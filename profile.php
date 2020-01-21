@@ -716,8 +716,9 @@ if ($newProfile) {
     }
     echo '<div class="lg">',
         Ht::textarea("bulkentry", $bulkentry,
-                     ["rows" => 1, "cols" => 80, "placeholder" => "Enter users one per line", "class" => "want-focus need-autogrow"]),
-        '<div class="g"><strong>OR</strong> &nbsp;',
+                     ["rows" => 1, "cols" => 80, "placeholder" => "Enter users one per line", "class" => "want-focus need-autogrow"]);
+    include "iacr/committee.php";
+    echo '<div class="g"><strong>OR</strong> &nbsp;',
         '<input type="file" name="bulk" size="30" /></div></div>';
 
     echo '<div class="lg">', Ht::submit("savebulk", "Save accounts", ["class" => "btn-primary"]), '</div>';
