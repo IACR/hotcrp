@@ -476,6 +476,9 @@ class CsvGenerator {
         assert(empty($this->lines) && $this->headerline === "");
         if ($header === false || $header === []) {
             $this->selection = $selection;
+        } else if ($header === true) {
+            $this->add($selection);
+            $this->selection = $selection;
         } else if ($header !== null) {
             assert(is_array($selection) && !is_associative_array($selection)
                    && is_array($header) && !is_associative_array($header)
@@ -483,16 +486,19 @@ class CsvGenerator {
             $this->add($header);
             $this->selection = $selection;
         } else if (is_associative_array($selection)) {
+            assert($header === null);
             $this->add(array_values($selection));
             $this->selection = array_keys($selection);
         } else {
+            assert($header === null);
             $this->add($selection);
             $this->selection = $selection;
         }
         $this->selection_is_names = true;
         foreach ($this->selection as $s) {
-            if (ctype_digit($s))
+            if (ctype_digit($s)) {
                 $this->selection_is_names = false;
+            }
         }
         if (!empty($this->lines)) {
             $this->headerline = $this->lines[0];
@@ -536,8 +542,9 @@ class CsvGenerator {
         $i = 0;
         foreach ($this->selection as $key) {
             if (isset($row[$key])) {
-                while (count($selected) < $i)
+                while (count($selected) < $i) {
                     $selected[] = "";
+                }
                 $selected[] = $row[$key];
             }
             ++$i;
@@ -545,8 +552,9 @@ class CsvGenerator {
         if (empty($selected) && $is_array) {
             for ($i = 0;
                  array_key_exists($i, $row) && $i != count($this->selection);
-                 ++$i)
+                 ++$i) {
                 $selected[] = $row[$i];
+            }
         }
         return $selected;
     }
@@ -559,10 +567,12 @@ class CsvGenerator {
 
     function add_comment($text) {
         preg_match_all('/([^\r\n]*)(?:\r\n?|\n|\z)/', $text, $m);
-        if ($m[1][count($m[1]) - 1] === "")
+        if ($m[1][count($m[1]) - 1] === "") {
             array_pop($m[1]);
-        foreach ($m[1] as $x)
+        }
+        foreach ($m[1] as $x) {
             $this->add_string($this->comment . $x . $this->lf);
+        }
         return $this;
     }
 
@@ -576,27 +586,33 @@ class CsvGenerator {
         }
         reset($row);
         if (is_array(current($row)) || is_object(current($row))) {
-            foreach ($row as $x)
+            foreach ($row as $x) {
                 $this->add($x);
+            }
         } else {
             $is_array = is_array($row);
-            if (!$is_array)
+            if (!$is_array) {
                 $row = (array) $row;
+            }
             if (($this->flags & self::FLAG_ITEM_COMMENTS)
                 && $this->selection
                 && isset($row["__precomment__"])
-                && ($cmt = (string) $row["__precomment__"]) !== "")
+                && ($cmt = (string) $row["__precomment__"]) !== "") {
                 $this->add_comment($cmt);
+            }
             $srow = $row;
-            if ($this->selection)
+            if ($this->selection) {
                 $srow = $this->apply_selection($srow, $is_array);
+            }
             if ($this->type == self::TYPE_COMMA) {
                 if ($this->flags & self::FLAG_ALWAYS_QUOTE) {
-                    foreach ($srow as &$x)
+                    foreach ($srow as &$x) {
                         $x = self::always_quote($x);
+                    }
                 } else {
-                    foreach ($srow as &$x)
+                    foreach ($srow as &$x) {
                         $x = self::quote($x);
+                    }
                 }
                 unset($x);
                 $this->add_string(join(",", $srow) . $this->lf);
@@ -655,8 +671,9 @@ class CsvGenerator {
         if ($this->lines_length <= 10000000) {
             echo join("", $this->lines);
         } else {
-            foreach ($this->lines as $line)
+            foreach ($this->lines as $line) {
                 echo $line;
+            }
         }
     }
 }

@@ -7,18 +7,23 @@ class PreferenceList_PaperColumn extends PaperColumn {
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         $this->topics = get($cj, "topics");
-        if (isset($cj->options) && in_array("topics", $cj->options))
+        if (isset($cj->options) && in_array("topics", $cj->options)) {
             $this->topics = true;
+        }
+        $this->override = PaperColumn::OVERRIDE_IFEMPTY_LINK;
     }
     function prepare(PaperList $pl, $visible) {
-        if ($this->topics && !$pl->conf->has_topics())
+        if ($this->topics && !$pl->conf->has_topics()) {
             $this->topics = false;
-        if (!$pl->user->is_manager())
+        }
+        if (!$pl->user->is_manager()) {
             return false;
+        }
         if ($visible) {
             $pl->qopts["allReviewerPreference"] = true;
-            if ($this->topics)
+            if ($this->topics) {
                 $pl->qopts["topics"] = true;
+            }
             $pl->conf->stash_hotcrp_pc($pl->user);
         }
         return true;
@@ -27,11 +32,11 @@ class PreferenceList_PaperColumn extends PaperColumn {
         return "Preferences";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
-        return !$pl->user->allow_administer($row);
+        return !$pl->user->can_administer($row);
     }
     function content(PaperList $pl, PaperInfo $row) {
         $prefs = $row->reviewer_preferences();
-        $ts = array();
+        $ts = [];
         if ($this->topics || $row->reviewer_preferences()) {
             foreach ($row->conf->pc_members() as $pcid => $pc) {
                 if (($pref = $row->reviewer_preference($pcid, $this->topics))) {
@@ -48,7 +53,8 @@ class PreferenceList_PaperColumn extends PaperColumn {
             $t = '<span class="need-allpref">Loading</span>';
             $pl->need_render = true;
             return $t;
-        } else
+        } else {
             return '';
+        }
     }
 }

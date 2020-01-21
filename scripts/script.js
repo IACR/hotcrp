@@ -950,7 +950,7 @@ var handle_ui = (function ($) {
 var callbacks = {};
 function handle_ui(event) {
     var e = event.target;
-    if ((e && (hasClass(e, "ui") || hasClass(e, "ui-submit")))
+    if ((e && hasClass(e, "ui"))
         || (this.tagName === "A" && hasClass(this, "ui"))) {
         event.preventDefault();
     }
@@ -6654,8 +6654,9 @@ function render_user(u) {
 var plinfo = (function () {
 
 function prownear(e) {
-    while (e && e.nodeName !== "TR")
+    while (e && e.nodeName !== "TR") {
         e = e.parentNode;
+    }
     while (e && hasClass(e, "plx")) {
         do {
             e = e.previousSibling;
@@ -6841,20 +6842,20 @@ function populate_bypid(table, selector) {
 function pidrow(pid) {
     if (!(pid in _bypid))
         populate_bypid(_bypid, "tr.pl");
-    return $(_bypid[pid]);
+    return _bypid[pid];
 }
 
 function pidxrow(pid) {
     if (!(pid in _bypidx))
         populate_bypid(_bypidx, "tr.plx > td.plx");
-    return $(_bypidx[pid]);
+    return _bypidx[pid];
 }
 
 function pidfield(pid, f, index) {
     var row = f.column ? pidrow(pid) : pidxrow(pid);
     if (row && index == null)
         index = field_index(f);
-    return $(row.length ? row[0].childNodes[index] : null);
+    return $(row ? row.childNodes[index] : null);
 }
 
 
@@ -7191,32 +7192,36 @@ plinfo.render_needed = render_needed;
 $(window).on("hotcrptags", function (evt, rv) {
     if (!self && (self === false || initialize() === false))
         return;
-    var $pr = pidrow(rv.pid);
-    if (!$pr.length)
+    var pr = pidrow(rv.pid);
+    if (!pr)
         return;
     var $ptr = $("tr.pl, tr.plx").filter("[data-pid='" + rv.pid + "']");
 
     // set attributes
-    $pr.removeAttr("data-tags data-tags-conflicted data-color-classes data-color-classes-conflicted")
+    $(pr).removeAttr("data-tags data-tags-conflicted data-color-classes data-color-classes-conflicted")
         .attr("data-tags", $.isArray(rv.tags) ? rv.tags.join(" ") : rv.tags);
-    if ("tags_conflicted" in rv)
-        $pr.attr("data-tags-conflicted", rv.tags_conflicted);
-    if (rv.color_classes)
+    if ("tags_conflicted" in rv) {
+        pr.setAttribute("data-tags-conflicted", rv.tags_conflicted);
+    }
+    if (rv.color_classes) {
         make_pattern_fill(rv.color_classes);
+    }
     if ("color_classes_conflicted" in rv) {
-        $pr.attr("data-color-classes", rv.color_classes)
-            .attr("data-color-classes-conflicted", rv.color_classes_conflicted);
+        pr.setAttribute("data-color-classes", rv.color_classes);
+        pr.setAttribute("data-color-classes-conflicted", rv.color_classes_conflicted);
         $ptr.addClass("colorconflict");
         make_pattern_fill(rv.color_classes_conflicted);
-    } else
+    } else {
         $ptr.removeClass("colorconflict");
+    }
 
     // set color classes
     var cc = rv.color_classes;
     if (/ tagbg$/.test(rv.color_classes || ""))
         $ptr.removeClass("k0 k1").closest("tbody").addClass("pltable-colored");
-    if ($pr.closest("table").hasClass("fold5c")
-        && "color_classes_conflicted" in rv)
+    if (hasClass(pr.closest("table"), "fold5c")
+        && "color_classes_conflicted" in rv
+        && !hasClass(pr, "fold5o"))
         cc = rv.color_classes_conflicted;
     $ptr.removeClass(function (i, klass) {
         return (klass.match(/(?:^| )(?:\S*tag)(?= |$)/g) || []).join(" ");
@@ -7239,18 +7244,34 @@ $(window).on("hotcrptags", function (evt, rv) {
         render_row_tags(pidfield(rv.pid, fields.tags)[0]);
 });
 
-function fold_override(checkbox) {
+function change_color_classes(isconflicted) {
+    return function () {
+        var a = pattrnear(this, isconflicted ? "data-color-classes-conflicted" : "data-color-classes");
+        this.className = this.className.replace(/(?:^|\s+)(?:\S*tag|k[01]|tagbg)(?= |$)/g, "").trim() + (a ? " " + a : "");
+    };
+}
+
+function fold_override(dofold) {
     $(function () {
-        var on = checkbox.checked;
-        fold(self, !on, 5);
-        $("#forceShow").val(on ? 1 : 0);
+        $(self).find(".fold5c, .fold5o").removeClass("fold5c fold5o");
+        fold(self, dofold, 5);
+        $("#forceShow").val(dofold ? 0 : 1);
         // show the color classes appropriate to this conflict state
-        $(self).find(".colorconflict").each(function () {
-            var a = pattrnear(this, on ? "data-color-classes" : "data-color-classes-conflicted");
-            this.className = this.className.replace(/(?:^|\s+)(?:\S*tag|k[01]|tagbg)(?= |$)/g, "").trim() + (a ? " " + a : "");
-        });
+        $(self).find(".colorconflict").each(change_color_classes(dofold));
     });
 };
+
+handle_ui.on("js-override-conflict", function () {
+    var pid = this.closest("tr").getAttribute("data-pid"),
+        pr = pidrow(pid), pxr = pidxrow(pid).closest("tr");
+    addClass(pr, "fold5o");
+    addClass(pxr, "fold5o");
+    if (hasClass(pr, "colorconflict")) {
+        var f = change_color_classes(false);
+        f.call(pr);
+        f.call(pxr);
+    }
+});
 
 handle_ui.on("js-plinfo", function (event) {
     var type = this.getAttribute("data-plinfo-field"), dofold = null;
@@ -7261,10 +7282,11 @@ handle_ui.on("js-plinfo", function (event) {
         dofold = !this.checked;
     }
     if (type) {
+        self || initialize();
         type = type.split(/\s+/);
         for (var i = 0; i != type.length; ++i) {
             if (type[i] === "force")
-                fold_override(this);
+                fold_override(dofold);
             else if (type[i] === "rownum")
                 fold(self, dofold, 6);
             else
@@ -8214,8 +8236,6 @@ handle_ui.on("js-select-all", function () {
 });
 
 
-var paperlist_ui = (function ($) {
-
 handle_ui.on("js-tag-list-action", function () {
     $("select.js-submit-action-info-tag").on("change", function () {
         var $t = $(this).closest(".linelink"),
@@ -8251,7 +8271,7 @@ handle_ui.on("js-assign-list-action", function () {
     });
 });
 
-function paperlist_submit(event) {
+handle_ui.on("js-paperlist-submit", function (event) {
     // analyze why this is being submitted
     var $self = $(this), fn = $self.data("submitMark");
     $self.removeData("submitMark");
@@ -8291,13 +8311,7 @@ function paperlist_submit(event) {
         action = hoturl_add(action, "action=" + encodeURIComponent(fn));
     }
     this.action = action;
-}
-
-return function (event) {
-    if (event.type === "submit")
-        paperlist_submit.call(this, event);
-};
-})($);
+});
 
 
 handle_ui.on("js-unfold-pcselector", function () {

@@ -225,18 +225,20 @@ class Conf {
         $this->settings = array();
         $this->settingTexts = array();
         foreach ($this->opt_override ? : [] as $k => $v) {
-            if ($v === null)
+            if ($v === null) {
                 unset($this->opt[$k]);
-            else
+            } else {
                 $this->opt[$k] = $v;
+            }
         }
         $this->opt_override = [];
 
         $result = $this->q_raw("select name, value, data from Settings");
         while ($result && ($row = $result->fetch_row())) {
             $this->settings[$row[0]] = (int) $row[1];
-            if ($row[2] !== null)
+            if ($row[2] !== null) {
                 $this->settingTexts[$row[0]] = $row[2];
+            }
             if (substr($row[0], 0, 4) == "opt.") {
                 $okey = substr($row[0], 4);
                 $this->opt_override[$okey] = get($this->opt, $okey);
@@ -265,16 +267,20 @@ class Conf {
         }
 
         // update options
-        if (isset($this->opt["ldapLogin"]) && !$this->opt["ldapLogin"])
+        if (isset($this->opt["ldapLogin"]) && !$this->opt["ldapLogin"]) {
             unset($this->opt["ldapLogin"]);
-        if (isset($this->opt["httpAuthLogin"]) && !$this->opt["httpAuthLogin"])
+        }
+        if (isset($this->opt["httpAuthLogin"]) && !$this->opt["httpAuthLogin"]) {
             unset($this->opt["httpAuthLogin"]);
+        }
 
         // GC old capabilities
         if (get($this->settings, "__capability_gc", 0) < $Now - 86400) {
-            foreach (array($this->dblink, $this->contactdb()) as $db)
-                if ($db)
+            foreach (array($this->dblink, $this->contactdb()) as $db) {
+                if ($db) {
                     Dbl::ql($db, "delete from Capability where timeExpires>0 and timeExpires<$Now");
+                }
+            }
             $this->q_raw("insert into Settings set name='__capability_gc', value=$Now on duplicate key update value=values(value)");
             $this->settings["__capability_gc"] = $Now;
         }
@@ -288,18 +294,22 @@ class Conf {
 
         // enforce invariants
         foreach (["pcrev_any", "extrev_view"] as $x) {
-            if (!isset($this->settings[$x]))
+            if (!isset($this->settings[$x])) {
                 $this->settings[$x] = 0;
+            }
         }
-        if (!isset($this->settings["sub_blind"]))
+        if (!isset($this->settings["sub_blind"])) {
             $this->settings["sub_blind"] = self::BLIND_ALWAYS;
-        if (!isset($this->settings["rev_blind"]))
+        }
+        if (!isset($this->settings["rev_blind"])) {
             $this->settings["rev_blind"] = self::BLIND_ALWAYS;
+        }
         if (!isset($this->settings["seedec"])) {
-            if (get($this->settings, "au_seedec"))
+            if (get($this->settings, "au_seedec")) {
                 $this->settings["seedec"] = self::SEEDEC_ALL;
-            else if (get($this->settings, "rev_seedec"))
+            } else if (get($this->settings, "rev_seedec")) {
                 $this->settings["seedec"] = self::SEEDEC_REV;
+            }
         }
         if (get($this->settings, "pc_seeallrev") == 2) {
             $this->settings["pc_seeblindrev"] = 1;
@@ -316,8 +326,9 @@ class Conf {
 
         // S3 settings
         foreach (array("s3_bucket", "s3_key", "s3_secret") as $k) {
-            if (!get($this->settingTexts, $k) && ($x = get($this->opt, $k)))
+            if (!get($this->settingTexts, $k) && ($x = get($this->opt, $k))) {
                 $this->settingTexts[$k] = $x;
+            }
         }
         if (!get($this->settingTexts, "s3_key")
             || !get($this->settingTexts, "s3_secret")
@@ -356,13 +367,15 @@ class Conf {
             && ($ss = get($this->settings, "sub_sub", 0)) > 0
             && $ss > $Now
             && (get($this->settings, "pc_seeallpdf", 0) <= 0
-                || !$this->can_pc_see_active_submissions()))
+                || !$this->can_pc_see_active_submissions())) {
             $this->_pc_see_pdf = false;
+        }
 
         $this->au_seerev = get($this->settings, "au_seerev", 0);
         $this->tag_au_seerev = null;
-        if ($this->au_seerev == self::AUSEEREV_TAGS)
+        if ($this->au_seerev == self::AUSEEREV_TAGS) {
             $this->tag_au_seerev = explode(" ", get_s($this->settingTexts, "tag_au_seerev"));
+        }
         $this->tag_seeall = get($this->settings, "tag_seeall", 0) > 0;
         $this->ext_subreviews = get($this->settings, "pcrev_editdelegate", 0);
 
@@ -394,11 +407,13 @@ class Conf {
             $max_rs = [];
             foreach ($this->_round_settings as $rs) {
                 if ($rs && isset($rs->pc_seeallrev)
-                    && self::pcseerev_compare($rs->pc_seeallrev, get($max_rs, "pc_seeallrev", 0)) > 0)
+                    && self::pcseerev_compare($rs->pc_seeallrev, get($max_rs, "pc_seeallrev", 0)) > 0) {
                     $max_rs["pc_seeallrev"] = $rs->pc_seeallrev;
+                }
                 if ($rs && isset($rs->extrev_view)
-                    && $rs->extrev_view > get($max_rs, "extrev_view", 0))
+                    && $rs->extrev_view > get($max_rs, "extrev_view", 0)) {
                     $max_rs["extrev_view"] = $rs->extrev_view;
+                }
             }
             $this->_round_settings["max"] = (object) $max_rs;
         }
@@ -418,26 +433,31 @@ class Conf {
     }
 
     private function crosscheck_track_settings($j) {
-        if (is_string($j) && !($j = json_decode($j)))
+        if (is_string($j) && !($j = json_decode($j))) {
             return;
+        }
         $this->_tracks = [];
         $default_track = Track::$zero;
         $this->_track_tags = [];
         foreach ((array) $j as $k => $v) {
-            if ($k !== "_")
+            if ($k !== "_") {
                 $this->_track_tags[] = $k;
-            if (!isset($v->viewpdf) && isset($v->view))
+            }
+            if (!isset($v->viewpdf) && isset($v->view)) {
                 $v->viewpdf = $v->view;
+            }
             $t = Track::$zero;
-            foreach (Track::$map as $tname => $idx)
+            foreach (Track::$map as $tname => $idx) {
                 if (isset($v->$tname)) {
                     $t[$idx] = $v->$tname;
                     $this->_track_sensitivity |= 1 << $idx;
                 }
-            if ($k === "_")
+            }
+            if ($k === "_") {
                 $default_track = $t;
-            else
+            } else {
                 $this->_tracks[$k] = $t;
+            }
         }
         $this->_tracks["_"] = $default_track;
     }
@@ -463,17 +483,18 @@ class Conf {
         $this->long_name = $this->opt["longName"];
 
         // expand ${confid}, ${confshortname}
-        foreach (array("sessionName", "downloadPrefix", "conferenceSite",
-                       "paperSite", "defaultPaperSite", "contactName",
-                       "contactEmail", "docstore") as $k)
+        foreach (["sessionName", "downloadPrefix", "conferenceSite",
+                  "paperSite", "defaultPaperSite", "contactName",
+                  "contactEmail", "docstore"] as $k) {
             if (isset($this->opt[$k]) && is_string($this->opt[$k])
                 && strpos($this->opt[$k], "$") !== false) {
                 $this->opt[$k] = preg_replace(',\$\{confid\}|\$confid\b,', $confid, $this->opt[$k]);
                 $this->opt[$k] = preg_replace(',\$\{confshortname\}|\$confshortname\b,', $this->short_name, $this->opt[$k]);
             }
+        }
         $this->download_prefix = $this->opt["downloadPrefix"];
 
-        foreach (array("emailFrom", "emailSender", "emailCc", "emailReplyTo") as $k)
+        foreach (["emailFrom", "emailSender", "emailCc", "emailReplyTo"] as $k) {
             if (isset($this->opt[$k]) && is_string($this->opt[$k])
                 && strpos($this->opt[$k], "$") !== false) {
                 $this->opt[$k] = preg_replace(',\$\{confid\}|\$confid\b,', $confid, $this->opt[$k]);
@@ -484,6 +505,7 @@ class Conf {
                     $this->opt[$k] = preg_replace(',\$\{confshortname\}|\$confshortname\b,', $v, $this->opt[$k]);
                 }
             }
+        }
 
         // remove final slash from $Opt["paperSite"]
         if (!isset($this->opt["paperSite"]) || $this->opt["paperSite"] === "") {
@@ -497,45 +519,54 @@ class Conf {
         }
 
         // option name updates (backwards compatibility)
-        foreach (array("assetsURL" => "assetsUrl",
-                       "jqueryURL" => "jqueryUrl", "jqueryCDN" => "jqueryCdn",
-                       "disableCSV" => "disableCsv") as $kold => $knew)
-            if (isset($this->opt[$kold]) && !isset($this->opt[$knew]))
+        foreach (["assetsURL" => "assetsUrl",
+                  "jqueryURL" => "jqueryUrl", "jqueryCDN" => "jqueryCdn",
+                  "disableCSV" => "disableCsv"] as $kold => $knew) {
+            if (isset($this->opt[$kold]) && !isset($this->opt[$knew])) {
                 $this->opt[$knew] = $this->opt[$kold];
+            }
+        }
 
         // set assetsUrl and scriptAssetsUrl
         if (!isset($this->opt["scriptAssetsUrl"]) && isset($_SERVER["HTTP_USER_AGENT"])
-            && strpos($_SERVER["HTTP_USER_AGENT"], "MSIE") !== false)
+            && strpos($_SERVER["HTTP_USER_AGENT"], "MSIE") !== false) {
             $this->opt["scriptAssetsUrl"] = Navigation::siteurl();
-        if (!isset($this->opt["assetsUrl"]))
+        }
+        if (!isset($this->opt["assetsUrl"])) {
             $this->opt["assetsUrl"] = Navigation::siteurl();
-        if ($this->opt["assetsUrl"] !== "" && !str_ends_with($this->opt["assetsUrl"], "/"))
+        }
+        if ($this->opt["assetsUrl"] !== "" && !str_ends_with($this->opt["assetsUrl"], "/")) {
             $this->opt["assetsUrl"] .= "/";
-        if (!isset($this->opt["scriptAssetsUrl"]))
+        }
+        if (!isset($this->opt["scriptAssetsUrl"])) {
             $this->opt["scriptAssetsUrl"] = $this->opt["assetsUrl"];
+        }
         Ht::$img_base = $this->opt["assetsUrl"] . "images/";
 
         // set docstore
-        if (get($this->opt, "docstore") === true)
+        if (get($this->opt, "docstore") === true) {
             $this->opt["docstore"] = "docs";
-        else if (!get($this->opt, "docstore") && get($this->opt, "filestore")) { // backwards compat
+        } else if (!get($this->opt, "docstore") && get($this->opt, "filestore")) { // backwards compat
             $this->opt["docstore"] = $this->opt["filestore"];
             if ($this->opt["docstore"] === true)
                 $this->opt["docstore"] = "filestore";
             $this->opt["docstoreSubdir"] = get($this->opt, "filestoreSubdir");
         }
-        if (get($this->opt, "docstore") && $this->opt["docstore"][0] !== "/")
+        if (get($this->opt, "docstore") && $this->opt["docstore"][0] !== "/") {
             $this->opt["docstore"] = $ConfSitePATH . "/" . $this->opt["docstore"];
+        }
         $this->_docstore = false;
         if (($dpath = get($this->opt, "docstore"))) {
-            if (strpos($dpath, "%") !== false)
+            if (strpos($dpath, "%") !== false) {
                 $this->_docstore = $dpath;
-            else {
-                if ($dpath[strlen($dpath) - 1] === "/")
+            } else {
+                if ($dpath[strlen($dpath) - 1] === "/") {
                     $dpath = substr($dpath, 0, strlen($dpath) - 1);
+                }
                 $use_subdir = get($this->opt, "docstoreSubdir");
-                if ($use_subdir && ($use_subdir === true || $use_subdir > 0))
+                if ($use_subdir && ($use_subdir === true || $use_subdir > 0)) {
                     $dpath .= "/%" . ($use_subdir === true ? 2 : $use_subdir) . "h";
+                }
                 $this->_docstore = $dpath . "/%h%x";
             }
         }
@@ -547,17 +578,19 @@ class Conf {
                     self::msg_error("Timezone option “" . htmlspecialchars($this->opt["timezone"]) . "” is invalid; falling back to “America/New_York”.");
                     date_default_timezone_set("America/New_York");
                 }
-            } else if (!ini_get("date.timezone") && !getenv("TZ"))
+            } else if (!ini_get("date.timezone") && !getenv("TZ")) {
                 date_default_timezone_set("America/New_York");
+            }
         }
         $this->_date_format_initialized = false;
 
         // set safePasswords
         if (!get($this->opt, "safePasswords")
-            || (is_int($this->opt["safePasswords"]) && $this->opt["safePasswords"] < 1))
+            || (is_int($this->opt["safePasswords"]) && $this->opt["safePasswords"] < 1)) {
             $this->opt["safePasswords"] = 0;
-        else if ($this->opt["safePasswords"] === true)
+        } else if ($this->opt["safePasswords"] === true) {
             $this->opt["safePasswords"] = 1;
+        }
 
         // set defaultFormat
         $this->default_format = (int) get($this->opt, "defaultFormat");
@@ -565,8 +598,9 @@ class Conf {
 
         // other caches
         $sort_by_last = !!get($this->opt, "sortByLastName");
-        if (!$this->sort_by_last != !$sort_by_last)
+        if (!$this->sort_by_last != !$sort_by_last) {
             $this->invalidate_caches("pc");
+        }
         $this->sort_by_last = $sort_by_last;
 
         $this->_api_map = null;
@@ -603,8 +637,9 @@ class Conf {
         } else {
             $value = (int) $value;
             $dval = $data;
-            if (is_array($dval) || is_object($dval))
+            if (is_array($dval) || is_object($dval)) {
                 $dval = json_encode_db($dval);
+            }
             if ($this->qe("insert into Settings set name=?, value=?, data=? on duplicate key update value=values(value), data=values(data)", $name, $value, $dval)) {
                 $this->settings[$name] = $value;
                 $this->settingTexts[$name] = $data;
@@ -613,10 +648,11 @@ class Conf {
         }
         if ($change && str_starts_with($name, "opt.")) {
             $oname = substr($name, 4);
-            if ($value === null && $data === null)
+            if ($value === null && $data === null) {
                 $this->opt[$oname] = get($this->opt_override, $oname);
-            else
+            } else {
                 $this->opt[$oname] = $data === null ? $value : $data;
+            }
         }
         return $change;
     }
@@ -625,10 +661,12 @@ class Conf {
         $change = $this->__save_setting($name, $value, $data);
         if ($change) {
             $this->crosscheck_settings();
-            if (str_starts_with($name, "opt."))
+            if (str_starts_with($name, "opt.")) {
                 $this->crosscheck_options();
-            if (str_starts_with($name, "tag_") || $name === "tracks")
+            }
+            if (str_starts_with($name, "tag_") || $name === "tracks") {
                 $this->invalidate_caches(["taginfo" => true, "tracks" => true]);
+            }
         }
         return $change;
     }
@@ -646,20 +684,22 @@ class Conf {
     function opt_timestamp() {
         if ($this->_opt_timestamp === null) {
             $this->_opt_timestamp = 1;
-            foreach (get($this->opt, "loaded", []) as $fn)
+            foreach (get($this->opt, "loaded", []) as $fn) {
                 $this->_opt_timestamp = max($this->_opt_timestamp, +@filemtime($fn));
+            }
         }
         return $this->_opt_timestamp;
     }
 
 
     static function pcseerev_compare($sr1, $sr2) {
-        if ($sr1 == $sr2)
+        if ($sr1 == $sr2) {
             return 0;
-        else if ($sr1 == self::PCSEEREV_YES || $sr2 == self::PCSEEREV_YES)
+        } else if ($sr1 == self::PCSEEREV_YES || $sr2 == self::PCSEEREV_YES) {
             return $sr1 == self::PCSEEREV_YES ? 1 : -1;
-        else
+        } else {
             return $sr1 > $sr2 ? 1 : -1;
+        }
     }
 
 
@@ -711,29 +751,27 @@ class Conf {
         return Dbl::fetch_ivalue(Dbl::do_query_on($this->dblink, func_get_args(), Dbl::F_ERROR));
     }
 
-    function db_error_html($getdb = true, $while = "") {
+    function db_error_html($getdb = true) {
         $text = "<p>Database error";
-        if ($while)
-            $text .= " $while";
-        if ($getdb)
+        if ($getdb) {
             $text .= ": " . htmlspecialchars($this->dblink->error);
+        }
         return $text . "</p>";
     }
 
-    function db_error_text($getdb = true, $while = "") {
+    function db_error_text($getdb = true) {
         $text = "Database error";
-        if ($while)
-            $text .= " $while";
-        if ($getdb)
+        if ($getdb) {
             $text .= ": " . $this->dblink->error;
+        }
         return $text;
     }
 
     function query_error_handler($dblink, $query) {
         $landmark = caller_landmark(1, "/^(?:Dbl::|Conf::q|call_user_func)/");
-        if (PHP_SAPI == "cli")
+        if (PHP_SAPI == "cli") {
             fwrite(STDERR, "$landmark: database error: $dblink->error in $query\n");
-        else {
+        } else {
             error_log("$landmark: database error: $dblink->error in $query");
             self::msg_error("<p>" . htmlspecialchars($landmark) . ": database error: " . htmlspecialchars($this->dblink->error) . " in " . Ht::pre_text_wrap($query) . "</p>");
         }
@@ -1169,14 +1207,16 @@ class Conf {
 
     function review_form_json() {
         $x = get($this->settingTexts, "review_form");
-        if (is_string($x))
+        if (is_string($x)) {
             $x = $this->settingTexts["review_form"] = json_decode($x);
+        }
         return is_object($x) ? $x : null;
     }
 
     function review_form() {
-        if (!$this->_review_form_cache)
+        if (!$this->_review_form_cache) {
             $this->_review_form_cache = new ReviewForm($this->review_form_json(), $this);
+        }
         return $this->_review_form_cache;
     }
 
@@ -1193,8 +1233,9 @@ class Conf {
 
 
     function tags() {
-        if (!$this->_taginfo)
+        if (!$this->_taginfo) {
             $this->_taginfo = TagMap::make($this);
+        }
         return $this->_taginfo;
     }
 
@@ -1213,21 +1254,25 @@ class Conf {
     }
 
     function permissive_track_tag_for(Contact $user, $perm) {
-        foreach ($this->_tracks ? : [] as $t => $tr)
-            if ($user->has_permission($tr[$perm]))
+        foreach ($this->_tracks ? : [] as $t => $tr) {
+            if ($user->has_permission($tr[$perm])) {
                 return $t;
+            }
+        }
         return null;
     }
 
     function check_tracks(PaperInfo $prow, Contact $user, $ttype) {
         $unmatched = true;
         if ($this->_tracks) {
-            foreach ($this->_tracks as $t => $tr)
+            foreach ($this->_tracks as $t => $tr) {
                 if ($t === "_" ? $unmatched : $prow->has_tag($t)) {
                     $unmatched = false;
-                    if ($user->has_permission($tr[$ttype]))
+                    if ($user->has_permission($tr[$ttype])) {
                         return true;
+                    }
                 }
+            }
         }
         return $unmatched;
     }
@@ -1235,12 +1280,14 @@ class Conf {
     function check_required_tracks(PaperInfo $prow, Contact $user, $ttype) {
         if ($this->_track_sensitivity & (1 << $ttype)) {
             $unmatched = true;
-            foreach ($this->_tracks as $t => $tr)
+            foreach ($this->_tracks as $t => $tr) {
                 if ($t === "_" ? $unmatched : $prow->has_tag($t)) {
                     $unmatched = false;
-                    if ($tr[$ttype] && $user->has_permission($tr[$ttype]))
+                    if ($tr[$ttype] && $user->has_permission($tr[$ttype])) {
                         return true;
+                    }
                 }
+            }
         }
         return false;
     }
@@ -1255,31 +1302,40 @@ class Conf {
     }
 
     function check_any_tracks(Contact $user, $ttype) {
-        if ($this->_tracks)
-            foreach ($this->_tracks as $t => $tr)
+        if ($this->_tracks) {
+            foreach ($this->_tracks as $t => $tr) {
                 if (($ttype === Track::VIEW
                      || $user->has_permission($tr[Track::VIEW]))
-                    && $user->has_permission($tr[$ttype]))
+                    && $user->has_permission($tr[$ttype])) {
                     return true;
+                }
+            }
+        }
         return !$this->_tracks;
     }
 
     function check_any_admin_tracks(Contact $user) {
-        if ($this->_track_sensitivity & Track::BITS_ADMIN)
-            foreach ($this->_tracks as $t => $tr)
+        if ($this->_track_sensitivity & Track::BITS_ADMIN) {
+            foreach ($this->_tracks as $t => $tr) {
                 if ($tr[Track::ADMIN]
-                    && $user->has_permission($tr[Track::ADMIN]))
+                    && $user->has_permission($tr[Track::ADMIN])) {
                     return true;
+                }
+            }
+        }
         return false;
     }
 
     function check_all_tracks(Contact $user, $ttype) {
-        if ($this->_tracks)
-            foreach ($this->_tracks as $t => $tr)
+        if ($this->_tracks) {
+            foreach ($this->_tracks as $t => $tr) {
                 if (!(($ttype === Track::VIEW
                        || $user->has_permission($tr[Track::VIEW]))
-                      && $user->has_permission($tr[$ttype])))
+                      && $user->has_permission($tr[$ttype]))) {
                     return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -1299,33 +1355,41 @@ class Conf {
     function check_paper_track_sensitivity(PaperInfo $prow, $ttype) {
         if ($this->_track_sensitivity & (1 << $ttype)) {
             $unmatched = true;
-            foreach ($this->_tracks as $t => $tr)
+            foreach ($this->_tracks as $t => $tr) {
                 if ($t === "_" ? $unmatched : $prow->has_tag($t)) {
                     $unmatched = false;
-                    if ($tr[$ttype])
+                    if ($tr[$ttype]) {
                         return true;
+                    }
                 }
+            }
         }
         return false;
     }
 
     function track_permission($tag, $ttype) {
-        if ($this->_tracks)
-            foreach ($this->_tracks as $t => $tr)
-                if (strcasecmp($t, $tag) === 0)
+        if ($this->_tracks) {
+            foreach ($this->_tracks as $t => $tr) {
+                if (strcasecmp($t, $tag) === 0) {
                     return $tr[$ttype];
+                }
+            }
+        }
         return null;
     }
 
     function dangerous_track_mask(Contact $user) {
         $m = 0;
         if ($this->_tracks && $user->contactTags) {
-            foreach ($this->_tracks as $t => $tr)
-                foreach ($tr as $i => $perm)
+            foreach ($this->_tracks as $t => $tr) {
+                foreach ($tr as $i => $perm) {
                     if ($perm
                         && $perm[0] === "-"
-                        && !$user->has_permission($perm))
+                        && !$user->has_permission($perm)) {
                         $m |= 1 << $i;
+                    }
+                }
+            }
         }
         return $m;
     }
@@ -1358,18 +1422,21 @@ class Conf {
                 unset($dl[0]);
             }
             $r = [];
-            foreach ($this->rounds as $i => $rname)
-                if (isset($dl[$i]))
+            foreach ($this->rounds as $i => $rname) {
+                if (isset($dl[$i])) {
                     $r[$i] = $i ? $rname : "unnamed";
+                }
+            }
             uksort($r, function ($a, $b) use ($r, $dl) {
                 $adl = get($dl, $a);
                 $bdl = get($dl, $b);
-                if ($adl && $bdl && $adl != $bdl)
+                if ($adl && $bdl && $adl != $bdl) {
                     return $adl < $bdl ? -1 : 1;
-                else if (!$adl != !$bdl)
+                } else if (!$adl != !$bdl) {
                     return $adl ? -1 : 1;
-                else
+                } else {
                     return strcasecmp($a ? $r[$a] : "~", $b ? $r[$b] : "~");
+                }
             });
             $this->_defined_rounds = $r;
         }
@@ -1378,17 +1445,19 @@ class Conf {
 
     function round_name($roundno) {
         if ($roundno > 0) {
-            if (($rname = get($this->rounds, $roundno)) && $rname !== ";")
+            if (($rname = get($this->rounds, $roundno)) && $rname !== ";") {
                 return $rname;
+            }
             error_log($this->dbname . ": round #$roundno undefined");
         }
         return "";
     }
 
     function round_suffix($roundno) {
-        if ($roundno > 0) {
-            if (($rname = get($this->rounds, $roundno)) && $rname !== ";")
-                return "_$rname";
+        if ($roundno > 0
+            && ($rname = get($this->rounds, $roundno))
+            && $rname !== ";") {
+            return "_$rname";
         }
         return "";
     }
@@ -1421,8 +1490,9 @@ class Conf {
     }
 
     function assignment_round_option($external) {
-        if (!$external || ($x = get($this->settingTexts, "extrev_roundtag")) === null)
+        if (!$external || ($x = get($this->settingTexts, "extrev_roundtag")) === null) {
             $x = (string) get($this->settingTexts, "rev_roundtag");
+        }
         return $x === "" ? "unnamed" : $x;
     }
 
@@ -1431,11 +1501,14 @@ class Conf {
     }
 
     function round_number($rname, $add) {
-        if (!$rname || !strcasecmp($rname, "none") || !strcasecmp($rname, "unnamed"))
+        if (!$rname || !strcasecmp($rname, "none") || !strcasecmp($rname, "unnamed")) {
             return 0;
-        for ($i = 1; $i != count($this->rounds); ++$i)
-            if (!strcasecmp($this->rounds[$i], $rname))
+        }
+        for ($i = 1; $i != count($this->rounds); ++$i) {
+            if (!strcasecmp($this->rounds[$i], $rname)) {
                 return $i;
+            }
+        }
         if ($add && !self::round_name_error($rname)) {
             $rtext = $this->setting_data("tag_rounds", "");
             $rtext = ($rtext ? "$rtext$rname " : " $rname ");
@@ -1449,16 +1522,19 @@ class Conf {
 
     function round_selector_options($isexternal) {
         $opt = [];
-        foreach ($this->defined_round_list() as $rname)
+        foreach ($this->defined_round_list() as $rname) {
             $opt[$rname] = $rname;
+        }
         if (($isexternal === null || $isexternal === true)
             && ($r = get($this->settingTexts, "rev_roundtag")) !== null
-            && !isset($opt[$r ? : "unnamed"]))
+            && !isset($opt[$r ? : "unnamed"])) {
             $opt[$r ? : "unnamed"] = $r ? : "unnamed";
+        }
         if (($isexternal === null || $isexternal === false)
             && ($r = get($this->settingTexts, "extrev_roundtag")) !== null
-            && !isset($opt[$r ? : "unnamed"]))
+            && !isset($opt[$r ? : "unnamed"])) {
             $opt[$r ? : "unnamed"] = $r ? : "unnamed";
+        }
         return $opt;
     }
 
@@ -1466,10 +1542,11 @@ class Conf {
         if ($this->_round_settings !== null
             && $round !== null
             && isset($this->_round_settings[$round])
-            && isset($this->_round_settings[$round]->$name))
+            && isset($this->_round_settings[$round]->$name)) {
             return $this->_round_settings[$round]->$name;
-        else
+        } else {
             return get($this->settings, $name, $defval);
+        }
     }
 
 
@@ -1487,8 +1564,9 @@ class Conf {
                 $r->done = get($this->settings, "resp_done$isuf");
                 $r->grace = get($this->settings, "resp_grace$isuf");
                 $r->words = get($this->settings, "resp_words$isuf", 500);
-                if (($s = get($this->settingTexts, "resp_search$isuf")))
+                if (($s = get($this->settingTexts, "resp_search$isuf"))) {
                     $r->search = new PaperSearch($this->site_contact(), $s);
+                }
                 $this->_resp_rounds[] = $r;
             }
         }
@@ -1514,11 +1592,14 @@ class Conf {
             || $rname === 1
             || $rname === "1"
             || $rname === true
-            || strcasecmp($rname, "none") === 0)
+            || strcasecmp($rname, "none") === 0) {
             return 0;
-        foreach ($this->resp_rounds() as $rrd)
-            if (strcasecmp($rname, $rrd->name) === 0)
+        }
+        foreach ($this->resp_rounds() as $rrd) {
+            if (strcasecmp($rname, $rrd->name) === 0) {
                 return $rrd->number;
+            }
+        }
         return false;
     }
 
@@ -1526,35 +1607,45 @@ class Conf {
     function format_info($format) {
         if ($this->_format_info === null) {
             $this->_format_info = [];
-            if (!isset($this->opt["formatInfo"]))
-                /* OK */;
-            else if (is_array($this->opt["formatInfo"]))
+            if (!isset($this->opt["formatInfo"])) {
+                // ok
+            } else if (is_array($this->opt["formatInfo"])) {
                 $this->_format_info = $this->opt["formatInfo"];
-            else if (is_string($this->opt["formatInfo"]))
+            } else if (is_string($this->opt["formatInfo"])) {
                 $this->_format_info = json_decode($this->opt["formatInfo"], true);
-            foreach ($this->_format_info as $format => &$fi)
+            }
+            foreach ($this->_format_info as $format => &$fi) {
                 $fi = new TextFormat($format, $fi);
+            }
         }
-        if ($format === null)
+        if ($format === null) {
             $format = $this->default_format;
+        }
         return get($this->_format_info, $format);
     }
 
     function check_format($format, $text = null) {
-        if ($format === null)
+        if ($format === null) {
             $format = $this->default_format;
-        if ($format && $text !== null && ($f = $this->format_info($format))
-            && $f->simple_regex && preg_match($f->simple_regex, $text))
+        }
+        if ($format
+            && $text !== null
+            && ($f = $this->format_info($format))
+            && $f->simple_regex
+            && preg_match($f->simple_regex, $text)) {
             $format = 0;
+        }
         return $format;
     }
 
 
     function saved_searches() {
         $ss = [];
-        foreach ($this->settingTexts as $k => $v)
-            if (substr($k, 0, 3) === "ss:" && ($v = json_decode($v)))
+        foreach ($this->settingTexts as $k => $v) {
+            if (substr($k, 0, 3) === "ss:" && ($v = json_decode($v))) {
                 $ss[substr($k, 3)] = $v;
+            }
+        }
         return $ss;
     }
 
@@ -2267,41 +2358,51 @@ class Conf {
 
     private function _dateFormat($type) {
         if (!$this->_date_format_initialized) {
-            if (!isset($this->opt["time24hour"]) && isset($this->opt["time24Hour"]))
+            if (!isset($this->opt["time24hour"]) && isset($this->opt["time24Hour"])) {
                 $this->opt["time24hour"] = $this->opt["time24Hour"];
-            if (!isset($this->opt["dateFormatLong"]) && isset($this->opt["dateFormat"]))
+            }
+            if (!isset($this->opt["dateFormatLong"]) && isset($this->opt["dateFormat"])) {
                 $this->opt["dateFormatLong"] = $this->opt["dateFormat"];
-            if (!isset($this->opt["dateFormat"]))
+            }
+            if (!isset($this->opt["dateFormat"])) {
                 $this->opt["dateFormat"] = get($this->opt, "time24hour") ? "j M Y H:i:s" : "j M Y g:i:sa";
-            if (!isset($this->opt["dateFormatLong"]))
+            }
+            if (!isset($this->opt["dateFormatLong"])) {
                 $this->opt["dateFormatLong"] = "l " . $this->opt["dateFormat"];
-            if (!isset($this->opt["dateFormatObscure"]))
+            }
+            if (!isset($this->opt["dateFormatObscure"])) {
                 $this->opt["dateFormatObscure"] = "j M Y";
-            if (!isset($this->opt["timestampFormat"]))
+            }
+            if (!isset($this->opt["timestampFormat"])) {
                 $this->opt["timestampFormat"] = $this->opt["dateFormat"];
-            if (!isset($this->opt["dateFormatSimplifier"]))
+            }
+            if (!isset($this->opt["dateFormatSimplifier"])) {
                 $this->opt["dateFormatSimplifier"] = get($this->opt, "time24hour") ? "/:00(?!:)/" : "/:00(?::00|)(?= ?[ap]m)/";
-            if (!isset($this->opt["dateFormatTimezone"]))
+            }
+            if (!isset($this->opt["dateFormatTimezone"])) {
                 $this->opt["dateFormatTimezone"] = null;
+            }
             $this->_date_format_initialized = true;
         }
-        if ($type === "timestamp")
+        if ($type === "timestamp") {
             return $this->opt["timestampFormat"];
-        else if ($type === "obscure")
+        } else if ($type === "obscure") {
             return $this->opt["dateFormatObscure"];
-        else if ($type === "long")
+        } else if ($type === "long") {
             return $this->opt["dateFormatLong"];
-        else
+        } else {
             return $this->opt["dateFormat"];
+        }
     }
     private function _unparse_timezone($value) {
         $z = $this->opt["dateFormatTimezone"];
         if ($z === null) {
             $z = date("T", $value);
-            if ($z === "-12")
+            if ($z === "-12") {
                 $z = "AoE";
-            else if ($z && ($z[0] === "+" || $z[0] === "-"))
+            } else if ($z && ($z[0] === "+" || $z[0] === "-")) {
                 $z = "UTC" . $z;
+            }
         }
         return $z;
     }
@@ -2309,10 +2410,12 @@ class Conf {
     function parseableTime($value, $include_zone) {
         $f = $this->_dateFormat(false);
         $d = date($f, $value);
-        if ($this->opt["dateFormatSimplifier"])
+        if ($this->opt["dateFormatSimplifier"]) {
             $d = preg_replace($this->opt["dateFormatSimplifier"], "", $d);
-        if ($include_zone && ($z = $this->_unparse_timezone($value)))
+        }
+        if ($include_zone && ($z = $this->_unparse_timezone($value))) {
             $d .= " $z";
+        }
         return $d;
     }
     function parse_time($d, $reference = null) {
@@ -2325,15 +2428,18 @@ class Conf {
             if (function_exists("timezone_abbreviations_list")) {
                 $mytz = date_default_timezone_get();
                 foreach (timezone_abbreviations_list() as $tzname => $tzinfo) {
-                    foreach ($tzinfo as $tz)
-                        if ($tz["timezone_id"] == $mytz)
+                    foreach ($tzinfo as $tz) {
+                        if ($tz["timezone_id"] == $mytz) {
                             $x[] = preg_quote($tzname);
+                        }
+                    }
                 }
             }
             if (empty($x)) {
                 $z = date("T", $reference);
-                if ($z === "-12")
+                if ($z === "-12") {
                     $x[] = "AoE";
+                }
                 $x[] = preg_quote($z);
             }
             $this->opt["dateFormatTimezoneRemover"] =
@@ -2361,15 +2467,19 @@ class Conf {
     }
 
     private function _unparse_time($value, $type, $useradjust, $preadjust = null) {
-        if ($value <= 0)
+        if ($value <= 0) {
             return "N/A";
+        }
         $t = date($this->_dateFormat($type), $value);
-        if ($this->opt["dateFormatSimplifier"])
+        if ($this->opt["dateFormatSimplifier"]) {
             $t = preg_replace($this->opt["dateFormatSimplifier"], "", $t);
-        if ($type !== "obscure" && ($z = $this->_unparse_timezone($value)))
+        }
+        if ($type !== "obscure" && ($z = $this->_unparse_timezone($value))) {
             $t .= " $z";
-        if ($preadjust)
+        }
+        if ($preadjust) {
             $t .= $preadjust;
+        }
         if ($useradjust) {
             $sp = strpos($useradjust, " ");
             $t .= "<$useradjust class=\"usertime hidden need-usertime\" data-time=\"$value\"></" . ($sp ? substr($useradjust, 0, $sp) : $useradjust) . ">";
@@ -2377,12 +2487,14 @@ class Conf {
         return $t;
     }
     function obscure_time($timestamp) {
-        if ($timestamp !== null)
+        if ($timestamp !== null) {
             $timestamp = (int) ($timestamp + 0.5);
+        }
         if ($timestamp > 0) {
             $offset = 0;
-            if (($zone = timezone_open(date_default_timezone_get())))
+            if (($zone = timezone_open(date_default_timezone_get()))) {
                 $offset = $zone->getOffset(new DateTime("@$timestamp"));
+            }
             $timestamp += 43200 - ($timestamp + $offset) % 86400;
         }
         return $timestamp;
@@ -2406,8 +2518,9 @@ class Conf {
         global $Now;
         $d = abs($when - ($now ? : $Now));
         if ($d >= 5227200) {
-            if (!($format & 1))
+            if (!($format & 1)) {
                 return ($format & 8 ? "on " : "") . date($this->_dateFormat("obscure"), $when);
+            }
             $unit = 5;
         } else if ($d >= 259200) {
             $unit = 4;
@@ -2425,28 +2538,31 @@ class Conf {
         $units = [1, 60, 1800, 3600, 86400, 604800];
         $x = $units[$unit];
         $d = ceil(($d - $x / 2) / $x);
-        if ($unit === 2)
+        if ($unit === 2) {
             $d /= 2;
-        if ($format & 4)
+        }
+        if ($format & 4) {
             $d .= substr("smhhdw", $unit, 1);
-        else {
+        } else {
             $unit_names = ["second", "minute", "hour", "hour", "day", "week"];
             $d .= " " . $unit_names[$unit] . ($d == 1 ? "" : "s");
         }
-        if ($format & 2)
+        if ($format & 2) {
             return $d;
-        else
+        } else {
             return $when < ($now ? : $Now) ? $d . " ago" : "in " . $d;
+        }
     }
 
     function printableTimeSetting($what, $useradjust = false, $preadjust = null) {
-        return $this->unparse_time_long(defval($this->settings, $what, 0), $useradjust, $preadjust);
+        return $this->unparse_time_long(get($this->settings, $what, 0), $useradjust, $preadjust);
     }
     function printableDeadlineSetting($what, $useradjust = false, $preadjust = null) {
-        if (!isset($this->settings[$what]) || $this->settings[$what] <= 0)
+        if (!isset($this->settings[$what]) || $this->settings[$what] <= 0) {
             return "No deadline";
-        else
+        } else {
             return "Deadline: " . $this->unparse_time_long($this->settings[$what], $useradjust, $preadjust);
+        }
     }
 
     function settingsAfter($name) {
@@ -2457,19 +2573,22 @@ class Conf {
     function deadlinesAfter($name, $grace = null) {
         global $Now;
         $t = get($this->settings, $name);
-        if ($t !== null && $t > 0 && $grace && ($g = get($this->settings, $grace)))
+        if ($t !== null && $t > 0 && $grace && ($g = get($this->settings, $grace))) {
             $t += $g;
+        }
         return $t !== null && $t > 0 && $t <= $Now;
     }
     function deadlinesBetween($name1, $name2, $grace = null) {
         // see also ResponseRound::time_allowed
         global $Now;
         $t = get($this->settings, $name1);
-        if (($t === null || $t <= 0 || $t > $Now) && $name1)
+        if (($t === null || $t <= 0 || $t > $Now) && $name1) {
             return false;
+        }
         $t = get($this->settings, $name2);
-        if ($t !== null && $t > 0 && $grace && ($g = get($this->settings, $grace)))
+        if ($t !== null && $t > 0 && $grace && ($g = get($this->settings, $grace))) {
             $t += $g;
+        }
         return $t === null || $t <= 0 || $t >= $Now;
     }
 
@@ -2519,12 +2638,14 @@ class Conf {
     function missed_review_deadline($round, $isPC, $hard) {
         global $Now;
         $rev_open = +get($this->settings, "rev_open");
-        if (!(0 < $rev_open && $rev_open <= $Now))
+        if (!(0 < $rev_open && $rev_open <= $Now)) {
             return "rev_open";
+        }
         $dn = $this->review_deadline($round, $isPC, $hard);
         $dv = +get($this->settings, $dn);
-        if ($dv > 0 && $dv < $Now)
+        if ($dv > 0 && $dv < $Now) {
             return $dn;
+        }
         return false;
     }
     function time_review($round, $isPC, $hard) {
@@ -2535,10 +2656,11 @@ class Conf {
     }
     function time_pc_view_decision($conflicted) {
         $s = $this->setting("seedec");
-        if ($conflicted)
+        if ($conflicted) {
             return $s == self::SEEDEC_ALL || $s == self::SEEDEC_REV;
-        else
+        } else {
             return $s >= self::SEEDEC_REV;
+        }
     }
     function time_reviewer_view_decision() {
         return $this->setting("seedec") >= self::SEEDEC_REV;
@@ -2548,12 +2670,13 @@ class Conf {
             && !$this->setting("seedec_hideau");
     }
     function timePCViewPaper($prow, $pdf) {
-        if ($prow->timeWithdrawn > 0)
+        if ($prow->timeWithdrawn > 0) {
             return false;
-        else if ($prow->timeSubmitted > 0)
+        } else if ($prow->timeSubmitted > 0) {
             return !$pdf || $this->_pc_see_pdf;
-        else
+        } else {
             return !$pdf && $this->can_pc_see_active_submissions();
+        }
     }
 
     function submission_blindness() {
@@ -2574,13 +2697,16 @@ class Conf {
 
     function is_review_blind($rrow) {
         $rb = $this->settings["rev_blind"];
-        if ($rb == self::BLIND_ALWAYS)
+        if ($rb == self::BLIND_ALWAYS) {
             return true;
-        else if ($rb != self::BLIND_OPTIONAL)
+        } else if ($rb != self::BLIND_OPTIONAL) {
             return false;
-        if (is_object($rrow))
-            $rrow = (bool) $rrow->reviewBlind;
-        return $rrow === null || $rrow;
+        } else {
+            if (is_object($rrow)) {
+                $rrow = (bool) $rrow->reviewBlind;
+            }
+            return $rrow === null || $rrow;
+        }
     }
     function review_blindness() {
         return $this->settings["rev_blind"];
@@ -2605,8 +2731,9 @@ class Conf {
         $n = $nyes = 0;
         while (($row = edb_row($result))) {
             $n += $row[1];
-            if ($row[0] > 0)
+            if ($row[0] > 0) {
                 $nyes += $row[1];
+            }
         }
         Dbl::free($result);
         return [$n, $nyes];
@@ -2628,8 +2755,9 @@ class Conf {
     function can_pc_see_active_submissions() {
         if ($this->_pc_seeall_cache === null) {
             $this->_pc_seeall_cache = get($this->settings, "pc_seeall") ? : 0;
-            if ($this->_pc_seeall_cache > 0 && !$this->timeFinalizePaper())
+            if ($this->_pc_seeall_cache > 0 && !$this->timeFinalizePaper()) {
                 $this->_pc_seeall_cache = 0;
+            }
         }
         return $this->_pc_seeall_cache > 0;
     }
@@ -2642,8 +2770,9 @@ class Conf {
             $this->opt["assetsUrl"] = $base;
             Ht::$img_base = $this->opt["assetsUrl"] . "images/";
         }
-        if ($this->opt["scriptAssetsUrl"] === $old_siteurl)
+        if ($this->opt["scriptAssetsUrl"] === $old_siteurl) {
             $this->opt["scriptAssetsUrl"] = $base;
+        }
     }
 
     const HOTURL_RAW = 1;
@@ -2664,17 +2793,21 @@ class Conf {
         if (is_array($param)) {
             $x = "";
             foreach ($param as $k => $v) {
-                if ($v === null || $v === false)
-                    /* skip */;
-                else if ($k === "anchor")
+                if ($v === null || $v === false) {
+                    // skip
+                } else if ($k === "anchor") {
                     $anchor = "#" . urlencode($v);
-                else
+                } else {
                     $x .= ($x === "" ? "" : $amp) . $k . "=" . urlencode($v);
+                }
             }
-            if (Conf::$hoturl_defaults && !($flags & self::HOTURL_NO_DEFAULTS))
-                foreach (Conf::$hoturl_defaults as $k => $v)
-                    if (!array_key_exists($k, $param))
+            if (Conf::$hoturl_defaults && !($flags & self::HOTURL_NO_DEFAULTS)) {
+                foreach (Conf::$hoturl_defaults as $k => $v) {
+                    if (!array_key_exists($k, $param)) {
                         $x .= ($x === "" ? "" : $amp) . $k . "=" . $v;
+                    }
+                }
+            }
             $param = $x;
         } else {
             $param = (string) $param;
@@ -2682,13 +2815,17 @@ class Conf {
                 $anchor = substr($param, $pos);
                 $param = substr($param, 0, $pos);
             }
-            if (Conf::$hoturl_defaults && !($flags & self::HOTURL_NO_DEFAULTS))
-                foreach (Conf::$hoturl_defaults as $k => $v)
-                    if (!preg_match($are . preg_quote($k) . '=/', $param))
+            if (Conf::$hoturl_defaults && !($flags & self::HOTURL_NO_DEFAULTS)) {
+                foreach (Conf::$hoturl_defaults as $k => $v) {
+                    if (!preg_match($are . preg_quote($k) . '=/', $param)) {
                         $param .= ($param === "" ? "" : $amp) . $k . "=" . $v;
+                    }
+                }
+            }
         }
-        if ($flags & self::HOTURL_POST)
+        if ($flags & self::HOTURL_POST) {
             $param .= ($param === "" ? "" : $amp) . "post=" . post_value();
+        }
         // append forceShow to links to same paper if appropriate
         $is_paper_page = preg_match('/\A(?:paper|review|comment|assign)\z/', $page);
         if ($is_paper_page
@@ -2697,16 +2834,18 @@ class Conf {
             && $this->paper->has_conflict($Me)
             && $Me->conf === $this
             && preg_match($are . 'p=' . $this->paper->paperId . $zre, $param)
-            && !preg_match($are . 'forceShow=/', $param))
+            && !preg_match($are . 'forceShow=/', $param)) {
             $param .= $amp . "forceShow=1";
+        }
         // create slash-based URLs if appropriate
         if ($param) {
             if ($page === "review"
                 && preg_match($are . 'r=(\d+[A-Z]+)' . $zre, $param, $m)) {
                 $t .= "/" . $m[2];
                 $param = $m[1] . $m[3];
-                if (preg_match($are . 'p=\d+' . $zre, $param, $m))
+                if (preg_match($are . 'p=\d+' . $zre, $param, $m)) {
                     $param = $m[1] . $m[2];
+                }
             } else if (($is_paper_page
                         && preg_match($are . 'p=(\d+|%\w+%|new)' . $zre, $param, $m))
                        || ($page === "help"
@@ -2735,14 +2874,18 @@ class Conf {
             }
             $param = preg_replace('/&(?:amp;)?\z/', "", $param);
         }
-        if ($param !== "" && preg_match('/\A&(?:amp;)?(.*)\z/', $param, $m))
+        if ($param !== "" && preg_match('/\A&(?:amp;)?(.*)\z/', $param, $m)) {
             $param = $m[1];
-        if ($param !== "")
+        }
+        if ($param !== "") {
             $t .= "?" . $param;
-        if ($anchor !== "")
+        }
+        if ($anchor !== "") {
             $t .= $anchor;
-        if ($flags & self::HOTURL_SITE_RELATIVE)
+        }
+        if ($flags & self::HOTURL_SITE_RELATIVE) {
             return $t;
+        }
         $need_site_path = false;
         if ($page === "index") {
             $expect = "index" . $nav->php_suffix;
@@ -2753,12 +2896,13 @@ class Conf {
                 $t = substr($t, $lexpect);
             }
         }
-        if (($flags & self::HOTURL_ABSOLUTE) || $this !== Conf::$g)
+        if (($flags & self::HOTURL_ABSOLUTE) || $this !== Conf::$g) {
             return $this->opt("paperSite") . "/" . $t;
-        else {
+        } else {
             $siteurl = $nav->site_path_relative;
-            if ($need_site_path && $siteurl === "")
+            if ($need_site_path && $siteurl === "") {
                 $siteurl = $nav->site_path;
+            }
             return $siteurl . $t;
         }
     }
@@ -2905,13 +3049,15 @@ class Conf {
 
         $contactId = $user ? $user->contactId : 0;
         if (is_int($options)
-            || (is_array($options) && !empty($options) && !is_associative_array($options)))
+            || (is_array($options) && !empty($options) && !is_associative_array($options))) {
             $options = ["paperId" => $options];
+        }
 
         // paper selection
         $paperset = array();
-        if (isset($options["paperId"]))
+        if (isset($options["paperId"])) {
             $paperset[] = self::_cvt_numeric_set($options["paperId"]);
+        }
         if (isset($options["reviewId"])) {
             if (is_numeric($options["reviewId"])) {
                 $result = $this->qe("select paperId from PaperReview where reviewId=?", $options["reviewId"]);
@@ -2919,18 +3065,21 @@ class Conf {
             } else if (preg_match('/^(\d+)([A-Z][A-Z]?)$/i', $options["reviewId"], $m)) {
                 $result = $this->qe("select paperId from PaperReview where paperId=? and reviewOrdinal=?", $m[1], parseReviewOrdinal($m[2]));
                 $paperset[] = self::_cvt_numeric_set(edb_first_columns($result));
-            } else
+            } else {
                 $paperset[] = array();
+            }
         }
         if (isset($options["commentId"])) {
             $result = $this->qe("select paperId from PaperComment where commentId?a", self::_cvt_numeric_set($options["commentId"]));
             $paperset[] = self::_cvt_numeric_set(edb_first_columns($result));
         }
-        if (count($paperset) > 1)
+        if (count($paperset) > 1) {
             $paperset = array(call_user_func_array("array_intersect", $paperset));
+        }
         $papersel = "";
-        if (!empty($paperset))
+        if (!empty($paperset)) {
             $papersel = "paperId" . sql_in_numeric_set($paperset[0]) . " and ";
+        }
 
         // prepare query: basic tables
         // * Every table in `$joins` can have at most one row per paperId,
@@ -2939,23 +3088,27 @@ class Conf {
 
         $joins = array("Paper");
 
-        if (get($options, "minimal"))
+        if (get($options, "minimal")) {
             $cols = ["Paper.paperId, Paper.timeSubmitted, Paper.timeWithdrawn, Paper.outcome, Paper.leadContactId"];
-        else
+        } else {
             $cols = ["Paper.*"];
+        }
 
         if ($user) {
             $aujoinwhere = null;
             if (get($options, "author")
-                && ($aujoinwhere = $user->act_author_view_sql("PaperConflict", true)))
+                && ($aujoinwhere = $user->act_author_view_sql("PaperConflict", true))) {
                 $where[] = $aujoinwhere;
-            if (get($options, "author") && !$aujoinwhere)
+            }
+            if (get($options, "author") && !$aujoinwhere) {
                 $joins[] = "join PaperConflict on (PaperConflict.paperId=Paper.paperId and PaperConflict.contactId=$contactId and PaperConflict.conflictType>=" . CONFLICT_AUTHOR . ")";
-            else
+            } else {
                 $joins[] = "left join PaperConflict on (PaperConflict.paperId=Paper.paperId and PaperConflict.contactId=$contactId)";
+            }
             $cols[] = "PaperConflict.conflictType";
-        } else if (get($options, "author"))
+        } else if (get($options, "author")) {
             $where[] = "false";
+        }
 
         // my review
         $no_paperreview = $paperreview_is_my_reviews = false;
@@ -2963,50 +3116,60 @@ class Conf {
         if (get($options, "myReviews")) {
             $joins[] = "join PaperReview on ($reviewjoin)";
             $paperreview_is_my_reviews = true;
-        } else if (get($options, "myOutstandingReviews"))
+        } else if (get($options, "myOutstandingReviews")) {
             $joins[] = "join PaperReview on ($reviewjoin and reviewNeedsSubmit!=0)";
-        else if (get($options, "myReviewRequests"))
+        } else if (get($options, "myReviewRequests")) {
             $joins[] = "join PaperReview on (PaperReview.paperId=Paper.paperId and requestedBy=" . ($contactId ? : -100) . " and reviewType=" . REVIEW_EXTERNAL . ")";
-        else
+        } else {
             $no_paperreview = true;
+        }
 
         // review signatures
         if (get($options, "reviewSignatures")
             || get($options, "scores")
             || get($options, "reviewWordCounts")) {
             $cols[] = "(select " . ReviewInfo::review_signature_sql($this, get($options, "scores")) . " from PaperReview r where r.paperId=Paper.paperId) reviewSignatures";
-            if (get($options, "reviewWordCounts"))
+            if (get($options, "reviewWordCounts")) {
                 $cols[] = "(select group_concat(coalesce(reviewWordCount,'.') order by reviewId) from PaperReview where PaperReview.paperId=Paper.paperId) reviewWordCountSignature";
+            }
         } else if ($user) {
             // need myReviewPermissions
-            if ($no_paperreview)
+            if ($no_paperreview) {
                 $joins[] = "left join PaperReview on ($reviewjoin)";
-            if ($no_paperreview || $paperreview_is_my_reviews)
+            }
+            if ($no_paperreview || $paperreview_is_my_reviews) {
                 $cols[] = PaperInfo::my_review_permissions_sql("PaperReview.") . " myReviewPermissions";
-            else
+            } else {
                 $cols[] = "(select " . PaperInfo::my_review_permissions_sql() . " from PaperReview where $reviewjoin group by paperId) myReviewPermissions";
+            }
         }
 
         // fields
-        if (get($options, "topics"))
+        if (get($options, "topics")) {
             $cols[] = "(select group_concat(topicId) from PaperTopic where PaperTopic.paperId=Paper.paperId) topicIds";
+        }
 
         if (get($options, "options")
             && (isset($this->settingTexts["options"]) || isset($this->opt["fixedOptions"]))
-            && $this->paper_opts->count_option_list())
+            && $this->paper_opts->count_option_list()) {
             $cols[] = "(select group_concat(PaperOption.optionId, '#', value) from PaperOption where paperId=Paper.paperId) optionIds";
-        else if (get($options, "options"))
+        } else if (get($options, "options")) {
             $cols[] = "'' as optionIds";
+        }
 
         if (get($options, "tags")
             || ($user && $user->isPC)
-            || $this->has_tracks())
+            || $this->has_tracks()) {
             $cols[] = "(select group_concat(' ', tag, '#', tagIndex order by tag separator '') from PaperTag where PaperTag.paperId=Paper.paperId) paperTags";
-        if (get($options, "tagIndex") && !is_array($options["tagIndex"]))
+        }
+        if (get($options, "tagIndex") && !is_array($options["tagIndex"])) {
             $options["tagIndex"] = array($options["tagIndex"]);
-        if (get($options, "tagIndex"))
-            foreach ($options["tagIndex"] as $i => $tag)
+        }
+        if (get($options, "tagIndex")) {
+            foreach ($options["tagIndex"] as $i => $tag) {
                 $cols[] = "(select tagIndex from PaperTag where PaperTag.paperId=Paper.paperId and PaperTag.tag='" . sqlq($tag) . "') tagIndex" . ($i ? : "");
+            }
+        }
 
         if (get($options, "reviewerPreference")) {
             $joins[] = "left join PaperReviewPreference on (PaperReviewPreference.paperId=Paper.paperId and PaperReviewPreference.contactId=$contactId)";
@@ -3014,12 +3177,14 @@ class Conf {
             $cols[] = "PaperReviewPreference.expertise as reviewerExpertise";
         }
 
-        if (get($options, "allReviewerPreference"))
+        if (get($options, "allReviewerPreference")) {
             $cols[] = "(select " . $this->query_all_reviewer_preference() . " from PaperReviewPreference where PaperReviewPreference.paperId=Paper.paperId) allReviewerPreference";
+        }
 
-        if (get($options, "allConflictType"))
+        if (get($options, "allConflictType")) {
             // See also SearchQueryInfo::add_allConflictType_column
             $cols[] = "(select group_concat(contactId, ' ', conflictType) from PaperConflict where PaperConflict.paperId=Paper.paperId) allConflictType";
+        }
 
         if (get($options, "watch") && $contactId) {
             $joins[] = "left join PaperWatch on (PaperWatch.paperId=Paper.paperId and PaperWatch.contactId=$contactId)";
@@ -3027,25 +3192,32 @@ class Conf {
         }
 
         // conditions
-        if (!empty($paperset))
+        if (!empty($paperset)) {
             $where[] = "Paper.paperId" . sql_in_numeric_set($paperset[0]);
-        if (get($options, "finalized"))
+        }
+        if (get($options, "finalized")) {
             $where[] = "timeSubmitted>0";
-        else if (get($options, "unsub"))
+        } else if (get($options, "unsub")) {
             $where[] = "timeSubmitted<=0";
-        if (get($options, "accepted"))
+        }
+        if (get($options, "accepted")) {
             $where[] = "outcome>0";
-        if (get($options, "undecided"))
+        }
+        if (get($options, "undecided")) {
             $where[] = "outcome=0";
+        }
         if (get($options, "active")
             || get($options, "myReviews")
             || get($options, "myOutstandingReviews")
-            || get($options, "myReviewRequests"))
+            || get($options, "myReviewRequests")) {
             $where[] = "timeWithdrawn<=0";
-        if (get($options, "myLead"))
+        }
+        if (get($options, "myLead")) {
             $where[] = "leadContactId=$contactId";
-        if (get($options, "myManaged"))
+        }
+        if (get($options, "myManaged")) {
             $where[] = "managerContactId=$contactId";
+        }
         if (get($options, "myWatching") && $contactId) {
             // return the papers with explicit or implicit WATCH_REVIEW
             // (i.e., author/reviewer/commenter); or explicitly managed
@@ -3056,25 +3228,30 @@ class Conf {
                 "exists (select * from PaperComment where paperId=Paper.paperId and contactId=$contactId)",
                 "(PaperWatch.watch&" . Contact::WATCH_REVIEW . ")!=0"
             ];
-            if ($this->has_any_lead_or_shepherd())
+            if ($this->has_any_lead_or_shepherd()) {
                 $owhere[] = "leadContactId=$contactId";
-            if ($this->has_any_manager() && $user->is_explicit_manager())
+            }
+            if ($this->has_any_manager() && $user->is_explicit_manager()) {
                 $owhere[] = "managerContactId=$contactId";
+            }
             $where[] = "(" . join(" or ", $owhere) . ")";
         }
-        if (get($options, "myConflicts"))
+        if (get($options, "myConflicts")) {
             $where[] = $contactId ? "PaperConflict.conflictType>0" : "false";
+        }
 
         $pq = "select " . join(",\n    ", $cols)
             . "\nfrom " . join("\n    ", $joins);
-        if (!empty($where))
+        if (!empty($where)) {
             $pq .= "\nwhere " . join("\n    and ", $where);
+        }
 
         $pq .= "\ngroup by Paper.paperId\n";
         // This `having` is probably faster than a `where exists` if most papers
         // have at least one tag.
-        if (get($options, "tags") === "require")
+        if (get($options, "tags") === "require") {
             $pq .= "having paperTags!=''\n";
+        }
         $pq .= get($options, "order", "order by Paper.paperId") . "\n";
 
         //Conf::msg_debugt($pq);
@@ -3084,8 +3261,9 @@ class Conf {
     function paper_set($options, Contact $user = null) {
         $rowset = new PaperInfoSet;
         $result = $this->paper_result($options, $user);
-        while (($prow = PaperInfo::fetch($result, $user, $this)))
+        while (($prow = PaperInfo::fetch($result, $user, $this))) {
             $rowset->add($prow);
+        }
         Dbl::free($result);
         return $rowset;
     }
@@ -4032,9 +4210,7 @@ class Conf {
         return $this->_api_map;
     }
     private function check_api_json($fj, $user, $method) {
-        if ((isset($fj->allow_if) && !$this->xt_allowed($fj, $user))
-            || !isset($fj->callback)
-            || !is_string($fj->callback)) {
+        if (isset($fj->allow_if) && !$this->xt_allowed($fj, $user)) {
             return false;
         } else if (!$method) {
             return true;
@@ -4074,6 +4250,8 @@ class Conf {
             }
         } else if (!$prow && get($uf, "paper")) {
             return self::paper_error_json_result($qreq->annex("paper_whynot"));
+        } else if (!is_string($uf->callback)) {
+            return new JsonResult(404, "Function not found.");
         } else {
             self::xt_resolve_require($uf);
             return call_user_func($uf->callback, $user, $qreq, $prow, $uf);
