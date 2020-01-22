@@ -1,9 +1,15 @@
+body#body-help, body#body-settings {
+    background: linear-gradient(to bottom, white, white 100px, transparent 100px, transparent),
+                linear-gradient(to right, #ecf2f4, #ecf2f4 164px, white 164px, white);
+                
+}
+
 #header-site {
     display:flex;
     align-items: center;
     background: none;
     color: #102a83;
-    margin-top: 4px;
+    padding-top: 4px;
     margin-left: 4px;
     border: none;
 }
