@@ -1,26 +1,61 @@
 body#body-help, body#body-settings {
-    background: linear-gradient(to bottom, white, white 100px, transparent 100px, transparent),
-                linear-gradient(to right, #ecf2f4, #ecf2f4 164px, white 164px, white);
+  background: linear-gradient(to bottom, white, white 105px, transparent 10px, transparent),
+  linear-gradient(to right, #ecf2f4, #ecf2f4 164px, white 164px, white);
                 
 }
 
+#top {
+    min-height: 80px;
+}
+/* Reposition the search bar so it doesn't appear below iacr logo */
+table.vbar {
+  position: absolute;
+  top: 40px;
+  right: 0px;
+}
+/* main top left nav has logo in it */
 #header-site {
-    display:flex;
-    align-items: center;
-    background: none;
-    color: #102a83;
-    padding-top: 4px;
-    margin-left: 4px;
-    border: none;
+  position: relative;
+  top: 10px;
+  left: 10px;
+  min-height: 100px;
+  vertical-align: middle;
+  background: none;
+  color: #102a83;
+  border: none;
+}
+#header-site a.qq {
+  border-radius: 5px;
+  border: 1px solid #f33360;
+  color: #f33360;
+  padding: 3px;
+  position: relative;
+  bottom: 30px;
 }
 
 #header-site:before {
-    margin-left: 10px;
-    margin-right: 10px;
-    background-image: url('https://iacr.org/img/logo/iacrlogo_small.png');
-    background-size: 75px 75px;
-    display:inline-block;
-    height:75px;
-    width:75px;
-    content:"";
+  margin-left: 10px;
+  margin-right: 10px;
+  position: relative;
+  top: 5px;
+  background-image: url('https://iacr.org/img/logo/iacrlogo_small.png');
+  background-size: 75px 75px;
+  display:inline-block;
+  height: 75px;
+  width: 75px;
+  content:"";
+}
+
+.leftmenu-left {
+  top: 20px;
+}
+
+button.iacrButton {
+  background-image: none;
+  background-color: #4CAF50;
+  color: white;
+}
+button.iacrButton:hover {
+    background-image: none;
+    background-color: green;
 }
