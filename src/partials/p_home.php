@@ -155,6 +155,7 @@ class Home_Partial {
     function render_admin_sidebar(Contact $user, Qrequest $qreq, $gx) {
         echo '<div class="homeinside"><h4>Administration</h4><ul>';
         $gx->start_render();
+        // This will be added later. echo '<li><a href="iacr/">IACR integration</a></li>';
         foreach ($gx->members("home/sidebar/admin") as $gj) {
             $gx->render($gj, [$user, $qreq, $gx, $gj]);
         }
@@ -220,6 +221,10 @@ class Home_Partial {
         if (($site = $user->conf->opt("conferenceSite"))
             && $site !== $user->conf->opt("paperSite"))
             echo " For general conference information, see ", Ht::link(htmlspecialchars($site), htmlspecialchars($site)), ".";
+        echo ' <p class="login_instructions">This site is built using the HotCRP conference review software. ',
+             'You need to <a href="',
+              $user->conf->hoturl("newaccount"),
+              '" class="uic js-href-add-email">Create an account</a> with your email address for every conference.</p>';
         echo '</div>';
     }
 
