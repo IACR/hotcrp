@@ -59,3 +59,12 @@ button.iacrButton:hover {
     background-image: none;
     background-color: green;
 }
+p.login_instructions {
+    max-width: 50%;
+    margin-top: 10px;
+    font-weight: 600;
+    color: #102a83;
+    background-color: #fffdf0;
+    border: 1px solid #b2a584;
+    padding: 5px;
+}
