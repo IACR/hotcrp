@@ -27,10 +27,10 @@ include "includes/lib.inc";
         <ul class="text-danger">
         <li>require login</li>
         <li>receive list of accepted papers as json in a hidden field</li>
-        <li>prompt user to select a template (crypto, asiacrypt, etc).
+        <li>prompt user to select a template (crypto, asiacrypt, etc).</li>
         </ul>
       </p>
-    </div
+    </div>
   </div>
 </div>
 <script>
