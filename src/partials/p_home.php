@@ -155,7 +155,7 @@ class Home_Partial {
     function render_admin_sidebar(Contact $user, Qrequest $qreq, $gx) {
         echo '<div class="homeinside"><h4>Administration</h4><ul>';
         $gx->start_render();
-        // This will be added later. echo '<li><a href="iacr/">IACR integration</a></li>';
+        echo '<li><a href="iacr/">IACR integration</a></li>';
         foreach ($gx->members("home/sidebar/admin") as $gj) {
             $gx->render($gj, [$user, $qreq, $gx, $gj]);
         }
