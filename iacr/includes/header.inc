@@ -46,7 +46,7 @@
        background-color: white;
      }
      /* hotcrp overrides btn and btn-primary, so we use .button
-        and .button-primary */
+        and .button-primary and copy from bootstrap 4.3. */
      .button {
         display: inline-block;
         font-weight: 400;

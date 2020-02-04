@@ -36,7 +36,5 @@ include "includes/header.inc";
 <script>
  setActiveMenu('menucomm');
 </script>
- <script src="https://iacr.org/libs/css/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-<?php
- include "includes/footer.inc";
-?>
+</body>
+</html>

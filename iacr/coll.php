@@ -44,7 +44,5 @@ include "includes/header.inc";
 <script>
  setActiveMenu('menucoll');
 </script>
- <script src="https://iacr.org/libs/css/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-<?php
- include "includes/footer.inc";
-?>
+</body>
+</html>
