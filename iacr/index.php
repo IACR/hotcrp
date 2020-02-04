@@ -12,11 +12,22 @@ include "includes/header.inc";
       <h3>IACR extensions to HotCRP</h3>
       <p>
         This section provides extra functionality that is specific to IACR
-        conferences. This includes the ability to import information for your
-        conference as well as the ability to export the list of accepted papers,
-        the program for the conference, and the proceedings for LNCS (if
-        applicable).
+        conferences. <strong>Before opening the site to submissions</strong>,
+        you should perform the following steps using the menu on the left:
       </p>
+      <ul>
+        <li>Create accounts for your program committee.</li>
+        <li>Import the recent collaborators of your program committee</li>
+      </ul>
+      <p>
+        After you have finalized acceptance decisions, you can perform
+        the following steps:
+      </p>
+      <ul>
+        <li>Announce the list of accepted papers</li>
+        <li>Prepare the proceedings (if you are publishing with LNCS)</li>
+        <li>Prepare the program for the web site</li>
+      </ul>
     </div>
   </div>
 </div>

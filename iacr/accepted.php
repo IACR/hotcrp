@@ -12,13 +12,16 @@ global $Opt;
     <div class="col-9">
       <h3>Export list of accepted papers</h3>
       <p>
-        Once the list of accepted papers has been decided, it is standard
-        practice to put them on the conference website. The way to do this
+        Once the acceptance decisions are finalized, you should
+        list the accepted papers on the website.  The way to do this
         is to download the <tt>papers.json</tt> file and place it in the
         location <tt><?php echo $Opt['conferenceSite'] . '/json/papers.json';?></tt>
       </p>
-      <p>
+      <p class="text-danger">
         TODO: create this form.
+      </p>
+      <p>
+        <a class="button button-primary" href="downloadaccepted.php">Download papers.json</a>
       </p>
     </div>
   </div>

@@ -15,8 +15,11 @@ include "includes/header.inc";
         need to supply a table of contents for the volume(s). The form below allows
         you to do this.
       </p>
-      <p>
+      <p class="text-danger">
         TODO: create this form.
+      </p>
+      <p>
+        <a class="button button-primary" href="lncstoc.php">Download table of contents</a>
       </p>
     </div>
   </div>

@@ -11,9 +11,14 @@ include "includes/header.inc";
     <div class="col-9">
       <h3>Import collaborators of the program committee</h3>
       <p>
-        PC members should supply their collaborators when they login, but this page
-        provides the option to import them automatically from CryptoDB.
+        Before you open the site to submissions, you should import the recent
+        collaborators of the program committee in order to detect conflict
+        of interest. This form uses CryptoDB and/or DBLP to import coauthors.
       </p>
+      <p>
+        <a class="button button-primary" href="#">Import coauthors for program committee</a>
+      </p>
+    <p class="text-danger">TODO: This needs an ajax form</p>
       <dl>
       <?php
       global $Opt;

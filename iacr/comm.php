@@ -27,11 +27,8 @@ include "includes/header.inc";
         </li>
       </ul>
       <p>
-        If you choose to upload a CSV, then you can still attempt to import their collaborators using the
-        form below.
-      </p>
-      <p>
-        TODO: create this form.
+        <strong>Once you have created the accounts of the program committee, you should <a href="coll.php">import
+        their recent collaborators<a>.</strong>
       </p>
     </div>
   </div>

@@ -3,24 +3,26 @@
  if (!$Me->is_signed_in()) {
    header("Location: ..");
  }
+ if (!$Me->privChair) {
+   http_response_code(403);
+   die('Forbidden for this account');
+ }
 ?>
 <html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>IACR functionality of hotcrp</title>
-    <link href="https://iacr.org/libs/css/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="../stylesheets/style.css" rel="stylesheet">
+    <link href="https://iacr.org/libs/css/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="../stylesheets/iacr.css" rel="stylesheet">
     <link rel="shortcut icon" href="https://iacr.org/favicon.ico">
     <style>
      .leftnav {
-       font-size: 75%;
        background-color:  #ecf2f4;
-       padding: 20px 0px 10px 0px;          
      }
      .leftnav > div {
-       margin-top: 6px;
-       margin-bottom: 6px;
+       margin-top: 10px;
+       margin-bottom: 10px;
      }
      div.navheader {
        margin-top: 10px;
@@ -42,6 +44,48 @@
        border: 1px solid green;
        color: green;
        background-color: white;
+     }
+     /* hotcrp overrides btn and btn-primary, so we use .button
+        and .button-primary */
+     .button {
+        display: inline-block;
+        font-weight: 400;
+        color: #212529;
+        text-align: center;
+        vertical-align: middle;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+       -ms-user-select: none;
+       user-select: none;
+       background-color: transparent;
+       border: 1px solid transparent;
+       padding: 0.375rem 0.75rem;
+       font-size: 1rem;
+       line-height: 1.5;
+       border-radius: 0.25rem;
+       transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+     }
+     @media (prefers-reduced-motion: reduce) {
+       .button {
+         transition: none;
+       }
+     }
+     .button:hover {
+        color: #212529;
+        text-decoration: none;
+     }
+     .button-primary {
+        color: #fff;
+        background-color: #007bff;
+        border-color: #007bff;
+     }
+     .button-primary:hover {
+        color: #fff;
+        background-color: #0069d9;
+        border-color: #0062cc;
+     }
+     .button-primary:focus, .button-primary.focus {
+        box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5);
      }
     </style>
     <script src="https://iacr.org/libs/js/jquery/3.3.1/jquery.min.js"></script>

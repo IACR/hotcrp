@@ -1,5 +1,5 @@
-<div class="leftnav d-flex flex-column px-2">
-  <div><a id="menuhome" class="navitem" href=".">Home</a></div>
+<div class="leftnav d-flex flex-column p-3">
+  <div><a id="menuhome" class="navitem" href=".">IACR Home</a></div>
   <div class="navheader font-weight-bold">Import</div>
   <div><a id="menucomm" class="navitem" href="comm.php">Program committee</a></div>
   <div><a id="menucoll" class="navitem" href="coll.php">PC Collaborators</a></div>
