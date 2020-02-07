@@ -30,7 +30,7 @@
 
     unset($paper);
     header('Content-Type: application/json');
-    $data = array('_source' => 'hotCRP v1', 'acceptedPapers' => $papers);
+    $data = array('_source' => 'IACR/hotcrp v1', 'acceptedPapers' => $papers);
     echo json_encode($data, JSON_PRETTY_PRINT);
     $db = null;
   } catch (PDOException $e) {
