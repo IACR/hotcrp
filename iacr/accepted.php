@@ -21,7 +21,7 @@ global $Opt;
         TODO: create this form.
       </p>
       <p>
-        <a class="button button-primary" href="downloadaccepted.php">Download papers.json</a>
+        <a class="button button-primary" target="_blank" href="downloadaccepted.php" download="papers.json">Download papers.json</a>
       </p>
     </div>
   </div>
