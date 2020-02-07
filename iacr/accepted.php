@@ -17,9 +17,6 @@ global $Opt;
         is to download the <tt>papers.json</tt> file and place it in the
         location <tt><?php echo $Opt['conferenceSite'] . '/json/papers.json';?></tt>
       </p>
-      <p class="text-danger">
-        TODO: create this form.
-      </p>
       <p>
         <a class="button button-primary" target="_blank" href="downloadaccepted.php" download="papers.json">Download papers.json</a>
       </p>
