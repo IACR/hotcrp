@@ -18,12 +18,11 @@
 
       // concats first and last names and adds to authors array + populates affiliations array
       foreach ($authorInfo as $authorLine) {
-        // because explode = ¯\_(ツ)_/¯
-        $fields = preg_split("/[\t]/", $authorLine, -1, PREG_SPLIT_NO_EMPTY);
+        // this is a HotCRP thing
+        $author = Author::make_tabbed($authorLine);
 
-        // $authorLine structure is first\tlast\temail\taffiliation
-        $paper['authors'][] = $fields[0] . ' ' . $fields[1];
-        $paper['affiliations'][] = $fields[3];
+        $paper['authors'][] = $author->firstName . ' ' . $author->lastName;
+        $paper['affiliations'][] = $author->affiliation;
       }
       unset($paper['authorInformation']);
     }
