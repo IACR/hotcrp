@@ -17,8 +17,20 @@ include "includes/header.inc";
       <ul>
         <li>
           <a href="../profile/new#bulk">Import the program committee directly from the conference website</a>.
-          Unfortunately this doesn't import email addresses, but it's about as easy to add these as it is
-          to construct the CSV in the next option.
+          This requires you to fill in their email addresses, but it allows you automatically import their recent co-authors in the next step.
+        <?php include "committee.php";?>
+        <script>
+        // This hides some things from hotcrp that we don't want.
+        let nodes = document.querySelectorAll('div.g strong');
+        nodes.forEach(function(node, currentIndex, listObj) {
+          node.style.display = 'none';
+        });
+        </script>
+        <form action="<?php echo hoturl_post('../profile/new', join('&amp;', array('u=new')) . '#bulk');?>" method="POST">
+        <textarea class="w-100" name="bulkentry" id="pclist" placeholder="Select a conference above"></textarea>
+        <input type="file" name="bulk" style="display:none">
+        <button type="submit" class="m-2 button button-primary" name="savebulk" value="1" id="commSubmit" disabled>Add accounts for program committee</button>
+        </form>
         </li>
         <li>
           <a href="../profile/new#bulk">Upload a CSV file containing names, affiliations, and email addresses</a>.
@@ -26,7 +38,7 @@ include "includes/header.inc";
           to import their collaborators automatically.
         </li>
       </ul>
-      <p>
+      <p class="alert alert-info">
         <strong>Once you have created the accounts of the program committee, you should <a href="coll.php">import
         their recent collaborators<a>.</strong>
       </p>

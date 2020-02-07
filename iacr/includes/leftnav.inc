@@ -7,6 +7,10 @@
   <div><a id="menuaccepted" class="navitem" href="accepted.php">Accepted papers</a></div>
   <div><a id="menulncs" class="navitem" href="lncs.php">LNCS table of contents</a></div>
   <div><a id="menuprogram" class="navitem" href="program.php">Program</a></div>
+  <div class="navheader font-weight-bold">IACR Documents</div>
+  <div><a class="navitem" href="https://www.iacr.org/docs/progchair.pdf" target="_blank">Program chair guidelines</a></div>
+  <div><a class="navitem" href="https://www.iacr.org/docs/genchair.pdf" target="_blank">General chair guidelines</a></div>
+  <div><a class="navitem" href="https://www.iacr.org/docs/reviewer.pdf" target="_blank">IACR reviewer guidelines</a></div>
 </div>
 <script>
   function setActiveMenu(nodeid) {
