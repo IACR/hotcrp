@@ -20,8 +20,9 @@ include "includes/lib.inc";
         password</strong>.
       </p>
       <p>
-        <a class="button button-primary" href="https://iacr.org/tools/program/index.html?hotcrp=<?php echo get_token();?>">Create program</a>
+        <button id="submitAccepted" class="button button-primary" href="https://iacr.org/tools/program/index.html?hotcrp=<?php echo get_token();?>" disabled>Create program</button>
       </p>
+      <textarea id="accepted" name="accepted" rows="8" cols="80" readonly></textarea>
       <p class="text-danger">
         TODO: make this be a post to a php file in the program editor.
         <ul class="text-danger">
@@ -34,7 +35,19 @@ include "includes/lib.inc";
   </div>
 </div>
 <script>
- setActiveMenu('menuprogram');
+  setActiveMenu('menuprogram');
+
+  $.getJSON('downloadaccepted.php', function(data) {
+    console.dir(data);
+    $('#accepted').html(JSON.stringify(data, null, 2));
+    let submitButton = document.getElementById('submitAccepted');
+    if (submitButton) {
+      submitButton.removeAttribute('disabled');
+    }
+  })
+  .fail(function(jqxhr, textStatus, error) {
+    console.dir(jqxhr);
+  });
 </script>
 </body>
 </html>
