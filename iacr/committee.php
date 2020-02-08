@@ -60,9 +60,13 @@
          txt += ',pc\n';
        }
        let textarea = document.getElementsByName('bulkentry')[0];
-       showError('You must add the email addresses by replacing EMAIL on each line');
+       showError('You must add the email addresses by replacing EMAIL on each line. You may wish to change "pc" to "chair" if someone should be a program chair.');
        textarea.setAttribute('rows', 10);
        textarea.value = txt;
+       let submitButton = document.getElementById('commSubmit');
+       if (submitButton) {
+          submitButton.removeAttribute('disabled');
+       }
      }).catch(function(error) {
        console.dir(url);
        console.dir(error);
@@ -98,5 +102,5 @@ function updateButton() {
          value="<?php echo date('Y');?>"
          min="<?php echo intval(date('Y')) - 2;?>"
          max="<?php echo intval(date('Y')) + 3;?>">
-  <button type="button" id="fetchIACR" onclick="fetchComm();return false" disabled>Fetch committee</button>
+  <button type="button" id="fetchIACR" class="button button-primary" onclick="fetchComm();return false" disabled>Fetch committee</button>
 </div>

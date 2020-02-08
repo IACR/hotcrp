@@ -354,6 +354,9 @@ function parseBulkFile($text, $filename) {
     } else if (count($success)) {
         $successMsg = "Saved " . plural($success, "account") . ": " . commajoin($success) . ".";
     }
+    if (count($success)) {
+       $successMsg .= " You may need to <a href='../iacr/coll.php'><strong>import their coauthors</strong></a>";
+    }
     if (count($errors)) {
         $errorMsg = '<div class="parseerr"><p>' . join("</p>\n<p>", $errors) . "</p></div>";
     }

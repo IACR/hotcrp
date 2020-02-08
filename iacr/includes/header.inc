@@ -1,18 +1,15 @@
 <?php
  global $Me;
- if (!$Me->is_signed_in()) {
+ if (!$Me->is_signed_in() || !$Me->privChair) {
+//   $Me->escape();
    header("Location: ..");
- }
- if (!$Me->privChair) {
-   http_response_code(403);
-   die('Forbidden for this account');
  }
 ?>
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>IACR functionality of hotcrp</title>
+    <title>IACR functionality of HotCRP</title>
     <link href="../stylesheets/style.css" rel="stylesheet">
     <link href="https://iacr.org/libs/css/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="../stylesheets/iacr.css" rel="stylesheet">
@@ -49,6 +46,7 @@
      /* hotcrp overrides btn and btn-primary, so we use .button
         and .button-primary and copy from bootstrap 4.3. */
      .button {
+        background-image: none;
         display: inline-block;
         font-weight: 400;
         color: #212529;
@@ -72,6 +70,8 @@
        }
      }
      .button:hover {
+        background: none;
+        background-image: none;
         color: #212529;
         text-decoration: none;
      }
@@ -97,6 +97,6 @@
       <div id="header-site">
         <a class="qq" href="/<?php echo $Opt['shortName'];?>/"><span class="header-site-name"><?php echo $Opt['shortName'];?></span></a>
       </div>
-    <h2 class="float-right mt-4 mr-4">IACR hotcrp integration</h2>
+    <h2 class="float-right mt-4 mr-4">IACR HotCRP integration</h2>
     </div>
     
