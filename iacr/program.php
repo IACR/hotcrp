@@ -1,11 +1,10 @@
 <?php
 include "../src/initweb.php";
 include "includes/header.inc";
-include "includes/lib.inc";
 
 function progEdPath() {
   // for Kay's dev env
-  if (empty($_SERVER['HTTP_HOST'])) {
+  if ($_SERVER['HTTP_HOST'] == 'localhost') {
     return "/program-editor";
   }
   return "https://iacr.org/tools/program";
@@ -28,7 +27,7 @@ function progEdPath() {
         password</strong>.
       </p>
       <form action="<?php echo progEdPath(); ?>/receiveFromHotCRP.php" method="post">
-        <button id="submitAccepted" class="button button-primary" href="https://iacr.org/tools/program/index.html?hotcrp=<?php echo get_token();?>" disabled>Create program</button>
+        <button id="submitAccepted" class="button button-primary" type="submit" disabled>Create program</button>
         <input type="hidden" name="name" value="<?php echo $Opt['longName']; ?>" />
         <textarea id="accepted" class="d-none" name="accepted" rows="8" cols="80" readonly></textarea>
       </form>
