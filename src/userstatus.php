@@ -1084,7 +1084,6 @@ class UserStatus extends MessageSet {
             ' <p>Give one conflict per line, using parentheses for affiliations and institutions.<br>
         Examples: “Ping Yen Zhang (INRIA)”, “All (University College London)”</p></div>';
         include 'iacr/collaborators.inc';
-        echoLookupForm($reqj->tags);
         echo "<textarea name=\"collaborators\" rows=\"5\" cols=\"80\" class=\"",
             $us->control_class("collaborators", "need-autogrow"), "\">",
             htmlspecialchars(get_s($cj, "collaborators")), "</textarea></div>\n";

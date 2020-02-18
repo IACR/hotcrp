@@ -17,7 +17,8 @@ include "includes/header.inc";
       <ul>
         <li>
           <a href="../profile/new#bulk">Import the program committee directly from the conference website</a>.
-          This requires you to fill in their email addresses, but it allows you automatically import their recent co-authors in the next step.
+          This requires you to fill in their email addresses, but it improves the accuracy
+          of identifying co-authors in the next step.
         <?php include "committee.php";?>
         <script>
         // This hides some things from hotcrp that we don't want.
@@ -33,9 +34,9 @@ include "includes/header.inc";
         </form>
         </li>
         <li>
-          <a href="../profile/new#bulk">Upload a CSV file containing names, affiliations, and email addresses</a>.
-          Unfortunately, this doesn't import CryptoDB ids, which would allow you
-          to import their collaborators automatically.
+          <a href="../profile/new#bulk">Upload a CSV file containing names, affiliations,
+          and email addresses</a>. Unfortunately, this doesn't import CryptoDB ids,
+          which help in identifying collaborators automatically.
         </li>
       </ul>
       <p class="alert alert-info">
