@@ -12,8 +12,9 @@ include "includes/header.inc";
       <h3>Import collaborators of the program committee</h3>
       <p>
         Before you open the site to submissions, you should import the recent
-        collaborators of the program committee in order to detect conflict
-        of interest. This form uses CryptoDB to import coauthors.
+        collaborators of the program committee in order to detect conflicts
+        of interest. This form uses CryptoDB to import coauthors but there
+        may still be other conflicts.
       </p>
       <p>
         <button id="lookup-button" class="button button-primary" onclick="fetchData()">Import coauthors for program committee</button>
@@ -25,7 +26,7 @@ include "includes/header.inc";
           <div id="lookupFailure" class="progress-bar bg-warning" role="progressbar" aria-valuenow="0" area-valuemin="0" aria-valuemax="100" style="width: 0%;">0%</div>
         </div>
       </div>
-      <p id="lookupStatus"></p>
+      <p id="lookupStatus" class="font-weight-bold"></p>
       <dl>
       <?php
       global $Opt;
