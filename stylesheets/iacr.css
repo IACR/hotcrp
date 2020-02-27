@@ -1,7 +1,7 @@
 body#body-help, body#body-settings {
   background: linear-gradient(to bottom, white, white 105px, transparent 10px, transparent),
   linear-gradient(to right, #ecf2f4, #ecf2f4 164px, white 164px, white);
-                
+
 }
 
 #top {
@@ -118,4 +118,33 @@ on what .btn and .btn-primary are in bootstrap 4.3. */
 
 div#iacrError {
     margin-bottom: 1rem;
+}
+
+.collaborators-form {
+  display: flex;
+  align-items: center;
+}
+
+select#iacrvenue, input#year, textarea#pclist {
+  /* mimic .form-control from Bootstrap 4.3, minus display block & width 100 */
+  height: calc(1.5em + .75rem + 2px);
+  padding: .375rem .75rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #495057;
+  background-color: #FFF;
+  background-clip: padding-box;
+  border: 1px solid #CED4DA;
+  border-radius: .25rem;
+  transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+}
+
+select#iacrvenue {
+  margin-right: 0.8rem;
+  width: 30%;
+}
+
+button#fetchIACR {
+  margin-left: 0.8rem;
 }

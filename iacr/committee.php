@@ -29,7 +29,7 @@
    }
    let url = 'https://';
    url += sel.options[sel.selectedIndex].value;
-   url += '.iacr.org/';   
+   url += '.iacr.org/';
    url += document.getElementById('year').value;
    url += '/json/comm.json';
    fetch(url,
@@ -84,23 +84,25 @@ function updateButton() {
 }
 </script>
 <div class="g">
-  <div style="display:none;margin:5px;padding: 5px;border: 1px solid red;color:red" id="iacrError"></div>
+  <div style="display:none;margin-bottom:1rem;padding: 5px;border: 1px solid red;color:red" id="iacrError"></div>
   <strong> OR </strong>
   <strong style="color:green">import from IACR:</strong>
-  <select id="iacrvenue" onchange="updateButton()">
-    <option>Select a conference</option>
-    <option value="asiacrypt">asiacrypt</option>
-    <option value="crypto">crypto</option>
-    <option value="eurocrypt">eurocrypt</option>
-    <option value="ches">ches</option>
-    <option value="fse">fse</option>
-    <option value="pkc">pkc</option>
-    <option value="rwc">rwc</option>
-    <option value="tcc">tcc</option>
-  </select>
-  <input type="number" id="year" id="year"
-         value="<?php echo date('Y');?>"
-         min="<?php echo intval(date('Y')) - 2;?>"
-         max="<?php echo intval(date('Y')) + 3;?>">
-  <button type="button" id="fetchIACR" class="button button-primary" onclick="fetchComm();return false" disabled>Fetch committee</button>
+  <div class="collaborators-form">
+    <select id="iacrvenue" onchange="updateButton()">
+      <option>Select a conference</option>
+      <option value="asiacrypt">asiacrypt</option>
+      <option value="crypto">crypto</option>
+      <option value="eurocrypt">eurocrypt</option>
+      <option value="ches">ches</option>
+      <option value="fse">fse</option>
+      <option value="pkc">pkc</option>
+      <option value="rwc">rwc</option>
+      <option value="tcc">tcc</option>
+    </select>
+    <input type="number" id="year" id="year"
+           value="<?php echo date('Y');?>"
+           min="<?php echo intval(date('Y')) - 2;?>"
+           max="<?php echo intval(date('Y')) + 3;?>">
+    <button type="button" id="fetchIACR" class="button button-primary" onclick="fetchComm();return false" disabled>Fetch committee</button>
+  </div>
 </div>
