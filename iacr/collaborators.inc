@@ -26,7 +26,7 @@
        cryptodb = parts[1];
      }
    }
-  
+
    showError(null);
    let url = null;
    if (cryptodb != null) {

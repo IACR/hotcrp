@@ -3,6 +3,7 @@ include "../conf/options.php";
 include "../src/initweb.php";
 include "includes/header.inc";
 ?>
+
 <div class="container-fluid float-left">
   <div class="row">
     <div class="col-3">
@@ -13,7 +14,7 @@ include "includes/header.inc";
       <p>
         The standard HotCRP user interface provides several
         ways to create accounts for your program committee:
-      </p>        
+      </p>
       <ul>
         <li>
           <a href="../profile/new#bulk">Import the program committee directly from the conference website</a>.
@@ -30,7 +31,7 @@ include "includes/header.inc";
         <form action="<?php echo hoturl_post('../profile/new', join('&amp;', array('u=new')) . '#bulk');?>" method="POST">
         <textarea class="w-100" name="bulkentry" id="pclist" placeholder="Select a conference above"></textarea>
         <input type="file" name="bulk" style="display:none">
-        <button type="submit" class="m-2 button button-primary" name="savebulk" value="1" id="commSubmit" disabled>Add accounts for program committee</button>
+        <button type="submit" class="my-2 button button-primary" name="savebulk" value="1" id="commSubmit" disabled>Add accounts for program committee</button>
         </form>
         </li>
         <li>
