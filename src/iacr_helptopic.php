@@ -1,5 +1,5 @@
 <?php
-// src/help/h_iacrguide.php -- HotCRP help functions
+// src/iacr_helptopic.php -- HotCRP help functions
 
 class IACR_HelpTopic {
     static function render_all($hth, $gj) {
