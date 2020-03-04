@@ -645,6 +645,10 @@ class PaperTable {
                 || $noPapers === true
                 || ($dtype == DTYPE_FINAL) !== $this->canUploadFinal)
                 return;
+          // ADDED FOR IACR. Rump session uses slides upload instead of PDF upload.
+          if ($this->conf->opt('iacrType') === 'rump') {
+            return;
+          }
         }
         $inputid = $dtype > 0 ? "opt" . $dtype : "paperUpload";
 
@@ -1316,6 +1320,10 @@ class PaperTable {
     }
 
     function echo_editable_contact_author($option) {
+        // IACR Rump session does not show additional contacts.
+        if ($this->conf->opt('iacrType') === 'rump') {
+          return;
+        }
         if ($this->prow) {
             list($aulist, $contacts) = $this->_analyze_authors();
             $contacts = array_merge($aulist, $contacts);
