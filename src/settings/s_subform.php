@@ -4,6 +4,10 @@
 
 class BanalSettings {
     static function render($suffix, $sv) {
+        global $Opt;
+        if ($Opt["iacrType"] === "rump") {
+          return;
+        }
         $cfs = new FormatSpec($sv->curv("sub_banal_opt$suffix"),
                               $sv->curv("sub_banal_data$suffix"));
         foreach (["papersize", "pagelimit", "columns", "textblock", "bodyfontsize", "bodylineheight", "unlimitedref"] as $k) {
@@ -219,6 +223,7 @@ class BanalSettings {
 
 class SubForm_SettingRenderer {
     static function render(SettingValues $sv) {
+        global $Opt;
         echo "<h3 class=\"settings\">Abstract and PDF</h3>\n";
 
         echo '<div id="foldpdfupload" class="fold2o fold3o">';
@@ -227,11 +232,12 @@ class SubForm_SettingRenderer {
             $sv->render_select("sub_noabstract", [0 => "Abstract required to register submission", 2 => "Abstract optional", 1 => "No abstract"]),
             '</div>';
 
-        echo '<div class="f-i">',
-            $sv->label("sub_nopapers", "PDF requirement", ["class" => "n"]),
-            $sv->render_select("sub_nopapers", [0 => "PDF required to complete submission", 2 => "PDF optional", 1 => "No PDF allowed"]),
-            '<div class="f-h fx3">Registering a submission never requires a PDF.</div></div>';
-
+        if ($Opt["iacrType"] !== "rump") {
+          echo '<div class="f-i">',
+              $sv->label("sub_nopapers", "PDF requirement", ["class" => "n"]),
+              $sv->render_select("sub_nopapers", [0 => "PDF required to complete submission", 2 => "PDF optional", 1 => "No PDF allowed"]),
+              '<div class="f-h fx3">Registering a submission never requires a PDF.</div></div>';
+        }
         if (is_executable("src/banal")) {
             echo '<div class="g fx2">';
             BanalSettings::render("", $sv);
