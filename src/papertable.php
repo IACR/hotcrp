@@ -1525,6 +1525,9 @@ class PaperTable {
             $heading = $this->edit_title_html($o);
         }
         $this->echo_editable_papt($o->formid, $heading, $rest, $o);
+        if ($o !== null && $o->readable_formid() === "iacr-copyright-agreement") {
+            echo "<strong><a href=\"../../iacrcopyright/" . $this->prow->paperId  . "\">IACR copyright form</a></strong>";
+        }
         $this->echo_field_hint($o);
         echo Ht::hidden("has_{$o->formid}", 1);
     }

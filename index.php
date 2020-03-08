@@ -29,6 +29,12 @@ if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "style
     exit;
 }
 
+// ADDED FOR IACR
+if ($nav->page === "iacrcopyright") {
+    include("iacrcopyright/index.php");
+    exit;
+}
+
 require_once("src/initweb.php");
 $page_template = $Conf->page_template($nav->page);
 
