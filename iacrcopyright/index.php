@@ -221,10 +221,9 @@ try {
   echo "</body></html>";
 
   // Send an email copy to copyrightform@iacr.org
-  $subject = $Opt["longName"] . " Copyright signed for " . $prow->title;
   $stmt = null;
   $db = null;
-  $subject = "Copyright registered for " . $Opt["shortName"] . ': ' . $prow->title;
+  $subject = "[" . $Opt["shortName"] . "] Copyright signed for: " . $prow->title;
   $headers  = "MIME-Version: 1.0\r\n";
   $headers .= "Content-type: text/html; charset=utf-8\r\n";
   $headers .= "From: " . $Opt["emailFrom"] . "\r\n".
