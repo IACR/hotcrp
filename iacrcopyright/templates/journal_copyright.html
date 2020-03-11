@@ -139,10 +139,10 @@ Part&nbsp;II of this form.</p>
 <hr/>
 <h2>Copyright and Consent Form</h2>
 <p>Name and address of corresponding author:<br>
-<textarea required class="border border-success" id="contact" name="contact" rows="5" cols="80">[$correspondingAuthor]</textarea>
+<textarea required class="border border-danger" id="contact" name="contact" rows="5" cols="80">[$correspondingAuthor]</textarea>
 </p>
 
-<p>Submission-ID: <input type="text" name="subId" value="[$subId]" readonly></p>
+<input type="hidden" name="subId" value="[$subId]">
 
 <p>Title of article (hereinafter referred to as "the Work"):<br>
 <input type="text" name="title" size="80" value="[$title]" readonly></p>
@@ -200,7 +200,7 @@ access or to disable, erase or otherwise harm any computer systems or software,
 and hereby agrees to indemnify and hold harmless IACR from all liability,
 losses, damages, penalties, claims, actions, costs and expenses (including
 reasonable legal expense) arising from the use of such files.</p></dl>
-<p>Signed by: <input required class="ml-2 border border-success" placeholder="Enter your name" type="text" id="signedBy1" name="signedBy1" size="40">.
+<p>Signed by: <input required class="ml-2 border border-danger" placeholder="Enter your name" type="text" id="signedBy1" name="signedBy1" size="40">.
 Today's date: <u>[$date]</u></p>
 <p>&nbsp;</p>
 
