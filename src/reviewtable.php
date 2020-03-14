@@ -1,6 +1,6 @@
 <?php
 // reviewtable.php -- HotCRP helper class for table of all reviews
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 function _review_table_actas($user, $rr) {
     if (!get($rr, "contactId") || $rr->contactId == $user->contactId)
@@ -19,9 +19,7 @@ function review_table($user, PaperInfo $prow, $rrows, $rrow, $mode) {
     $admin = $user->can_administer($prow);
     $hideUnviewable = ($cflttype > 0 && !$admin)
         || (!$user->act_pc($prow) && !$conf->setting("extrev_view"));
-    $show_colors = $user->can_view_reviewer_tags($prow);
     $show_ratings = $user->can_view_review_ratings($prow);
-    $tagger = $show_colors ? new Tagger($user) : null;
     $xsep = ' <span class="barsep">·</span> ';
     $want_scores = $mode !== "assign" && $mode !== "edit" && $mode !== "re";
     $want_requested_by = false;
@@ -72,9 +70,10 @@ function review_table($user, PaperInfo $prow, $rrows, $rrow, $mode) {
 
         $t = '<td class="rl nw">';
         if ($rrow && $rrow->reviewId == $rr->reviewId) {
-            if ($user->contactId == $rr->contactId && !$rr->reviewSubmitted)
+            if ($user->contactId == $rr->contactId && !$rr->reviewSubmitted) {
                 $id = "Your $id";
-            $t .= '<a href="' . $conf->hoturl("review", "p=$prow->paperId&r=$rlink") . '" class="q"><b>' . $id . '</b></a>';
+            }
+            $t .= '<a href="' . $prow->reviewurl(["r" => $rlink]) . '" class="q"><b>' . $id . '</b></a>';
         } else if (!$canView
                    || ($rr->reviewModified <= 1 && !$user->can_review($prow, $rr))) {
             $t .= $id;
@@ -82,21 +81,23 @@ function review_table($user, PaperInfo $prow, $rrows, $rrow, $mode) {
                    || $rr->reviewModified <= 1
                    || (($mode === "re" || $mode === "assign")
                        && $user->can_review($prow, $rr))) {
-            $t .= '<a href="' . $conf->hoturl("review", "p=$prow->paperId&r=$rlink") . '">' . $id . '</a>';
+            $t .= '<a href="' . $prow->reviewurl(["r" => $rlink]) . '">' . $id . '</a>';
         } else if (Navigation::page() !== "paper") {
-            $t .= '<a href="' . $conf->hoturl("paper", "p=$prow->paperId#r$rlink") . '">' . $id . '</a>';
+            $t .= '<a href="' . $prow->hoturl(["anchor" => "r$rlink"]) . '">' . $id . '</a>';
         } else {
             $t .= '<a href="#r' . $rlink . '">' . $id . '</a>';
             if ($show_ratings
                 && $user->can_view_review_ratings($prow, $rr)
                 && ($ratings = $rr->ratings())) {
                 $all = 0;
-                foreach ($ratings as $r)
+                foreach ($ratings as $r) {
                     $all |= $r;
-                if ($all & 126)
+                }
+                if ($all & 126) {
                     $t .= " &#x2691;";
-                else if ($all & 1)
+                } else if ($all & 1) {
                     $t .= " &#x2690;";
+                }
             }
         }
         $t .= '</td>';

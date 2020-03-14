@@ -1,6 +1,6 @@
 <?php
 // pc_preferencelist.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class PreferenceList_PaperColumn extends PaperColumn {
     private $topics;
@@ -28,18 +28,15 @@ class PreferenceList_PaperColumn extends PaperColumn {
         }
         return true;
     }
-    function header(PaperList $pl, $is_text) {
-        return "Preferences";
-    }
     function content_empty(PaperList $pl, PaperInfo $row) {
         return !$pl->user->can_administer($row);
     }
     function content(PaperList $pl, PaperInfo $row) {
-        $prefs = $row->reviewer_preferences();
+        $prefs = $row->preferences();
         $ts = [];
-        if ($this->topics || $row->reviewer_preferences()) {
+        if ($this->topics || $row->preferences()) {
             foreach ($row->conf->pc_members() as $pcid => $pc) {
-                if (($pref = $row->reviewer_preference($pcid, $this->topics))) {
+                if (($pref = $row->preference($pcid, $this->topics))) {
                     if ($pref[0] !== 0 || $pref[1] !== null) {
                         $ts[] = $pcid . "P" . $pref[0] . ($pref[1] !== null ? unparse_expertise($pref[1]) : "");
                     } else if ($this->topics && $pref[2]) {

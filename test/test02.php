@@ -1,6 +1,6 @@
 <?php
 // test02.php -- HotCRP S3 and database unit tests
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 global $ConfSitePATH;
 $ConfSitePATH = preg_replace(",/[^/]+/[^/]+$,", "", __FILE__);
@@ -120,6 +120,23 @@ else
     xassert_eqq(substr("", 0, 1), false);
 $s = "";
 xassert_eqq(@$s[0], "");
+
+xassert(str_starts_with("", ""));
+xassert(str_starts_with("a", ""));
+xassert(str_starts_with("a", "a"));
+xassert(!str_starts_with("a", "ab"));
+xassert(str_starts_with("abc", "ab"));
+xassert(str_ends_with("", ""));
+xassert(str_ends_with("a", ""));
+xassert(str_ends_with("a", "a"));
+xassert(!str_ends_with("a", "ab"));
+xassert(str_ends_with("abc", "bc"));
+xassert(stri_ends_with("", ""));
+xassert(stri_ends_with("a", ""));
+xassert(stri_ends_with("a", "A"));
+xassert(!stri_ends_with("a", "Ab"));
+xassert(stri_ends_with("abc", "Bc"));
+
 
 // Json tests
 xassert_eqq(json_encode(Json::decode("{}")), "{}");
@@ -674,6 +691,7 @@ xassert_eqq($ms->x("Hello"), "Bonjour");
 xassert_eqq($ms->x("%d friend", 1), "1 ami");
 xassert_eqq($ms->x("%d friend", 0), "0 amis");
 xassert_eqq($ms->x("%d friend", 2), "2 amis");
+xassert_eqq($ms->x("%1[foo]\$s friend", ["foo" => 3]), "3 friend");
 xassert_eqq($ms->x("ax"), "b");
 xassert_eqq($ms->x("bx"), "a");
 xassert_eqq($ms->x("%xOOB%x friend", 10, 11), "aOOBb friend");
@@ -684,6 +702,20 @@ xassert_eqq($ms->x("fart", "bob"), "fart example A");
 xassert_eqq($ms->xi("fox-saying"), "What the fox said");
 xassert_eqq($ms->xi("fox-saying", false, "Animal"), "What the Animal said");
 xassert_eqq($ms->xi("test103", false, "Ass"), "Ass %% %s %BU%%MAN%Ass");
+
+$ms->add(["itext" => "butt", "otext" => "normal butt"]);
+$ms->add(["itext" => "butt", "otext" => "fat butt", "require" => ["$1[fat]"]]);
+$ms->add(["itext" => "butt", "otext" => "two butts", "require" => ["$1[count]>1"], "priority" => 1]);
+$ms->add(["itext" => "butt", "otext" => "three butts", "require" => ["$1[count]>2"], "priority" => 2]);
+xassert_eqq($ms->x("butt"), "normal butt");
+xassert_eqq($ms->x("butt", []), "normal butt");
+xassert_eqq($ms->x("butt", ["thin" => true]), "normal butt");
+xassert_eqq($ms->x("butt", ["fat" => true]), "fat butt");
+xassert_eqq($ms->x("butt", ["fat" => false]), "normal butt");
+xassert_eqq($ms->x("butt", ["fat" => true, "count" => 2]), "two butts");
+xassert_eqq($ms->x("butt", ["fat" => false, "count" => 2]), "two butts");
+xassert_eqq($ms->x("butt", ["fat" => true, "count" => 3]), "three butts");
+xassert_eqq($ms->x("butt", ["fat" => false, "count" => 2.1]), "three butts");
 
 // i18n messages with contexts
 $ms = new IntlMsgSet;
@@ -1196,7 +1228,7 @@ xassert_eqq($au->firstName, "G.-Y. (Ken (Butt))");
 xassert_eqq($au->affiliation, "France (Crap) Telecom");
 
 // mailer expansion
-$mailer = new HotCRPMailer($Conf, null, null, ["width" => false]);
+$mailer = new HotCRPMailer($Conf, null, ["width" => false]);
 xassert_eqq($mailer->expand("%CONFNAME%//%CONFLONGNAME%//%CONFSHORTNAME%"),
     "Test Conference I (Testconf I)//Test Conference I//Testconf I\n");
 xassert_eqq($mailer->expand("%SITECONTACT%//%ADMINEMAIL%"),
@@ -1218,7 +1250,6 @@ xassert_eqq(CleanHTML::basic_clean('<a href =\'https:"""//hello\' butt><B>Hello<
 // tag sorting
 $dt = $Conf->tags();
 xassert_eqq($dt->sort(""), "");
-xassert_eqq($dt->sort("a"), "a");
 xassert_eqq($dt->sort(" a"), " a");
 xassert_eqq($dt->sort(" a1 a10 a100 a2"), " a1 a2 a10 a100");
 

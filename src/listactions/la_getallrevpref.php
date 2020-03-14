@@ -1,9 +1,9 @@
 <?php
 // listactions/la_getallrevpref.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class GetAllRevpref_ListAction extends ListAction {
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->is_manager();
     }
     function run(Contact $user, $qreq, $ssel) {
@@ -15,7 +15,7 @@ class GetAllRevpref_ListAction extends ListAction {
                 continue;
             $conflicts = $prow->conflicts();
             foreach ($pcm as $cid => $p) {
-                $pref = $prow->reviewer_preference($p);
+                $pref = $prow->preference($p);
                 $cflt = get($conflicts, $cid);
                 $tv = $prow->topicIds ? $prow->topic_interest_score($p) : 0;
                 if ($pref[0] !== 0 || $pref[1] !== null || $cflt || $tv) {

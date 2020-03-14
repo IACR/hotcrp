@@ -1,6 +1,6 @@
 <?php
 // pc_reviewdelegation.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class ReviewDelegation_PaperColumn extends PaperColumn {
     private $requester;
@@ -13,9 +13,6 @@ class ReviewDelegation_PaperColumn extends PaperColumn {
         $pl->qopts["reviewSignatures"] = true;
         $this->requester = $pl->reviewer_user();
         return true;
-    }
-    function header(PaperList $pl, $is_text) {
-        return "Requested reviews";
     }
     function content(PaperList $pl, PaperInfo $row) {
         global $Now;

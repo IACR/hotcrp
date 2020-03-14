@@ -1,6 +1,6 @@
 <?php
 // test/setup.php -- HotCRP helper file to initialize tests
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 global $ConfSitePATH;
 $ConfSitePATH = preg_replace(",/[^/]+/[^/]+$,", "", __FILE__);
@@ -78,11 +78,11 @@ class MailChecker {
         xassert_eqq(count(self::$preps), 0);
         self::$preps = [];
     }
-    static function check1($recipient, $template, $row = null, $rest = []) {
+    static function check1($recipient, $template, $rest = []) {
         global $Conf;
         xassert_eqq(count(self::$preps), 1);
         if (count(self::$preps) === 1) {
-            $mailer = new HotCRPMailer($Conf, $recipient, $row, $rest);
+            $mailer = new HotCRPMailer($Conf, $recipient, $rest);
             $prep = $mailer->make_preparation($template, $rest);
             xassert_eqq(self::$preps[0]->subject, $prep->subject);
             xassert_eqq(self::$preps[0]->body, $prep->body);
@@ -157,15 +157,24 @@ class MailChecker {
         self::$preps = [];
     }
     static function add_messagedb($text) {
-        preg_match_all('/^\*\*\*\*\*\*\*\*(.*)\n([\s\S]*?\n\n)([\s\S]*?)(?=^\*\*\*\*\*\*\*\*|\z)/m', $text, $ms, PREG_SET_ORDER);
+        preg_match_all('/^\*\*\*\*\*\*\*\*(.*)\n([\s\S]*?\n)(?=^\*\*\*\*\*\*\*\*|\z)/m', $text, $ms, PREG_SET_ORDER);
         foreach ($ms as $m) {
             $m[1] = trim($m[1]);
+            $nlpos = strpos($m[2], "\n\n");
+            $nlpos = $nlpos === false ? strlen($m[2]) : $nlpos + 2;
+            $header = substr($m[2], 0, $nlpos);
+            $body = substr($m[2], $nlpos);
             if ($m[1] === ""
-                && preg_match('/\nX-Landmark:\s*(\S+)/', $m[2], $mx)) {
+                && preg_match('/\nX-Landmark:\s*(\S+)/', $header, $mx)) {
                 $m[1] = $mx[1];
             }
             if ($m[1] !== "") {
-                self::$messagedb[$m[1]][] = [$m[2], $m[3]];
+                if (!isset(self::$messagedb[$m[1]])) {
+                    self::$messagedb[$m[1]] = [];
+                }
+                if (trim($m[2]) !== "") {
+                    self::$messagedb[$m[1]][] = [$header, $body];
+                }
             }
         }
     }
@@ -179,8 +188,9 @@ $Admin->save_roles(Contact::ROLE_ADMIN | Contact::ROLE_CHAIR | Contact::ROLE_PC,
 
 // Load data.
 $json = json_decode(file_get_contents("$ConfSitePATH/test/db.json"));
-if (!$json)
+if (!$json) {
     die_hard("* test/testdb.json error: " . json_last_error_msg() . "\n");
+}
 $us = new UserStatus($Conf->site_contact());
 foreach ($json->contacts as $c) {
     $user = $us->save($c);
@@ -242,20 +252,21 @@ function assert_location() {
 
 function xassert($x, $description = "") {
     ++Xassert::$n;
-    if (!$x) {
-        trigger_error("Assertion" . ($description ? " " . $description : "") . " failed at " . assert_location() . "\n", E_USER_WARNING);
-    } else {
+    if ($x) {
         ++Xassert::$nsuccess;
+    } else {
+        trigger_error("Assertion" . ($description ? " " . $description : "") . " failed at " . assert_location() . "\n", E_USER_WARNING);
     }
     return !!$x;
 }
 
 function xassert_exit() {
-    $ok = Xassert::$nsuccess && Xassert::$nsuccess == Xassert::$n
+    $ok = Xassert::$nsuccess
+        && Xassert::$nsuccess == Xassert::$n
         && !Xassert::$nerror;
     echo ($ok ? "* " : "! "), plural(Xassert::$nsuccess, "test"), " succeeded out of ", Xassert::$n, " tried.\n";
-    if (Xassert::$nerror
-        && ($nerror = Xassert::$nerror - (Xassert::$n - Xassert::$nsuccess))) {
+    if (Xassert::$nerror > Xassert::$n - Xassert::$nsuccess) {
+        $nerror = Xassert::$nerror - (Xassert::$n - Xassert::$nsuccess);
         echo "! ", plural($nerror, "other error"), ".\n";
     }
     exit($ok ? 0 : 1);

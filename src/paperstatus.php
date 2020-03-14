@@ -1,6 +1,6 @@
 <?php
 // paperstatus.php -- HotCRP helper for reading/storing papers as JSON
-// Copyright (c) 2008-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class PaperStatus extends MessageSet {
     public $conf;
@@ -8,7 +8,7 @@ class PaperStatus extends MessageSet {
     public $prow;
     public $paperId;
     private $uploaded_documents;
-    private $no_email = false;
+    private $no_notify = false;
     private $export_ids = false;
     private $hide_docids = false;
     private $export_content = false;
@@ -27,13 +27,14 @@ class PaperStatus extends MessageSet {
     private $_option_ins;
     private $_new_conflicts;
     private $_conflict_ins;
+    private $_created_contacts;
     private $_paper_submitted;
     private $_document_change;
 
     function __construct(Conf $conf, Contact $user = null, $options = array()) {
         $this->conf = $conf;
         $this->user = $user;
-        foreach (array("no_email", "export_ids", "hide_docids",
+        foreach (array("no_notify", "export_ids", "hide_docids",
                        "export_content", "disable_users",
                        "allow_any_content_file", "content_file_prefix",
                        "add_topics") as $k) {
@@ -302,7 +303,8 @@ class PaperStatus extends MessageSet {
                 continue;
             }
             $ov = $prow->force_option($o);
-            if ($o->required && !$o->value_present($ov)) {
+            if ($o->test_required($prow)
+                && !$o->value_present($ov)) {
                 $this->error_at_option($o, "Entry required.");
             }
             $oj = $o->unparse_json($ov, $this, $user);
@@ -1227,11 +1229,17 @@ class PaperStatus extends MessageSet {
     static function postcheck_contacts(PaperStatus $ps, $pj) {
         if (isset($ps->diffs["contacts"]) && !$ps->has_error_at("contacts")) {
             foreach (self::contacts_array($pj) as $c) {
-                $flags = (get($c, "contact") ? 0 : Contact::SAVE_IMPORT)
-                    | ($ps->no_email ? 0 : Contact::SAVE_NOTIFY);
+                $flags = get($c, "contact") ? 0 : Contact::SAVE_IMPORT;
                 $c->disabled = !!$ps->disable_users;
-                if (!Contact::create($ps->conf, $ps->user, $c, $flags)
-                    && !($flags & Contact::SAVE_IMPORT)) {
+                $u = Contact::create($ps->conf, $ps->user, $c, $flags);
+                if ($u) {
+                    if ($u->password_unset()
+                        && !$u->activity_at
+                        && !$u->isPC
+                        && !$u->is_disabled()) {
+                        $ps->_created_contacts[] = $u;
+                    }
+                } else if (!($flags & Contact::SAVE_IMPORT)) {
                     $key = "contacts";
                     if (isset($c->index) && is_int($c->index)) {
                         $key = (isset($c->is_new) && $c->is_new === true ? "newcontact_" : "contact_") . $c->index;
@@ -1263,6 +1271,17 @@ class PaperStatus extends MessageSet {
             }
             if (!empty($ps->_conflict_ins)) {
                 $ps->conf->qe("insert into PaperConflict (paperId,contactId,conflictType) values ?v", $ps->_conflict_ins);
+            }
+        }
+        if ($ps->_created_contacts !== null) {
+            $rest = ["prow" => $ps->conf->fetch_paper($ps->paperId)];
+            if (!$ps->user
+                || ($ps->user->can_administer($rest["prow"])
+                    && !$rest["prow"]->has_author($ps->user))) {
+                $rest["adminupdate"] = true;
+            }
+            foreach ($ps->_created_contacts as $u) {
+                $u->send_mail("@newaccount.paper", $rest);
             }
         }
     }
@@ -1472,9 +1491,9 @@ class PaperStatus extends MessageSet {
             }
         }
 
-        self::execute_conflicts($this);
         self::execute_topics($this);
         self::execute_options($this);
+        self::execute_conflicts($this);
 
         if ($this->_paper_submitted) {
             self::postcheck_required_options($this);

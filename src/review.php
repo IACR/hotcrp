@@ -1,6 +1,6 @@
 <?php
 // review.php -- HotCRP helper class for producing review forms and tables
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 // JSON schema for settings["review_form"]:
 // {FIELD:{"name":NAME,"description":DESCRIPTION,"position":POSITION,
@@ -1346,7 +1346,7 @@ $blind\n";
     function unparse_flow_entry(PaperInfo $prow, ReviewInfo $rrow, Contact $contact) {
         // See also CommentInfo::unparse_flow_entry
         $barsep = ' <span class="barsep">·</span> ';
-        $a = '<a href="' . hoturl("paper", "p=$prow->paperId#r" . $rrow->unparse_ordinal()) . '"';
+        $a = '<a href="' . $prow->hoturl(["anchor" => "r" . $rrow->unparse_ordinal()]) . '"';
         $t = '<tr class="pl"><td class="pl_eventicon">' . $a . '>'
             . Ht::img("review48.png", "[Review]", ["class" => "dlimg", "width" => 24, "height" => 24])
             . '</a></td><td class="pl_eventid pl_rowclick">'
@@ -1934,7 +1934,7 @@ class ReviewValues extends MessageSet {
     function review_watch_callback($prow, $minic) {
         $rrow = $this->_mailer_info["rrow"];
         if ($minic->can_view_review($prow, $rrow, $this->_mailer_diff_view_score)
-            && ($p = HotCRPMailer::prepare_to($minic, $this->_mailer_template, $prow, $this->_mailer_info))
+            && ($p = HotCRPMailer::prepare_to($minic, $this->_mailer_template, $this->_mailer_info))
             && ($rrow->reviewSubmitted > 0
                 || $rrow->contactId == $minic->contactId
                 || $rrow->requestedBy == $minic->contactId
@@ -2276,7 +2276,7 @@ class ReviewValues extends MessageSet {
         }
 
         $this->_mailer_info = [
-            "rrow" => $new_rrow,
+            "prow" => $prow, "rrow" => $new_rrow,
             "reviewer_contact" => $reviewer,
             "check_function" => "HotCRPMailer::check_can_view_review"
         ];
@@ -2350,11 +2350,12 @@ class ReviewValues extends MessageSet {
 
     private function _confirm_message($fmt, $info, $single = null) {
         $pids = array();
-        foreach ($info as &$x)
+        foreach ($info as &$x) {
             if (preg_match('/\A(#?)(\d+)([A-Z]*)\z/', $x, $m)) {
                 $x = "<a href=\"" . hoturl("paper", ["p" => $m[2], "anchor" => $m[3] ? "r$m[2]$m[3]" : null]) . "\">" . $x . "</a>";
                 $pids[] = $m[2];
             }
+        }
         if ($single === null) {
             $single = $this->text === null;
         }

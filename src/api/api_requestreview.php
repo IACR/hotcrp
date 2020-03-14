@@ -1,6 +1,6 @@
 <?php
 // api_requestreview.php -- HotCRP user-related API calls
-// Copyright (c) 2008-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class RequestReview_API {
     static function requestreview($user, $qreq, $prow) {
@@ -125,7 +125,9 @@ class RequestReview_API {
             $reviewer = Contact::create($user->conf, $user, $xreviewer);
         }
         if (!$reviewer) {
-            return new JsonResult(400, "Error while creating account.");
+            return new JsonResult(400, "Review assignment error: Could not create account.");
+        } else if ($reviewer->is_disabled()) {
+            return new JsonResult(403, "Review assignment error: The account for " . Text::user_text($reviewer) . " is disabled.");
         }
 
         // assign review
@@ -136,10 +138,9 @@ class RequestReview_API {
                               "round_number" => $round]);
 
         // send confirmation mail
-        HotCRPMailer::send_to($reviewer, "@requestreview", $prow, [
-            "requester_contact" => $requester,
-            "reason" => $reason,
-            "rrow" => $prow->fresh_review_of_user($reviewer)
+        HotCRPMailer::send_to($reviewer, "@requestreview", [
+            "prow" => $prow, "rrow" => $prow->fresh_review_of_user($reviewer),
+            "requester_contact" => $requester, "reason" => $reason
         ]);
 
         return new JsonResult(["ok" => true, "action" => "request", "response" => "Requested an external review from " . Text::user_html($reviewer) . "."]);
@@ -198,8 +199,10 @@ class RequestReview_API {
                 "lastName" => $reviewer ? $reviewer->lastName : $request->lastName,
                 "email" => $email
             ];
-            HotCRPMailer::send_to($requester, "@denyreviewrequest", $prow,
-                ["reviewer_contact" => $reviewer_contact, "reason" => $reason]);
+            HotCRPMailer::send_to($requester, "@denyreviewrequest", [
+                "prow" => $prow,
+                "reviewer_contact" => $reviewer_contact, "reason" => $reason
+            ]);
 
             $user->log_activity_for($requester, "Review proposal denied for $email", $prow);
             $prow->conf->update_autosearch_tags($prow);
@@ -288,6 +291,9 @@ class RequestReview_API {
             $user->conf->qe("update PaperReviewRefused set reason=? where paperId=? and email=?",
                 $reason, $prow->paperId, $email);
         }
+        if ($reason === null && !empty($refusals)) {
+            $reason = $refusals[0]->reason;
+        }
 
         $user->conf->qe_raw("unlock tables");
 
@@ -305,8 +311,10 @@ class RequestReview_API {
             }
             if ($requser) {
                 $reqprow = $user->conf->fetch_paper($prow->paperId, $requser);
-                HotCRPMailer::send_to($requser, "@refusereviewrequest", $reqprow,
-                    ["reviewer_contact" => $rrow, "reason" => $reason]);
+                HotCRPMailer::send_to($requser, "@refusereviewrequest", [
+                    "prow" => $reqprow,
+                    "reviewer_contact" => $rrow, "reason" => $reason
+                ]);
             }
             $user->log_activity_for($rrow->contactId, "Review $rrow->reviewId declined", $prow);
         }
@@ -314,7 +322,7 @@ class RequestReview_API {
         if ($qreq->redirect) {
             $user->conf->confirmMsg("Thank you for telling us that you are unable to review submission #{$prow->paperId}.");
         }
-        return new JsonResult(["ok" => true, "action" => "decline"]);
+        return new JsonResult(["ok" => true, "action" => "decline", "reason" => $reason]);
     }
 
     static function retractreview($user, $qreq, $prow) {
@@ -383,8 +391,10 @@ class RequestReview_API {
                         && $requester->contactId != $user->contactId) {
                         $cc .= ", " . Text::user_email_to($requester);
                     }
-                    HotCRPMailer::send_to($reviewer, "@retractrequest", $prow,
-                        ["requester_contact" => $user, "cc" => $cc]);
+                    HotCRPMailer::send_to($reviewer, "@retractrequest", [
+                        "prow" => $prow,
+                        "requester_contact" => $user, "cc" => $cc
+                    ]);
                     $notified = true;
                 }
             }

@@ -1,6 +1,6 @@
 <?php
 // api_user.php -- HotCRP user-related API calls
-// Copyright (c) 2008-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class User_API {
     static function whoami(Contact $user, Qrequest $qreq) {
@@ -55,6 +55,7 @@ class User_API {
         if ($qreq->accept
             && $qreq->clickthrough_id
             && ($hash = Filer::sha1_hash_as_text($qreq->clickthrough_id))) {
+            $user->activate_database_account();
             $user->merge_and_save_data(["clickthrough" => [$hash => $Now]]);
             $user->log_activity("Terms agreed " . substr($hash, 0, 10) . "...");
             return ["ok" => true];

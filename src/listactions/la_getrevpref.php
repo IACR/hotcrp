@@ -1,13 +1,13 @@
 <?php
 // listactions/la_get_revpref.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class GetRevpref_ListAction extends ListAction {
     private $extended;
     function __construct($conf, $fj) {
         $this->extended = $fj->name === "get/revprefx";
     }
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->isPC;
     }
     static function render_upload(PaperList $pl) {
@@ -45,7 +45,7 @@ class GetRevpref_ListAction extends ListAction {
             $item = ["paper" => $prow->paperId, "title" => $prow->title];
             if ($not_me)
                 $item["email"] = $Rev->email;
-            $item["preference"] = unparse_preference($prow->reviewer_preference($Rev));
+            $item["preference"] = unparse_preference($prow->preference($Rev));
             if ($prow->has_conflict($Rev)) {
                 $item["notes"] = "conflict";
                 $has_conflict = true;

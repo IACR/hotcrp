@@ -1,6 +1,6 @@
 <?php
 // csv.php -- HotCRP CSV parsing functions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 if (!function_exists("gmp_init")) {
     global $ConfSitePATH;
@@ -434,17 +434,22 @@ class CsvGenerator {
     const FLAG_CR = 16;
     const FLAG_LF = 0;
     const FLAG_ITEM_COMMENTS = 32;
+    const FLAG_HEADERS = 256;
+    const FLAG_FLUSHED = 512;
 
     private $type;
     private $flags;
-    private $lines = array();
+    private $headerline = "";
+    private $lines = [];
     private $lines_length = 0;
-    public $headerline = "";
-    private $selection = null;
+    private $stream;
+    private $stream_filename;
+    private $stream_length = 0;
+    private $selection;
     private $selection_is_names = false;
     private $lf = "\n";
     private $comment = "# ";
-    private $inline = null;
+    private $inline;
     private $filename;
 
     static function always_quote($text) {
@@ -461,10 +466,18 @@ class CsvGenerator {
         }
     }
 
+    static function quote_join($array, $quote_empty = false) {
+        $x = [];
+        foreach ($array as $t) {
+            $x[] = self::quote($t, $quote_empty);
+        }
+        return join(",", $x);
+    }
+
 
     function __construct($flags = self::TYPE_COMMA) {
         $this->type = $flags & self::FLAG_TYPE;
-        $this->flags = $flags;
+        $this->flags = $flags & 255;
         if ($this->flags & self::FLAG_CRLF) {
             $this->lf = "\r\n";
         } else if ($this->flags & self::FLAG_CR) {
@@ -473,7 +486,7 @@ class CsvGenerator {
     }
 
     function select($selection, $header = null) {
-        assert(empty($this->lines) && $this->headerline === "");
+        assert($this->lines_length === 0 && !($this->flags & self::FLAG_FLUSHED));
         if ($header === false || $header === []) {
             $this->selection = $selection;
         } else if ($header === true) {
@@ -503,7 +516,7 @@ class CsvGenerator {
         if (!empty($this->lines)) {
             $this->headerline = $this->lines[0];
             $this->lines = [];
-            $this->lines_length = 0;
+            $this->flags |= self::FLAG_HEADERS;
         }
         return $this;
     }
@@ -560,9 +573,34 @@ class CsvGenerator {
     }
 
     function add_string($text) {
+        if ($this->lines_length >= 10000000 && $this->stream !== false) {
+            $this->_flush_stream();
+        }
         $this->lines[] = $text;
         $this->lines_length += strlen($text);
         return $this;
+    }
+
+    private function _flush_stream() {
+        global $Conf, $Now;
+        if ($this->stream === null) {
+            $this->stream = false;
+            if (($dir = Filer::docstore_tmpdir($Conf) ? : tempdir())) {
+                if (!str_ends_with($dir, "/")) {
+                    $dir .= "/";
+                }
+                for ($i = 0; $i !== 100; ++$i) {
+                    $fn = $dir . "csvtmp-$Now-" . mt_rand(0, 99999999) . ".csv";
+                    if (($this->stream = @fopen($fn, "xb"))) {
+                        $this->stream_filename = $fn;
+                        break;
+                    }
+                }
+            }
+        }
+        if ($this->stream !== false) {
+            $this->stream_length += $this->flush($this->stream);
+        }
     }
 
     function add_comment($text) {
@@ -633,18 +671,21 @@ class CsvGenerator {
     }
 
     function sort($flags = SORT_NORMAL) {
+        assert(!($this->flags & self::FLAG_FLUSHED));
         sort($this->lines, $flags);
         return $this;
     }
 
 
     function unparse() {
+        assert($this->stream_length === 0);
         return $this->headerline . join("", $this->lines);
     }
 
+
     function download_headers() {
         if ($this->is_csv()) {
-            header("Content-Type: text/csv; charset=utf-8; header=" . ($this->headerline !== "" ? "present" : "absent"));
+            header("Content-Type: text/csv; charset=utf-8; header=" . ($this->flags & self::FLAG_HEADERS ? "present" : "absent"));
         } else {
             header("Content-Type: text/plain; charset=utf-8");
         }
@@ -661,19 +702,40 @@ class CsvGenerator {
         header("X-Content-Type-Options: nosniff");
     }
 
+    function flush($stream = null) {
+        $n = 0;
+        if ($stream === null) {
+            $stream = fopen("php://output", "wb");
+        }
+        if ($this->headerline !== "") {
+            $n += fwrite($stream, $this->headerline);
+            $this->flags |= self::FLAG_FLUSHED;
+        }
+        if (!empty($this->lines)) {
+            if ($this->lines_length <= 10000000) {
+                $n += fwrite($stream, join("", $this->lines));
+            } else {
+                foreach ($this->lines as $line) {
+                    $n += fwrite($stream, $line);
+                }
+            }
+        }
+        $this->headerline = "";
+        $this->lines = [];
+        $this->lines_length = 0;
+        return $n;
+    }
+
     function download() {
         global $zlib_output_compression;
-        if (!$zlib_output_compression) {
-            header("Content-Length: " . (strlen($this->headerline) + $this->lines_length));
-        }
-        echo $this->headerline;
-        // try to avoid out-of-memory
-        if ($this->lines_length <= 10000000) {
-            echo join("", $this->lines);
+        if ($this->stream) {
+            $this->flush($this->stream);
+            Filer::download_file($this->stream_filename);
         } else {
-            foreach ($this->lines as $line) {
-                echo $line;
+            if (!($this->flags & self::FLAG_FLUSHED) && !$zlib_output_compression) {
+                header("Content-Length: " . $this->lines_length);
             }
+            $this->flush();
         }
     }
 }

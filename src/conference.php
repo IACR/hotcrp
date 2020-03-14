@@ -1,6 +1,6 @@
 <?php
 // conference.php -- HotCRP central helper class (singleton)
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Track {
     const VIEW = 0;
@@ -97,6 +97,7 @@ class Conf {
     public $headerPrinted = false;
     private $_save_logs = false;
     public $_session_handler;
+    private $_initial_msg_count;
 
     private $_collator;
     private $rounds = null;
@@ -133,8 +134,10 @@ class Conf {
     private $_updating_autosearch_tags = false;
     private $_cdb = false;
 
-    public $xt_factory_error_handler;
+    public $xt_context;
+    private $_xt_allow_checkers;
     private $_xt_allow_callback;
+    public $xt_factory_error_handler;
 
     private $_formula_functions;
     private $_search_keyword_base;
@@ -157,6 +160,7 @@ class Conf {
     private $_mail_keyword_map;
     private $_mail_keyword_factories;
     private $_mail_template_map;
+    private $_page_partials;
 
     public $paper = null; // current paper row
     private $_active_list = false;
@@ -249,7 +253,7 @@ class Conf {
 
         // update schema
         $this->sversion = $this->settings["allowPaperOption"];
-        if ($this->sversion < 226) {
+        if ($this->sversion < 229) {
             require_once("updateschema.php");
             $old_nerrors = Dbl::$nerrors;
             updateSchema($this);
@@ -584,14 +588,6 @@ class Conf {
         }
         $this->_date_format_initialized = false;
 
-        // set safePasswords
-        if (!get($this->opt, "safePasswords")
-            || (is_int($this->opt["safePasswords"]) && $this->opt["safePasswords"] < 1)) {
-            $this->opt["safePasswords"] = 0;
-        } else if ($this->opt["safePasswords"] === true) {
-            $this->opt["safePasswords"] = 1;
-        }
-
         // set defaultFormat
         $this->default_format = (int) get($this->opt, "defaultFormat");
         $this->_format_info = null;
@@ -867,29 +863,51 @@ class Conf {
         }
     }
     static private function xt_combine($xt1, $xt2) {
-        foreach (get_object_vars($xt2) as $k => $v)
+        foreach (get_object_vars($xt2) as $k => $v) {
             if (!property_exists($xt1, $k)
                 && $k !== "match"
                 && $k !== "expand_callback")
                 $xt1->$k = $v;
+        }
     }
     static function xt_enabled($xt) {
         return $xt && (!isset($xt->disabled) || !$xt->disabled);
     }
-    static function xt_disabled($xt) {
+    static function xt_disabled($xt) { // XXX delete this
         return !$xt || (isset($xt->disabled) && $xt->disabled);
     }
     static function xt_resolve_require($xt) {
         if ($xt
             && isset($xt->require)
             && !isset(self::$xt_require_resolved[$xt->require])) {
-            foreach (expand_includes($xt->require, ["autoload" => true]) as $f)
+            foreach (expand_includes($xt->require, ["autoload" => true]) as $f) {
                 require_once($f);
+            }
             self::$xt_require_resolved[$xt->require] = true;
         }
         return $xt && (!isset($xt->disabled) || !$xt->disabled) ? $xt : null;
     }
-    function xt_check($expr, $xt, Contact $user = null, Qrequest $qreq = null) {
+    function xt_swap_context($context) {
+        $old = $this->xt_context;
+        $this->xt_context = $context;
+        return $old;
+    }
+    function xt_add_allow_checker($checker) {
+        $this->_xt_allow_checkers[] = $checker;
+        return count($this->_xt_allow_checkers) - 1;
+    }
+    function xt_remove_allow_checker($checker_index) {
+        unset($this->_xt_allow_checkers[$checker_index]);
+    }
+    private function xt_check_allow_checkers($e, $xt, $user) {
+        foreach ($this->_xt_allow_checkers as $ch) {
+            if (($x = call_user_func($ch, $e, $xt, $user, $this)) !== null) {
+                return $x;
+            }
+        }
+        return null;
+    }
+    function xt_check($expr, $xt, Contact $user = null) {
         foreach (is_array($expr) ? $expr : [$expr] as $e) {
             $not = false;
             if (is_string($e)
@@ -900,6 +918,9 @@ class Conf {
             }
             if (!is_string($e)) {
                 $b = $e;
+            } else if ($this->_xt_allow_checkers
+                       && ($x = $this->xt_check_allow_checkers($e, $xt, $user)) !== null) {
+                $b = $x;
             } else if ($e === "chair" || $e === "admin") {
                 $b = !$user || $user->privChair;
             } else if ($e === "manager") {
@@ -914,11 +935,6 @@ class Conf {
                 $b = $this->has_any_lead_or_shepherd();
             } else if ($e === "empty") {
                 $b = $user && $user->is_empty();
-            } else if ($e === "post") {
-                $b = $qreq && $qreq->post_ok() && $qreq->method() === "POST";
-            } else if ($e === "getpost") {
-                $b = $qreq && $qreq->post_ok()
-                    && ($qreq->method() === "GET" || $qreq->method() === "POST");
             } else if (strpos($e, "::") !== false) {
                 self::xt_resolve_require($xt);
                 $b = call_user_func($e, $xt, $user, $this);
@@ -926,15 +942,14 @@ class Conf {
                 $b = !!$this->opt(substr($e, 4));
             } else if (str_starts_with($e, "setting.")) {
                 $b = !!$this->setting(substr($e, 8));
-            } else if (str_starts_with($e, "req.")) {
-                $b = false;
-                foreach (explode(" ", $e) as $w) {
-                    if (str_starts_with($w, "req.")) {
-                        $w = substr($w, 4);
-                    }
-                    $b = $b || ($qreq && isset($qreq[$w]));
-                }
+            } else if (str_starts_with($e, "conf.")) {
+                $f = substr($e, 5);
+                $b = !!$this->$f();
+            } else if (str_starts_with($e, "user.")) {
+                $f = substr($e, 5);
+                $b = !$user || $user->$f();
             } else {
+                error_log("unknown xt_check $e");
                 $b = !!$this->setting($e);
             }
             if ($not ? $b : !$b) {
@@ -1155,7 +1170,7 @@ class Conf {
 
 
     function has_topics() {
-        return get($this->settings, "has_topics", 0) !== 0;
+        return ($this->settings["has_topics"] ?? 0) !== 0;
     }
 
     function topic_set() {
@@ -1652,10 +1667,6 @@ class Conf {
 
     // users
 
-    function password_storage_cleartext() {
-        return $this->opt["safePasswords"] < 1;
-    }
-
     function external_login() {
         return isset($this->opt["ldapLogin"]) || isset($this->opt["httpAuthLogin"]);
     }
@@ -1841,18 +1852,21 @@ class Conf {
             Dbl::free($result);
 
             if ($expected_by_name_count > count($by_name_text)) {
-                foreach ($by_name_text as $us)
+                foreach ($by_name_text as $us) {
                     if (count($us) > 1) {
                         $npcus = 0;
-                        foreach ($us as $u)
+                        foreach ($us as $u) {
                             $npcus += ($u->roles & Contact::ROLE_PC ? 1 : 0);
-                        foreach ($us as $u)
+                        }
+                        foreach ($us as $u) {
                             if ($npcus > 1 || ($u->roles & Contact::ROLE_PC) == 0) {
                                 $u->nameAmbiguous = true;
                                 $u->name_analysis = null;
                                 $u->name_analysis = Text::analyze_name($u);
                             }
+                        }
                     }
+                }
             }
 
             uasort($pc, "Contact::compare");
@@ -1864,8 +1878,9 @@ class Conf {
                     $u->sort_position = count($this->_pc_members_cache);
                     $this->_pc_members_cache[$u->contactId] = $u;
                 }
-                if ($u->roles & Contact::ROLE_CHAIR)
+                if ($u->roles & Contact::ROLE_CHAIR) {
                     $this->_pc_chairs_cache[$u->contactId] = $u;
+                }
             }
 
             $this->collator()->asort($this->_pc_tags_cache);
@@ -1928,7 +1943,7 @@ class Conf {
 
     function pc_completion_map() {
         $map = $bylevel = [];
-        foreach ($this->pc_members_and_admins() as $pc)
+        foreach ($this->pc_members_and_admins() as $pc) {
             if (!$pc->is_disabled()) {
                 foreach ($pc->completion_items() as $k => $level) {
                     if (!isset($bylevel[$k])
@@ -1936,10 +1951,12 @@ class Conf {
                         || get($map, $k) === $pc) {
                         $map[$k] = $pc;
                         $bylevel[$k] = $level;
-                    } else
+                    } else {
                         unset($map[$k]);
+                    }
                 }
             }
+        }
         return $map;
     }
 
@@ -1947,9 +1964,9 @@ class Conf {
         if ($viewer->privChair) {
             return $this->pc_tags();
         } else if ($viewer->can_view_user_tags()) {
-            $t = join(" ", $this->pc_tags());
-            $t = $this->tags()->strip_nonviewable($t, $viewer, null);
-            return explode(" ", $t);
+            $t = " " . join("#0 ", $this->pc_tags()) . "#0";
+            $t = $this->tags()->censor(TagMap::CENSOR_VIEW, $t, $viewer, null);
+            return explode("#0 ", substr($t, 1, -2));
         } else {
             return [];
         }
@@ -2199,10 +2216,14 @@ class Conf {
         if ($any)
             $this->invariant_error($ie, "anonymous_user_enabled", "anonymous user is not disabled");
 
-        // no empty tags
-        $any = $this->invariantq("select email from ContactInfo where contactTags is not null and trim(contactTags)='' limit 1");
-        if ($any)
-            $this->invariant_error($ie, "empty_user_tags", "user has non-null empty user tags");
+        // check tag strings
+        $result = $this->qe("select distinct contactTags from ContactInfo where contactTags is not null union select distinct commentTags from PaperComment where commentTags is not null");
+        while (($row = $result->fetch_row())) {
+            if ($row[0] === "" || !TagMap::is_tag_string($row[0], true)) {
+                $this->invariant_error($ie, "tag_strings", "bad tag string “{$row[0]}”");
+            }
+        }
+        Dbl::free($result);
 
         // paper denormalizations match
         $any = $this->invariantq("select p.paperId from Paper p join PaperStorage ps on (ps.paperStorageId=p.paperStorageId) where p.finalPaperStorageId<=0 and p.paperStorageId>1 and (p.sha1!=ps.sha1 or p.size!=ps.size or p.mimetype!=ps.mimetype or p.timestamp!=ps.timestamp) limit 1");
@@ -2839,9 +2860,10 @@ class Conf {
         }
         // create slash-based URLs if appropriate
         if ($param) {
+            $tp = "";
             if ($page === "review"
                 && preg_match($are . 'r=(\d+[A-Z]+)' . $zre, $param, $m)) {
-                $t .= "/" . $m[2];
+                $tp = "/" . $m[2];
                 $param = $m[1] . $m[3];
                 if (preg_match($are . 'p=\d+' . $zre, $param, $m)) {
                     $param = $m[1] . $m[2];
@@ -2852,25 +2874,45 @@ class Conf {
                            && preg_match($are . 't=(\w+)' . $zre, $param, $m))
                        || ($page === "settings"
                            && preg_match($are . 'group=(\w+)' . $zre, $param, $m))) {
-                $t .= "/" . $m[2];
+                $tp = "/" . $m[2];
                 $param = $m[1] . $m[3];
                 if ($param !== ""
                     && $page === "paper"
                     && preg_match($are . 'm=(\w+)' . $zre, $param, $m)) {
-                    $t .= "/" . $m[2];
+                    $tp .= "/" . $m[2];
                     $param = $m[1] . $m[3];
                 }
-            } else if (($page === "profile"
-                        && preg_match($are . 'u=([^&?]+)' . $zre, $param, $m))
-                       || ($page === "graph"
-                           && preg_match($are . 'g=([^&?]+)' . $zre, $param, $m))
+            } else if (($page === "graph"
+                        && preg_match($are . 'g=([^&?]+)' . $zre, $param, $m))
                        || ($page === "doc"
                            && preg_match($are . 'file=([^&]+)' . $zre, $param, $m))) {
-                $t .= "/" . str_replace("%2F", "/", $m[2]);
+                $tp = "/" . str_replace("%2F", "/", $m[2]);
+                $param = $m[1] . $m[3];
+            } else if ($page === "profile"
+                       && preg_match($are . 'u=([^&?]+)' . $zre, $param, $m)) {
+                $tp = "/" . str_replace("%2F", "/", $m[2]);
+                $param = $m[1] . $m[3];
+                if ($param !== ""
+                    && preg_match($are . 't=(\w+)' . $zre, $param, $m)) {
+                    $tp .= "/" . $m[2];
+                    $param = $m[1] . $m[3];
+                }
+            } else if ($page === "profile"
+                       && preg_match($are . 't=(\w+)' . $zre, $param, $m)) {
+                $tp = "/" . $m[2];
                 $param = $m[1] . $m[3];
             } else if (preg_match($are . '__PATH__=([^&]+)' . $zre, $param, $m)) {
-                $t .= "/" . urldecode($m[2]);
+                $tp = "/" . urldecode($m[2]);
                 $param = $m[1] . $m[3];
+            } else {
+                $tp = "";
+            }
+            if ($tp !== "") {
+                $t .= $tp;
+                if (preg_match($are . '__PATH__=([^&]+)' . $zre, $param, $m)
+                    && $tp === "/" . urldecode($m[2])) {
+                    $param = $m[1] . $m[3];
+                }
             }
             $param = preg_replace('/&(?:amp;)?\z/', "", $param);
         }
@@ -2917,6 +2959,10 @@ class Conf {
 
     function hoturl_post($page, $param = null) {
         return $this->hoturl($page, $param, self::HOTURL_POST);
+    }
+
+    function hoturl_raw($page, $param = null, $flags = 0) {
+        return $this->hoturl($page, $param, self::HOTURL_RAW | $flags);
     }
 
     function hotlink($html, $page, $param = null, $js = null) {
@@ -3320,21 +3366,25 @@ class Conf {
             $type = $tmp;
         }
         if (PHP_SAPI === "cli") {
-            if (is_array($text))
+            if (is_array($text)) {
                 $text = join("\n", $text);
-            if ($type === "xmerror" || $type === "merror" || $type === 2)
+            }
+            if ($type === "xmerror" || $type === "merror" || $type === 2) {
                 fwrite(STDERR, "$text\n");
-            else if ($type === "xwarning" || $type === "warning" || $type === 1
-                     || !defined("HOTCRP_TESTHARNESS"))
+            } else if ($type === "xwarning" || $type === "warning" || $type === 1
+                       || !defined("HOTCRP_TESTHARNESS")) {
                 fwrite(STDOUT, "$text\n");
+            }
         } else if ($conf && !$conf->headerPrinted) {
             ensure_session();
+            $conf->initial_msg_count();
             $_SESSION[$conf->dsn]["msgs"][] = [$text, $type];
         } else if (is_int($type) || $type[0] === "x") {
             echo Ht::msg($text, $type);
         } else {
-            if (is_array($text))
+            if (is_array($text)) {
                 $text = '<div class="multimessage">' . join("", array_map(function ($x) { return '<div class="mmm">' . $x . '</div>'; }, $text)) . '</div>';
+            }
             echo "<div class=\"$type\">$text</div>";
         }
     }
@@ -3388,6 +3438,18 @@ class Conf {
         $this->msg("Your uploaded data wasn’t received. This can happen on unusually slow connections, or if you tried to upload a file larger than I can accept.", "merror");
     }
 
+    function initial_msg_count() {
+        if (!isset($this->_initial_msg_count)
+            && session_id() !== "")  {
+            $this->_initial_msg_count = 0;
+            if (isset($_SESSION[$this->dsn])
+                && isset($_SESSION[$this->dsn]["msgs"])) {
+                $this->_initial_msg_count = count($_SESSION[$this->dsn]["msgs"]);
+            }
+        }
+        return $this->_initial_msg_count;
+    }
+
 
     //
     // Conference header, footer
@@ -3398,8 +3460,9 @@ class Conf {
     }
 
     function active_list() {
-        if ($this->_active_list === false)
+        if ($this->_active_list === false) {
             $this->_active_list = null;
+        }
         return $this->_active_list;
     }
 
@@ -3514,10 +3577,6 @@ class Conf {
 <head>
 <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">
 <meta name=\"google\" content=\"notranslate\">\n";
-        if (!$this->opt("allowIndexPapers")
-            && $Me
-            && $Me->has_author_view_capability())
-            echo "<meta name=\"robots\" content=\"noindex,noarchive\">\n";
 
         if (($font_script = $this->opt("fontScript"))) {
             if (!str_starts_with($font_script, "<script"))
@@ -3741,11 +3800,13 @@ class Conf {
             }
 
             // sign in and out
-            if (!$Me->is_signed_in() && !isset($this->opt["httpAuthLogin"])) {
-                $profile_parts[] = '<a href="' . $this->hoturl("index", ["signin" => 1, "cap" => null]) . '" class="nw">Sign in</a>';
+            if ((!$Me->is_signed_in() && !isset($this->opt["httpAuthLogin"]))
+                && $id !== "signin") {
+                $profile_parts[] = '<a href="' . $this->hoturl("signin", ["cap" => null]) . '" class="nw">Sign in</a>';
             }
-            if (!$Me->is_empty() || isset($this->opt["httpAuthLogin"])) {
-                $profile_parts[] = Ht::form($this->hoturl_post("index", ["signout" => 1, "cap" => null]), ["class" => "d-inline"])
+            if ((!$Me->is_empty() || isset($this->opt["httpAuthLogin"]))
+                && $id !== "signout") {
+                $profile_parts[] = Ht::form($this->hoturl_post("signout", ["cap" => null]), ["class" => "d-inline"])
                     . Ht::button("Sign out", ["type" => "submit", "class" => "btn btn-link"])
                     . "</form>";
             }
@@ -3882,44 +3943,87 @@ class Conf {
         echo '</div>', Ht::unstash(), "</body>\n</html>\n";
     }
 
-    function hotcrp_pc_json(Contact $user) {
-        $hpcj = $list = [];
-        foreach ($this->pc_members() as $pcm) {
-            $hpcj[$pcm->contactId] = $j = (object) ["name" => $user->name_text_for($pcm), "email" => $pcm->email];
-            if (($color_classes = $pcm->viewable_color_classes($user))) {
-                $j->color_classes = $color_classes;
-            }
-            if ($this->sort_by_last && $pcm->lastName) {
-                $r = Text::analyze_name($pcm);
-                if (strlen($r->lastName) !== strlen($r->name))
+    private function pc_json_item($viewer, $user, $is_contact) {
+        $j = (object) [];
+        $r = null;
+        if ($is_contact) {
+            $j->name = $viewer->name_text_for($user);
+        } else {
+            $r = Text::analyze_name($user);
+            $j->name = $r->name;
+        }
+        $j->email = $user->email;
+        if ($is_contact
+            && ($color_classes = $user->viewable_color_classes($viewer))) {
+            $j->color_classes = $color_classes;
+        }
+        if ($this->sort_by_last && $user->lastName) {
+            $r = $r ? : Text::analyze_name($user);
+            if (strlen($r->lastName) !== strlen($j->name)) {
+                if ($r->nameAscii) {
                     $j->lastpos = strlen($r->firstName) + 1;
-                if ($r->nameAmbiguous && $r->name !== "" && $r->email !== "")
-                    $j->emailpos = strlen($r->name) + 1;
+                } else {
+                    $j->lastpos = UnicodeHelper::utf16_strlen($r->firstName) + 1;
+                }
             }
+            if ($r->nameAmbiguous && $r->name !== "" && $r->email !== "") {
+                if ($r->nameAscii) {
+                    $j->emailpos = strlen($r->name) + 1;
+                } else {
+                    $j->emailpos = UnicodeHelper::utf16_strlen($r->name) + 1;
+                }
+            }
+        }
+        return $j;
+    }
+
+    function hotcrp_pc_json(Contact $viewer) {
+        $hpcj = $list = $otherj = [];
+        foreach ($this->pc_members() as $pcm) {
+            $hpcj[$pcm->contactId] = $this->pc_json_item($viewer, $pcm, true);
             $list[] = $pcm->contactId;
         }
         $hpcj["__order__"] = $list;
         if ($this->sort_by_last) {
             $hpcj["__sort__"] = "last";
         }
-        if ($user->can_view_user_tags()) {
-            $hpcj["__tags__"] = $this->viewable_user_tags($user);
+        if ($viewer->can_view_user_tags()) {
+            $hpcj["__tags__"] = $this->viewable_user_tags($viewer);
         }
         if ($this->paper
-            && ($user->privChair || $user->allow_administer($this->paper))) {
+            && ($viewer->privChair || $viewer->allow_administer($this->paper))) {
             $list = [];
             foreach ($this->pc_members() as $pcm) {
-                if ($pcm->can_accept_review_assignment($this->paper))
+                if ($pcm->can_accept_review_assignment($this->paper)) {
                     $list[] = $pcm->contactId;
+                }
             }
             $hpcj["__assignable__"] = [$this->paper->paperId => $list];
+            if ($this->setting("extrev_shepherd")) {
+                $this->paper->ensure_reviewer_names();
+                $erlist = [];
+                foreach ($this->paper->reviews_by_display($viewer) as $rrow) {
+                    if ($rrow->reviewType == REVIEW_EXTERNAL
+                        && !$rrow->reviewToken
+                        && !in_array($rrow->contactId, $erlist)) {
+                        $otherj[$rrow->contactId] = $this->pc_json_item($viewer, $rrow, false);
+                        $erlist[] = $rrow->contactId;
+                    }
+                }
+                if (!empty($erlist)) {
+                    $hpcj["__extrev__"] = [$this->paper->paperId => $erlist];
+                }
+            }
+        }
+        if (!empty($otherj)) {
+            $hpcj["__other__"] = $otherj;
         }
         return $hpcj;
     }
 
-    function stash_hotcrp_pc(Contact $user, $always = false) {
+    function stash_hotcrp_pc(Contact $viewer, $always = false) {
         if (($always || !$this->opt("largePC")) && Ht::mark_stash("hotcrp_pc"))
-            Ht::stash_script("demand_load.pc(" . json_encode_browser($this->hotcrp_pc_json($user)) . ");");
+            Ht::stash_script("demand_load.pc(" . json_encode_browser($this->hotcrp_pc_json($viewer)) . ");");
     }
 
 
@@ -3981,13 +4085,16 @@ class Conf {
 
     function log_for($user, $dest_user, $text, $pids = null) {
         if (is_object($pids)) {
-            $pids = array($pids->paperId);
-        } else if (!is_array($pids)) {
-            $pids = $pids > 0 ? array($pids) : array();
-        }
-        $ps = [];
-        foreach ($pids as $p) {
-            $ps[] = is_object($p) ? $p->paperId : $p;
+            $pids = [$pids->paperId];
+        } else if (is_array($pids)) {
+            foreach ($pids as &$p) {
+                $p = is_object($p) ? $p->paperId : $p;
+            }
+            unset($p);
+        } else if ($pids === null || $pids <= 0) {
+            $pids = [];
+        } else {
+            $pids = [$pids];
         }
 
         $true_user = 0;
@@ -3995,22 +4102,22 @@ class Conf {
             if ($user->is_actas_user()) {
                 $true_user = Contact::$true_user->contactId;
             } else if (!$user->contactId
-                       && count($ps) === 1
-                       && $user->has_capability_for($ps[0])) {
-                $true_user = -1;
+                       && !empty($pids)
+                       && $user->has_capability_for($pids[0])) {
+                $true_user = -1; // indicate download via link
             }
         }
         $user = self::log_clean_user($user, $text);
         $dest_user = self::log_clean_user($dest_user, $text);
 
         if ($this->_save_logs === false) {
-            $this->qe(self::action_log_query, self::format_log_values($text, $user, $dest_user, $true_user, $ps));
+            $this->qe(self::action_log_query, self::format_log_values($text, $user, $dest_user, $true_user, $pids));
         } else {
             $key = "$user,$dest_user,$true_user|$text";
             if (!isset($this->_save_logs[$key])) {
                 $this->_save_logs[$key] = [];
             }
-            foreach ($ps as $p) {
+            foreach ($pids as $p) {
                 $this->_save_logs[$key][$p] = true;
             }
         }
@@ -4060,15 +4167,7 @@ class Conf {
     // capabilities
 
     function capability_manager($for = null) {
-        if ($for && substr($for, 0, 1) === "U") {
-            if (($cdb = $this->contactdb())) {
-                return new CapabilityManager($cdb, "U");
-            } else {
-                return null;
-            }
-        } else {
-            return new CapabilityManager($this->dblink, "");
-        }
+        return new CapabilityManager($this, $for && substr($for, 0, 1) === "U");
     }
 
 
@@ -4079,16 +4178,19 @@ class Conf {
             $this->_ims = new IntlMsgSet;
             $this->_ims->add_requirement_resolver([$this, "resolve_ims_requirement"]);
             $m = ["?etc/msgs.json"];
-            if (($lang = $this->opt("lang")))
+            if (($lang = $this->opt("lang"))) {
                 $m[] = "?etc/msgs.$lang.json";
+            }
             $this->_ims->set_default_priority(-1.0);
             expand_json_includes_callback($m, [$this->_ims, "addj"]);
             $this->_ims->clear_default_priority();
-            if (($mlist = $this->opt("messageOverrides")))
+            if (($mlist = $this->opt("messageOverrides"))) {
                 expand_json_includes_callback($mlist, [$this->_ims, "addj"]);
-            foreach ($this->settingTexts as $k => $v)
+            }
+            foreach ($this->settingTexts as $k => $v) {
                 if (str_starts_with($k, "msg."))
                     $this->_ims->add_override(substr($k, 4), $v);
+            }
         }
         return $this->_ims;
     }
@@ -4240,6 +4342,8 @@ class Conf {
             && (!$uf || get($uf, "post"))
             && (!$uf || !get($uf, "allow_xss"))) {
             return new JsonResult(403, "Missing credentials.");
+        } else if ($user->is_disabled() && (!$uf || !get($uf, "allow_disabled"))) {
+            return new JsonResult(403, "Your account is disabled.");
         } else if (!$uf) {
             if ($this->has_api($fn, $user, null)) {
                 return new JsonResult(405, "Method not supported.");
@@ -4262,8 +4366,9 @@ class Conf {
         if ($whynot) {
             $status = isset($whynot["noPaper"]) ? 404 : 403;
             $result["error"] = whyNotText($whynot, true);
-            if (isset($whynot["signin"]))
+            if (isset($whynot["signin"])) {
                 $result["loggedout"] = true;
+            }
         } else {
             $status = 400;
             $result["error"] = "Bad request, missing submission.";
@@ -4274,7 +4379,7 @@ class Conf {
         // XXX precondition: $user->can_view_paper($prow) || !$prow
         $uf = $this->api($fn, $user, $qreq->method());
         if ($uf && get($uf, "redirect") && $qreq->redirect
-            && preg_match('@\A(?![a-z]+:|/).+@', $qreq->redirect)) {
+            && preg_match('/\A(?![a-z]+:|\/)./', $qreq->redirect)) {
             try {
                 JsonResultException::$capturing = true;
                 $j = $this->call_api($fn, $uf, $user, $qreq, $prow);
@@ -4607,7 +4712,7 @@ class Conf {
                     if (isset($fj->id)) {
                         $ids[$fj->id] = true;
                     }
-                    if (!self::xt_disabled($fj)) {
+                    if (self::xt_enabled($fj)) {
                         $fj->conf = $this;
                         $fj->user = $user;
                         $args[0] = $fj;
@@ -4624,13 +4729,10 @@ class Conf {
 
     // pages
 
-    function page_template($page) {
-        if ($page === "index") {
-            return (object) ["name" => "index", "group" => "home"];
-        } else if (in_array($page, ["doc", "paper", "search", "review", "assign", "autoassign", "bulkassign", "buzzer", "checkupdates", "profile", "conflictassign", "deadlines", "graph", "help", "log", "mail", "manualassign", "mergeaccounts", "offline", "reviewprefs", "scorechart", "settings", "users"])) {
-            return (object) ["name" => $page, "require" => "$page.php"];
-        } else {
-            return null;
+    function page_partials(Contact $viewer) {
+        if (!$this->_page_partials || $this->_page_partials->viewer() !== $viewer) {
+            $this->_page_partials = new GroupedExtensions($viewer, ["etc/pagepartials.json"], $this->opt("pagePartials"));
         }
+        return $this->_page_partials;
     }
 }

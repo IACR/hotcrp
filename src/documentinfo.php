@@ -1,6 +1,6 @@
 <?php
 // documentinfo.php -- HotCRP document objects
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class DocumentInfo implements JsonSerializable {
     public $conf;
@@ -993,9 +993,7 @@ class DocumentInfo implements JsonSerializable {
     }
 
     static function log_download_activity($docs, Contact $user) {
-        if ($user->is_actas_user()
-            || $user->is_anonymous_user()
-            || ($user->roles & (Contact::ROLE_ADMIN | Contact::ROLE_CHAIR))) {
+        if ($user->is_anonymous_user()) {
             return;
         }
         $byn = [];

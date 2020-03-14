@@ -1,6 +1,6 @@
 <?php
 // paperinfo.php -- HotCRP paper objects
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class PaperContactInfo {
     public $paperId;
@@ -8,7 +8,11 @@ class PaperContactInfo {
     public $conflictType = 0;
     public $reviewType = 0;
     public $reviewSubmitted = 0;
-    public $review_status = 0;    // 0: no review, 1: complete, -1: needs submit
+    public $review_status = 0;    // 0 means no review
+    const RS_DECLINED = 1;        // declined assigned review
+    const RS_UNSUBMITTED = 2;     // review not submitted, needs submit
+    const RS_PROXIED = 3;         // review proxied (e.g., lead)
+    const RS_SUBMITTED = 4;       // review submitted
 
     public $rights_forced = null;
     public $forced_rights_link = null;
@@ -33,6 +37,7 @@ class PaperContactInfo {
     public $vsreviews_array;
     public $vsreviews_version;
     public $viewable_tags;
+    public $searchable_tags;
 
     static function make_empty(PaperInfo $prow, $user) {
         $ci = new PaperContactInfo;
@@ -43,7 +48,7 @@ class PaperContactInfo {
             && isset($prow->leadContactId)
             && $prow->leadContactId == $user->contactId
             && !$prow->conf->setting("lead_noseerev")) {
-            $ci->review_status = 1;
+            $ci->review_status = PaperContactInfo::RS_PROXIED;
         }
         return $ci;
     }
@@ -70,9 +75,9 @@ class PaperContactInfo {
         $this->reviewSubmitted = max($rs, $this->reviewSubmitted);
         if ($rt > 0) {
             if ($rs > 0 || $rns == 0) {
-                $this->review_status = 2;
+                $this->review_status = PaperContactInfo::RS_SUBMITTED;
             } else if ($this->review_status == 0) {
-                $this->review_status = -1;
+                $this->review_status = PaperContactInfo::RS_UNSUBMITTED;
             }
         }
     }
@@ -159,7 +164,7 @@ class PaperContactInfo {
     function get_forced_rights() {
         if (!$this->forced_rights_link) {
             $ci = $this->forced_rights_link = clone $this;
-            $ci->vsreviews_array = $ci->viewable_tags = null;
+            $ci->vsreviews_array = $ci->viewable_tags = $ci->searchable_tags = null;
         }
         return $this->forced_rights_link;
     }
@@ -373,6 +378,16 @@ class PaperInfo {
         return ["fail" => true, "paperId" => $this->paperId, "conf" => $this->conf] + $rest;
     }
 
+    function hoturl($param = [], $flags = 0) {
+        $param["p"] = $this->paperId;
+        return $this->conf->hoturl("paper", $param, $flags);
+    }
+
+    function reviewurl($param = [], $flags = 0) {
+        $param["p"] = $this->paperId;
+        return $this->conf->hoturl("review", $param, $flags);
+    }
+
 
     static private function contact_to_cid($contact) {
         assert($contact !== null);
@@ -461,7 +476,7 @@ class PaperInfo {
             $f["submission"] = true;
         }
         foreach ($this->conf->paper_opts->option_list() as $o) {
-            if ($o->required
+            if ($o->test_required($this)
                 && (!$user || $user->can_view_option($this, $o))
                 && !$o->value_present($this->force_option($o))) {
                 $f[$o->json_key()] = true;
@@ -694,15 +709,18 @@ class PaperInfo {
         if ((string) $data !== "") {
             $field_deaccent = $field . "_deaccent";
             if (!isset($this->$field_deaccent)) {
-                if (preg_match('/[\x80-\xFF]/', $data))
-                    $this->$field_deaccent = UnicodeHelper::deaccent($data);
-                else
+                if (is_usascii($data)) {
                     $this->$field_deaccent = false;
+                } else {
+                    $this->$field_deaccent = UnicodeHelper::deaccent($data);
+                }
             }
-            if ($want_false || $this->$field_deaccent !== false)
+            if ($want_false || $this->$field_deaccent !== false) {
                 $data = $this->$field_deaccent;
-        } else if ($want_false)
+            }
+        } else if ($want_false) {
             $data = false;
+        }
         return $data;
     }
 
@@ -751,10 +769,11 @@ class PaperInfo {
             return $ci ? $ci->reviewType : 0;
         }
         $cid = self::contact_to_cid($contact);
-        if (array_key_exists($cid, $this->_contact_info))
+        if (array_key_exists($cid, $this->_contact_info)) {
             $rrow = $this->_contact_info[$cid];
-        else
+        } else {
             $rrow = $this->review_of_user($cid);
+        }
         return $rrow ? $rrow->reviewType : 0;
     }
 
@@ -764,7 +783,7 @@ class PaperInfo {
 
     function review_not_incomplete($contact) {
         $ci = $this->contact_info($contact);
-        return $ci && $ci->review_status > 0;
+        return $ci && $ci->review_status > PaperContactInfo::RS_UNSUBMITTED;
     }
 
     function review_submitted($contact) {
@@ -773,9 +792,9 @@ class PaperInfo {
     }
 
     function pc_can_become_reviewer_ignore_conflict() {
-        if (!$this->conf->check_track_review_sensitivity())
+        if (!$this->conf->check_track_review_sensitivity()) {
             return $this->conf->pc_members();
-        else {
+        } else {
             $pcm = array();
             foreach ($this->conf->pc_members() as $cid => $pc)
                 if ($pc->can_become_reviewer_ignore_conflict($this))
@@ -788,24 +807,28 @@ class PaperInfo {
     function load_tags() {
         $result = $this->conf->qe("select group_concat(' ', tag, '#', tagIndex order by tag separator '') from PaperTag where paperId=? group by paperId", $this->paperId);
         $this->paperTags = "";
-        if (($row = edb_row($result)) && $row[0] !== null)
+        if (($row = $result->fetch_row()) && $row[0] !== null) {
             $this->paperTags = $row[0];
+        }
         Dbl::free($result);
     }
 
     function has_tag($tag) {
-        if (!property_exists($this, "paperTags"))
+        if (!property_exists($this, "paperTags")) {
             $this->load_tags();
+        }
         return $this->paperTags !== ""
             && stripos($this->paperTags, " $tag#") !== false;
     }
 
     function has_any_tag($tags) {
-        if (!property_exists($this, "paperTags"))
+        if (!property_exists($this, "paperTags")) {
             $this->load_tags();
-        foreach ($tags as $tag)
+        }
+        foreach ($tags as $tag) {
             if (stripos($this->paperTags, " $tag#") !== false)
                 return true;
+        }
         return false;
     }
 
@@ -815,19 +838,39 @@ class PaperInfo {
     }
 
     function tag_value($tag) {
-        if (!property_exists($this, "paperTags"))
+        if (!property_exists($this, "paperTags")) {
             $this->load_tags();
+        }
         if ($this->paperTags !== ""
-            && ($pos = stripos($this->paperTags, " $tag#")) !== false)
+            && ($pos = stripos($this->paperTags, " $tag#")) !== false) {
             return (float) substr($this->paperTags, $pos + strlen($tag) + 2);
-        else
+        } else {
             return false;
+        }
     }
 
     function all_tags_text() {
-        if (!property_exists($this, "paperTags"))
+        if (!property_exists($this, "paperTags")) {
             $this->load_tags();
+        }
         return $this->paperTags;
+    }
+
+    function searchable_tags(Contact $user) {
+        if (!$user->isPC || (string) $this->all_tags_text() === "") {
+            return "";
+        }
+        $rights = $user->__rights($this);
+        if ($rights->searchable_tags === null) {
+            $dt = $this->conf->tags();
+            $rights->searchable_tags = $dt->censor(TagMap::CENSOR_SEARCH, $this->all_tags_text(), $user, $this);
+        }
+        return $rights->searchable_tags;
+    }
+
+    function sorted_searchable_tags(Contact $user) {
+        $tags = $this->searchable_tags($user);
+        return $tags === "" ? "" : $this->conf->tags()->sort($tags);
     }
 
     function viewable_tags(Contact $user) {
@@ -837,37 +880,29 @@ class PaperInfo {
         }
         $rights = $user->__rights($this);
         if ($rights->viewable_tags === null) {
-            $tags = $this->all_tags_text();
             $dt = $this->conf->tags();
-            if ($user->can_view_most_tags($this)) {
-                $tags = $dt->strip_nonviewable($tags, $user, $this);
-            } else if ($dt->has_sitewide && $user->can_view_tags($this)) {
-                $tags = Tagger::strip_nonsitewide($tags, $user);
-            } else {
-                $tags = "";
-            }
+            $tags = $dt->censor(TagMap::CENSOR_VIEW, $this->all_tags_text(), $user, $this);
             $rights->viewable_tags = $dt->sort($tags);
         }
         return $rights->viewable_tags;
     }
 
-    function searchable_tags(Contact $user) {
-        if ($user->allow_administer($this))
-            return $this->all_tags_text();
-        else
-            return $this->viewable_tags($user);
+    function sorted_viewable_tags(Contact $user) {
+        // XXX don't sort until required
+        return $this->viewable_tags($user);
     }
 
-    function editable_tags(Contact $user) {
+    function sorted_editable_tags(Contact $user) {
         $tags = $this->all_tags_text();
         if ($tags !== "") {
             $old_overrides = $user->add_overrides(Contact::OVERRIDE_CONFLICT);
-            $tags = $this->viewable_tags($user);
+            $tags = $this->sorted_viewable_tags($user);
             if ($tags !== "") {
                 $etags = [];
-                foreach (explode(" ", $tags) as $tag)
+                foreach (explode(" ", $tags) as $tag) {
                     if ($tag !== "" && $user->can_change_tag($this, $tag, 0, 1))
                         $etags[] = $tag;
+                }
                 $tags = join(" ", $etags);
             }
             $user->set_overrides($old_overrides);
@@ -877,32 +912,37 @@ class PaperInfo {
 
     function add_tag_info_json($pj, Contact $user) {
         $tagger = new Tagger($user);
-        if (($can_override = $user->has_overridable_conflict($this)))
+        if (($can_override = $user->has_overridable_conflict($this))) {
             $overrides = $user->add_overrides(Contact::OVERRIDE_CONFLICT);
-        $editable = $this->editable_tags($user);
-        $viewable = $this->viewable_tags($user);
+        }
+        $editable = $this->sorted_editable_tags($user);
+        $viewable = $this->sorted_viewable_tags($user);
         $pj->tags = TagInfo::split($viewable);
         $pj->tags_edit_text = $tagger->unparse($editable);
         $pj->tags_view_html = $tagger->unparse_link($viewable);
-        if (($decor = $tagger->unparse_decoration_html($viewable)))
+        if (($decor = $tagger->unparse_decoration_html($viewable))) {
             $pj->tag_decoration_html = $decor;
+        }
         $tagmap = $this->conf->tags();
         $pj->color_classes = $tagmap->color_classes($viewable);
         if ($can_override && $viewable) {
             $user->remove_overrides(Contact::OVERRIDE_CONFLICT);
-            $viewable_c = $this->viewable_tags($user);
+            $viewable_c = $this->sorted_viewable_tags($user);
             if ($viewable_c !== $viewable) {
                 $pj->tags_conflicted = TagInfo::split($viewable_c);
                 if ($decor
-                    && ($decor_c = $tagger->unparse_decoration_html($viewable_c)) !== $decor)
+                    && ($decor_c = $tagger->unparse_decoration_html($viewable_c)) !== $decor) {
                     $pj->tag_decoration_html_conflicted = $decor_c;
+                }
                 if ($pj->color_classes
-                    && ($cc_c = $tagmap->color_classes($viewable_c)) !== $pj->color_classes)
+                    && ($cc_c = $tagmap->color_classes($viewable_c)) !== $pj->color_classes) {
                     $pj->color_classes_conflicted = $cc_c;
+                }
             }
         }
-        if ($can_override)
+        if ($can_override) {
             $user->set_overrides($overrides);
+        }
     }
 
 
@@ -1045,7 +1085,7 @@ class PaperInfo {
         return $vals;
     }
 
-    function load_reviewer_preferences() {
+    function load_preferences() {
         if ($this->_row_set && ++$this->_row_set->loaded_allprefs >= 10)
             $row_set = $this->_row_set->filter(function ($prow) {
                 return !property_exists($prow, "allReviewerPreference");
@@ -1064,9 +1104,10 @@ class PaperInfo {
         Dbl::free($result);
     }
 
-    function reviewer_preferences() {
-        if (!property_exists($this, "allReviewerPreference"))
-            $this->load_reviewer_preferences();
+    function preferences() {
+        if (!property_exists($this, "allReviewerPreference")) {
+            $this->load_preferences();
+        }
         if ($this->_prefs_array === null) {
             $x = array();
             if ($this->allReviewerPreference !== null && $this->allReviewerPreference !== "") {
@@ -1081,14 +1122,15 @@ class PaperInfo {
         return $this->_prefs_array;
     }
 
-    function reviewer_preference($contact, $include_topic_score = false) {
+    function preference($contact, $include_topic_score = false) {
         $cid = is_int($contact) ? $contact : $contact->contactId;
         if ($this->_prefs_cid === null
             && $this->_prefs_array === null
             && !property_exists($this, "allReviewerPreference")) {
             $row_set = $this->_row_set ? : new PaperInfoSet($this);
-            foreach ($row_set as $prow)
+            foreach ($row_set as $prow) {
                 $prow->_prefs_cid = [$cid, null];
+            }
             $result = $this->conf->qe("select paperId, preference, expertise from PaperReviewPreference where paperId?a and contactId=?", $row_set->paper_ids(), $cid);
             while ($result && ($row = $result->fetch_row())) {
                 $prow = $row_set->get($row[0]);
@@ -1096,25 +1138,38 @@ class PaperInfo {
             }
             Dbl::free($result);
         }
-        if ($this->_prefs_cid !== null && $this->_prefs_cid[0] == $cid)
+        if ($this->_prefs_cid !== null && $this->_prefs_cid[0] == $cid) {
             $pref = $this->_prefs_cid[1];
-        else
-            $pref = get($this->reviewer_preferences(), $cid);
+        } else {
+            $pref = get($this->preferences(), $cid);
+        }
         $pref = $pref ? : [0, null];
-        if ($include_topic_score)
+        if ($include_topic_score) {
             $pref[] = $this->topic_interest_score($contact);
+        }
         return $pref;
+    }
+
+    function viewable_preferences(Contact $viewer, $aggregate = false) {
+        if ($viewer->can_view_preference($this, $aggregate)) {
+            return $this->preferences();
+        } else if ($viewer->isPC) {
+            $pref = $this->preference($viewer);
+            return $pref[0] || $pref[1] ? [$viewer->contactId => $pref] : [];
+        } else {
+            return [];
+        }
     }
 
     function desirability() {
         if ($this->_desirability === null) {
-            $prefs = $this->reviewer_preferences();
             $this->_desirability = 0;
-            foreach ($prefs as $pf) {
-                if ($pf[0] > 0)
+            foreach ($this->preferences() as $pf) {
+                if ($pf[0] > 0) {
                     $this->_desirability += 1;
-                else if ($pf[0] > -100 && $pf[0] < 0)
+                } else if ($pf[0] > -100 && $pf[0] < 0) {
                     $this->_desirability -= 1;
+                }
             }
         }
         return $this->_desirability;
@@ -1677,16 +1732,20 @@ class PaperInfo {
         $missing = [];
         foreach ($row_set as $prow) {
             $prow->_reviews_have["names"] = true;
-            foreach ($prow->reviews_by_id() as $rrow)
-                if (($u = $this->conf->cached_user_by_id($rrow->contactId, true)))
+            foreach ($prow->reviews_by_id() as $rrow) {
+                if (($u = $this->conf->cached_user_by_id($rrow->contactId, true))) {
                     $rrow->assign_name($u);
-                else
+                } else {
                     $missing[] = $rrow;
+                }
+            }
         }
         if ($this->conf->load_missing_cached_users()) {
-            foreach ($missing as $rrow)
-                if (($u = $this->conf->cached_user_by_id($rrow->contactId, true)))
+            foreach ($missing as $rrow) {
+                if (($u = $this->conf->cached_user_by_id($rrow->contactId, true))) {
                     $rrow->assign_name($u);
+                }
+            }
         }
     }
 

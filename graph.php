@@ -1,14 +1,15 @@
 <?php
 // graph.php -- HotCRP review preference graph drawing page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papersearch.php");
 
 $Graph = $Qreq->g;
 if (!$Graph
-    && preg_match(',\A/(\w+)(/|\z),', Navigation::path(), $m))
-    $Graph = $Qreq->g = $m[1];
+    && preg_match('/\A\/\w+\/*/', $Qreq->path())) {
+    $Graph = $Qreq->g = $Qreq->path_component(0);
+}
 if (!isset($Qreq->x) && !isset($Qreq->y) && isset($Qreq->fx) && isset($Qreq->fy)) {
     $Qreq->x = $Qreq->fx;
     $Qreq->y = $Qreq->fy;

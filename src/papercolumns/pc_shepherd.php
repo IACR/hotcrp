@@ -1,6 +1,6 @@
 <?php
 // pc_shepherd.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Shepherd_PaperColumn extends PaperColumn {
     function __construct(Conf $conf, $cj) {
@@ -25,9 +25,6 @@ class Shepherd_PaperColumn extends PaperColumn {
     function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
         $pl = $sorter->pl;
         return $pl->_compare_pc(self::cid($pl, $a), self::cid($pl, $b), $sorter);
-    }
-    function header(PaperList $pl, $is_text) {
-        return "Shepherd";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
         return !self::cid($pl, $row);

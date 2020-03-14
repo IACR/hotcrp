@@ -1,6 +1,6 @@
 <?php
 // commentinfo.php -- HotCRP helper class for comments
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class CommentInfo {
     public $conf;
@@ -53,10 +53,12 @@ class CommentInfo {
 
     static function fetch($result, PaperInfo $prow = null, Conf $conf = null) {
         $cinfo = null;
-        if ($result)
+        if ($result) {
             $cinfo = $result->fetch_object("CommentInfo", [null, $prow, $conf]);
-        if ($cinfo && !is_int($cinfo->commentId))
+        }
+        if ($cinfo && !is_int($cinfo->commentId)) {
             $cinfo->merge(null, $prow, $conf);
+        }
         return $cinfo;
     }
 
@@ -233,10 +235,19 @@ class CommentInfo {
         return $n;
     }
 
+    function searchable_tags(Contact $viewer) {
+        if ($this->commentTags
+            && $viewer->can_view_comment_tags($this->prow, $this)) {
+            return $this->conf->tags()->censor(TagMap::CENSOR_SEARCH, $this->commentTags, $viewer, $this->prow);
+        } else {
+            return null;
+        }
+    }
+
     function viewable_tags(Contact $viewer) {
         if ($this->commentTags
             && $viewer->can_view_comment_tags($this->prow, $this)) {
-            return $this->conf->tags()->strip_nonviewable($this->commentTags, $viewer, $this->prow);
+            return $this->conf->tags()->censor(TagMap::CENSOR_VIEW, $this->commentTags, $viewer, $this->prow);
         } else {
             return null;
         }
@@ -245,9 +256,10 @@ class CommentInfo {
     function viewable_nonresponse_tags(Contact $viewer) {
         if ($this->commentTags
             && $viewer->can_view_comment_tags($this->prow, $this)) {
-            $tags = $this->conf->tags()->strip_nonviewable($this->commentTags, $viewer, $this->prow);
-            if ($this->commentType & COMMENTTYPE_RESPONSE)
-                $tags = trim(preg_replace('{ \S*response(?:|#\S+)(?= |\z)}i', "", " $tags "));
+            $tags = $this->conf->tags()->censor(TagMap::CENSOR_VIEW, $this->commentTags, $viewer, $this->prow);
+            if ($this->commentType & COMMENTTYPE_RESPONSE) {
+                $tags = preg_replace('{ \S*response(?:|#\S+)(?= |\z)}i', "", $tags);
+            }
             return $tags;
         } else {
             return null;
@@ -256,7 +268,7 @@ class CommentInfo {
 
     function has_tag($tag) {
         return $this->commentTags
-            && stripos($this->commentTags, " $tag ") !== false;
+            && stripos($this->commentTags, " {$tag}#") !== false;
     }
 
     function attachments() {
@@ -477,8 +489,9 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
 
     function save($req, Contact $acting_contact) {
         global $Now;
-        if (is_array($req))
+        if (is_array($req)) {
             $req = (object) $req;
+        }
         $Table = $this->prow->comment_table_name();
         $LinkTable = $this->prow->table_name();
         $LinkColumn = $this->prow->id_column();
@@ -527,22 +540,27 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
 
         // tags
         if ($is_response) {
-            $ctags = " response ";
+            $ctags = " response";
             if ($response_name != "1") {
-                $ctags .= "{$response_name}response ";
+                $ctags .= " {$response_name}response";
             }
         } else if (get($req, "tags")
                    && preg_match_all(',\S+,', $req->tags, $m)
                    && !$contact->act_author_view($this->prow)) {
             $tagger = new Tagger($contact);
-            $ctags = [];
+            $ts = [];
             foreach ($m[0] as $tt) {
-                if (($tt = $tagger->check($tt, Tagger::NOVALUE))
-                    && !stri_ends_with($tt, "response"))
-                    $ctags[strtolower($tt)] = $tt;
+                if (($tt = $tagger->check($tt))
+                    && !stri_ends_with($tt, "response")) {
+                    list($tag, $value) = TagInfo::unpack($tt);
+                    $ts[strtolower($tag)] = $tag . "#" . (float) $value;
+                }
             }
-            $tagger->sort($ctags);
-            $ctags = count($ctags) ? " " . join(" ", $ctags) . " " : null;
+            if (!empty($ts)) {
+                $ctags = " " . join(" ", $this->conf->tags()->sort($ts));
+            } else {
+                $ctags = null;
+            }
         } else {
             $ctags = null;
         }
@@ -632,12 +650,14 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         }
 
         $result = $this->conf->qe_apply($q, $qv);
-        if (!$result)
+        if (!$result) {
             return false;
+        }
 
         $cmtid = $this->commentId ? : $result->insert_id;
-        if (!$cmtid)
+        if (!$cmtid) {
             return false;
+        }
 
         // log
         $log = $is_response ? "Response $cmtid" : "Comment $cmtid";
@@ -684,8 +704,9 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         if ($text !== false) {
             $comments = $this->prow->fetch_comments("commentId=$cmtid");
             $this->merge($comments[$cmtid], $this->prow);
-            if ($this->timeNotified == $this->timeModified)
+            if ($this->timeNotified == $this->timeModified) {
                 $this->prow->notify_reviews([$this, "watch_callback"], $contact);
+            }
         } else {
             $this->commentId = 0;
             $this->comment = "";
@@ -719,13 +740,14 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
             // Don't send notifications about draft responses to the chair,
             // even though the chair can see draft responses.
             && (!($ctype & COMMENTTYPE_DRAFT) || $minic->act_author_view($prow))) {
-            if (($ctype & COMMENTTYPE_RESPONSE) && ($ctype & COMMENTTYPE_DRAFT))
+            if (($ctype & COMMENTTYPE_RESPONSE) && ($ctype & COMMENTTYPE_DRAFT)) {
                 $tmpl = "@responsedraftnotify";
-            else if ($ctype & COMMENTTYPE_RESPONSE)
+            } else if ($ctype & COMMENTTYPE_RESPONSE) {
                 $tmpl = "@responsenotify";
-            else
+            } else {
                 $tmpl = "@commentnotify";
-            HotCRPMailer::send_to($minic, $tmpl, $prow, ["comment_row" => $this]);
+            }
+            HotCRPMailer::send_to($minic, $tmpl, ["prow" => $prow, "comment_row" => $this]);
         }
     }
 }

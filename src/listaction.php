@@ -1,12 +1,12 @@
 <?php
 // listaction.php -- HotCRP helper class for paper search actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class ListAction {
     public $subname;
     const ENOENT = "No such action.";
     const EPERM = "Permission error.";
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return true;
     }
     function run(Contact $user, $qreq, $selection) {
@@ -43,7 +43,7 @@ class ListAction {
         } else {
             $action = call_user_func($uf->callback, $user->conf, $uf);
         }
-        if (!$action || !$action->allow($user)) {
+        if (!$action || !$action->allow($user, $qreq)) {
             return new JsonResult(403, "Permission error.");
         } else {
             return $action->run($user, $qreq, $selection);

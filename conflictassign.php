@@ -1,6 +1,6 @@
 <?php
 // manualassign.php -- HotCRP chair's paper assignment page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papersearch.php");
@@ -16,7 +16,7 @@ echo '<div class="psmode">',
     '<div class="papmode"><a href="', hoturl("bulkassign"), '">Bulk update</a></div>',
     '</div><hr class="c" />';
 
-echo '<div class="settingstext">';
+echo '<div class="w-text">';
 
 if ($Qreq->neg) {
 } else {
@@ -43,7 +43,7 @@ if ($Qreq->neg) {
     $filter = function ($pl, $row) {
         $user = $pl->reviewer_user();
         return $row->conflict_type($user) == 0
-            && ($row->reviewer_preference($user)[0] <= -100
+            && ($row->preference($user)[0] <= -100
                 || $row->potential_conflict($user));
     };
 }

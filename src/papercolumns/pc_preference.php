@@ -1,6 +1,6 @@
 <?php
 // pc_preference.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Preference_PaperColumn extends PaperColumn {
     private $editable;
@@ -32,7 +32,7 @@ class Preference_PaperColumn extends PaperColumn {
         $this->contact = $this->contact ? : $reviewer;
         $this->not_me = $this->contact->contactId !== $pl->user->contactId;
         if (!$pl->user->isPC
-            || ($this->not_me && !$pl->user->is_manager())) {
+            || ($this->not_me && !$pl->user->can_view_preference(null))) {
             return false;
         }
         if ($visible) {
@@ -46,10 +46,10 @@ class Preference_PaperColumn extends PaperColumn {
         return true;
     }
     private function preference_values($row) {
-        if ($this->not_me && !$this->viewer_contact->can_administer($row)) {
+        if ($this->not_me && !$this->viewer_contact->can_view_preference($row)) {
             return [null, null];
         } else {
-            return $row->reviewer_preference($this->contact);
+            return $row->preference($this->contact);
         }
     }
     function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
@@ -101,16 +101,16 @@ class Preference_PaperColumn extends PaperColumn {
         if ($this->contact === $pl->user || $this->row) {
             return "Preference";
         } else if ($is_text) {
-            return $pl->user->name_text_for($this->contact) . " preference";
+            return $pl->user->reviewer_text_for($this->contact) . " preference";
         } else {
-            return $pl->user->name_html_for($this->contact) . "<br>preference";
+            return $pl->user->reviewer_html_for($this->contact) . "<br>preference";
         }
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
-        return $this->not_me && !$pl->user->allow_administer($row);
+        return $this->not_me && !$pl->user->allow_view_preference($row);
     }
     function content(PaperList $pl, PaperInfo $row) {
-        $pv = $row->reviewer_preference($this->contact);
+        $pv = $row->preference($this->contact);
         $pv_exists = $pv[0] !== 0 || $pv[1] !== null;
         $editable = $this->editable && $this->contact->can_enter_preference($row);
         $has_conflict = $row->has_conflict($this->contact);
@@ -128,7 +128,7 @@ class Preference_PaperColumn extends PaperColumn {
             }
             $t = '<input name="' . $iname . '" class="uikd uich revpref" value="'
                 . ($pv_exists ? unparse_preference($pv) : "")
-                . '" type="text" size="4" tabindex="2" placeholder="0" />';
+                . '" type="text" size="4" tabindex="2" placeholder="0" inputmode="numeric" />';
             if ($has_conflict && $this->show_conflict) {
                 $t .= " " . review_type_icon(-1);
             }
@@ -143,7 +143,7 @@ class Preference_PaperColumn extends PaperColumn {
         // account for statistics and maybe wrap HTML in conflict
         if ($this->not_me
             && !$editable
-            && !$pl->user->can_administer($row)
+            && !$pl->user->can_view_preference($row)
             && $t !== "") {
             $tag = $this->row ? "div" : "span";
             $t = "<$tag class=\"fx5\">" . $t . "</$tag>";

@@ -1,9 +1,9 @@
 <?php
 // listactions/la_getrank.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class GetRank_ListAction extends ListAction {
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->conf->setting("tag_rank") && $user->is_reviewer();
     }
     function run(Contact $user, $qreq, $ssel) {

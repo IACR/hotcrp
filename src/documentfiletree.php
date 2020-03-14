@@ -1,16 +1,18 @@
 <?php
 // documentfiletree.php -- document helper class for trees of HotCRP papers
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class DocumentFileTree implements JsonSerializable {
     public $treeid;
     private $_components = [];
     private $_pregs = [];
     private $_n;
+    private $_filecount;
 
     private $_algo;
     private $_hash;
     private $_extension;
+    private $_need_hash;
 
     private $_dirinfo = [];
 
@@ -19,9 +21,9 @@ class DocumentFileTree implements JsonSerializable {
         $this->treeid = $treeid;
         $this->_matcher = $matcher;
 
-        foreach (preg_split("{/+}", $dp) as $fdir) {
+        foreach (preg_split("/\/+/", $dp) as $fdir) {
             if ($fdir !== "") {
-                if (preg_match('/%\d*[%hxHjaA]/', $fdir)) {
+                if (preg_match('/%\d*[%hHjaAwx]/', $fdir)) {
                     if (count($this->_components) % 2 == 0) {
                         $this->_components[] = "";
                     }
@@ -39,7 +41,7 @@ class DocumentFileTree implements JsonSerializable {
         }
 
         $this->_n = count($this->_components);
-        $this->populate_dirinfo("", 0);
+        $this->_filecount = $this->populate_dirinfo("", 0);
     }
 
     private function populate_dirinfo($dir, $pos) {
@@ -74,6 +76,7 @@ class DocumentFileTree implements JsonSerializable {
         $this->_algo = null;
         $this->_hash = "";
         $this->_extension = null;
+        $this->_need_hash = false;
     }
 
     function match_component($text, $i) {
@@ -83,7 +86,7 @@ class DocumentFileTree implements JsonSerializable {
         $xext = $this->_extension;
 
         $build = "";
-        while (preg_match('{\A(.*?)%(\d*)([%hxHjaA])(.*)\z}', $match, $m)) {
+        while (preg_match('/\A(.*?)%(\d*)([%hHjaAwx])(.*)\z/', $match, $m)) {
             if ($m[1] !== "") {
                 if (substr($text, 0, strlen($m[1])) !== $m[1]) {
                     return false;
@@ -106,19 +109,32 @@ class DocumentFileTree implements JsonSerializable {
                     }
                     $build .= $xext;
                     $text = substr($text, strlen($xext));
-                } else if (preg_match('{\A(\.(?:avi|bib|bin|bz2|csv|docx?|gif|gz|html|jpg|json|md|mp4|pdf|png|pptx?|ps|rtf|smil|svgz?|tar|tex|tiff|txt|webm|xlsx?|xz|zip))}', $text, $m)) {
+                } else if (preg_match('/\A(\.(?:avi|bib|bin|bz2|csv|docx?|gif|gz|html|jpg|json|md|mp4|pdf|png|pptx?|ps|rtf|smil|svgz?|tar|tex|tiff|txt|webm|xlsx?|xz|zip))/', $text, $m)) {
                     $xext = $m[1];
                     $build .= $m[1];
                     $text = substr($text, strlen($m[1]));
                 } else {
                     $xext = "";
                 }
+            } else if ($fn === "w") {
+                preg_match('/\A([^%\/]*)(.*)\z/', $match, $mm);
+                if (str_starts_with($mm[2], "%x")) {
+                    $mm[1] .= ".";
+                }
+                $re = '/\A([^\/]+?)' . ($mm[1] === "" ? '\z' : preg_quote($mm[1], "/")) . '/';
+                if (preg_match($re, $text, $m)) {
+                    $build .= $m[1];
+                    $text = substr($text, strlen($m[1]));
+                } else {
+                    return false;
+                }
             } else if ($fn === "j") {
+                $this->_need_hash = true;
                 $l = min(strlen($xhash), 2);
                 if (substr($text, 0, $l) !== (string) substr($xhash, 0, $l)) {
                     return false;
                 }
-                if (preg_match('{\A([0-9a-f]{2,3})}', $text, $mm)) {
+                if (preg_match('/\A([0-9a-f]{2,3})/', $text, $mm)) {
                     if (strlen($mm[1]) > strlen($xhash)) {
                         $xhash = $mm[1];
                     }
@@ -135,7 +151,8 @@ class DocumentFileTree implements JsonSerializable {
                     return false;
                 }
             } else if ($fn === "a") {
-                if (preg_match('{\A(sha1|sha256)}', $text, $mm)) {
+                $this->_need_hash = true;
+                if (preg_match('/\A(sha1|sha256)/', $text, $mm)) {
                     $malgo = $mm[1] === "sha1" ? "" : "sha2-";
                     if ($xalgo === null) {
                         $xalgo = $malgo;
@@ -149,12 +166,19 @@ class DocumentFileTree implements JsonSerializable {
                     return false;
                 }
             } else {
+                $this->_need_hash = true;
                 if ($fn === "A" || $fn === "h") {
                     if ($xalgo !== null) {
                         if ($xalgo !== (string) substr($text, 0, strlen($xalgo)))
                             return false;
-                    } else if (preg_match('{\A((?:sha2-)?)}', $text, $mm)) {
-                        $xalgo = $mm[1];
+                    } else if (preg_match('/\A(sha2-|[0-9a-f]+)/', $text, $mm)) {
+                        if ($mm[1] === "sha2-" || strlen($mm[1]) === 64) {
+                            $xalgo = "sha2-";
+                        } else if (strlen($mm[1]) === 40) {
+                            $xalgo = "";
+                        } else {
+                            return false;
+                        }
                     } else {
                         return false;
                     }
@@ -176,7 +200,7 @@ class DocumentFileTree implements JsonSerializable {
                         $fwidth = "40,64";
                     }
                 }
-                if (preg_match('{\A([0-9a-f]{' . $fwidth . '})}', $text, $mm)) {
+                if (preg_match('/\A([0-9a-f]{' . $fwidth . '})/', $text, $mm)) {
                     if (strlen($mm[1]) > strlen($xhash))
                         $xhash = $mm[1];
                     $build .= $mm[1];
@@ -197,8 +221,9 @@ class DocumentFileTree implements JsonSerializable {
     }
 
     function match_complete() {
-        return $this->_algo !== null
-            && strlen($this->_hash) === ($this->_algo === "" ? 40 : 64);
+        return !$this->_need_hash
+            || ($this->_algo === "" && strlen($this->_hash) === 40)
+            || ($this->_algo !== null && strlen($this->_hash) === 64);
     }
 
     static function random_index($di) {
@@ -235,7 +260,7 @@ class DocumentFileTree implements JsonSerializable {
             }
         }
         if ($this->match_complete()) {
-            $fm->algohash = $this->_algo . $this->_hash;
+            $fm->algohash = $this->_need_hash ? $this->_algo . $this->_hash : "none";
             $fm->extension = $this->_extension;
         }
         return $fm;
@@ -254,7 +279,7 @@ class DocumentFileTree implements JsonSerializable {
             }
         }
         if ($this->match_complete()) {
-            $fm->algohash = $this->_algo . $this->_hash;
+            $fm->algohash = $this->_need_hash ? $this->_algo . $this->_hash : "none";
             $fm->extension = $this->_extension;
         }
         return $fm;
@@ -268,6 +293,11 @@ class DocumentFileTree implements JsonSerializable {
             $this->_dirinfo[$fm->bdirs[$i]]->hide_component_index($fm->idxes[$i]);
         }
         $fm->idxes = $fm->bdirs = [];
+        --$this->_filecount;
+    }
+
+    function is_empty() {
+        return $this->_filecount === 0;
     }
 
     function jsonSerialize() {

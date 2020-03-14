@@ -1,6 +1,6 @@
 <?php
 // listactions/la_get_sub.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Get_ListAction extends ListAction {
     static function render(PaperList $pl) {
@@ -59,7 +59,7 @@ class GetCheckFormat_ListAction extends ListAction {
         }
         $csvg = $user->conf->make_csvg("formatcheck")->select(["paper", "title", "pages", "format"]);
         $csvg->download_headers();
-        echo $csvg->headerline;
+        $csvg->flush();
         $cf = new CheckFormat($user->conf, CheckFormat::RUN_PREFER_NO);
         foreach ($papers as $prow) {
             $pages = "?";
@@ -170,7 +170,7 @@ class GetAuthors_ListAction extends ListAction {
         }
         return $contact_map;
     }
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->can_view_some_authors();
     }
     function run(Contact $user, $qreq, $ssel) {
@@ -215,7 +215,7 @@ class GetAuthors_ListAction extends ListAction {
 
 /* NB this search action is actually unavailable via the UI */
 class GetContacts_ListAction extends ListAction {
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->is_manager();
     }
     function run(Contact $user, $qreq, $ssel) {
@@ -237,7 +237,7 @@ class GetContacts_ListAction extends ListAction {
 }
 
 class GetPcconflicts_ListAction extends ListAction {
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->is_manager();
     }
     function run(Contact $user, $qreq, $ssel) {

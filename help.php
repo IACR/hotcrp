@@ -1,6 +1,6 @@
 <?php
 // help.php -- HotCRP help page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 
@@ -9,8 +9,8 @@ $help_topics = new GroupedExtensions($Me, [
     "etc/helptopics.json"
 ], $Conf->opt("helpTopics"));
 
-if (!$Qreq->t && preg_match(',\A/(\w+)\z,i', Navigation::path())) {
-    $Qreq->t = substr(Navigation::path(), 1);
+if (!$Qreq->t && preg_match('/\A\/\w+\/*\z/i', $Qreq->path())) {
+    $Qreq->t = $Qreq->path_component(0);
 }
 $topic = $Qreq->t ? : "topics";
 $want_topic = $help_topics->canonical_group($topic);
@@ -32,13 +32,34 @@ class HtHead extends Ht {
     private $_help_topics;
     private $_renderers = [];
     private $_sv;
+    private $_h3ids;
     function __construct($help_topics, Contact $user) {
         $this->conf = $user->conf;
         $this->user = $user;
         $this->_help_topics = $help_topics;
+        $this->_help_topics->set_context(["hclass" => "helppage", "args" => [$this]]);
     }
-    static function subhead($title, $id = null) {
+    function subhead($title, $id = null) {
+        if (!$id && $title) {
+            $id = preg_replace('/[^A-Za-z0-9]+|<.*?>/', "-", strtolower($title));
+            if (str_ends_with($id, "-")) {
+                $id = substr($id, 0, strlen($id) - 1);
+            }
+            if (preg_match('/\A(?:htctl.*|fold.*|body.*|tracker.*|msg.*|header.*|quicklink.*|tla.*|-|)\z/', $id)) {
+                $id = ($id === "" || $id === "-" ? null : "h-$id");
+            }
+            if ($id) {
+                $n = "";
+                while (isset($this->_h3ids[$id . $n])) {
+                    $n = (int) $n + 1;
+                }
+                $id .= $n;
+            }
+        }
         if ($id || $title) {
+            if ($id) {
+                $this->_h3ids[$id] = true;
+            }
             return '<h3 class="helppage"' . ($id ? " id=\"{$id}\"" : "") . '>' . $title . "</h3>\n";
         } else {
             return "";
@@ -179,14 +200,7 @@ class HtHead extends Ht {
         }
     }
     function render_group($topic, $top = false) {
-        $this->_help_topics->start_render(3, "helppage");
-        if ($top && ($gj = $this->_help_topics->get($topic))) {
-            $this->_help_topics->render($gj, [$this, $gj]);
-        }
-        foreach ($this->_help_topics->members($topic) as $gj) {
-            $this->_help_topics->render($gj, [$this, $gj]);
-        }
-        $this->_help_topics->end_render();
+        $this->_help_topics->render_group($topic, ["top" => $top]);
     }
     function groups() {
         return $this->_help_topics->groups();
@@ -232,23 +246,25 @@ function meaningful_round_name(Contact $user) {
 }
 
 
-echo '<div class="leftmenu-left"><div class="leftmenu-menu"><h1 class="leftmenu">Help</h1><div class="leftmenu-list">';
+echo '<div class="leftmenu-left"><nav class="leftmenu-menu"><h1 class="leftmenu">Help</h1><div class="leftmenu-list">';
 foreach ($help_topics->groups() as $gj) {
-    if ($gj->name === $topic) {
-        echo '<div class="leftmenu-item active">', $gj->title, '</div>';
-    } else if (isset($gj->title)) {
-        echo '<div class="leftmenu-item ui js-click-child">',
-            '<a href="', hoturl("help", "t=$gj->name"), '">', $gj->title, '</a></div>';
-    }
-    if ($gj->name === "topics") {
-        echo '<div class="c g"></div>';
+    if (isset($gj->title)) {
+        echo '<div class="leftmenu-item',
+            ($gj->name === "topics" ? " mb-3" : ""),
+            ($gj->name === $topic ? ' active">' : ' ui js-click-child">');
+        if ($gj->name === $topic) {
+            echo $gj->title;
+        } else {
+            echo Ht::link($gj->title, $Conf->hoturl("help", "t=$gj->name"));
+        }
+        echo '</div>';
     }
 }
-echo "</div></div></div>\n",
-    '<div id="helpcontent" class="leftmenu-content">',
+echo "</div></nav></div>\n",
+    '<main id="helpcontent" class="leftmenu-content main-column">',
     '<h2 class="leftmenu">', $topicj->title, '</h2>';
 $hth->render_group($topic, true);
-echo "</div>\n";
+echo "</main>\n";
 
 
 $Conf->footer();

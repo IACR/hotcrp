@@ -1,5 +1,5 @@
 // script.js -- HotCRP JavaScript library
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 var siteurl, siteurl_base_path,
     siteurl_postvalue, siteurl_suffix, siteurl_defaults,
@@ -996,6 +996,8 @@ function input_default_value(elt) {
     if (input_is_checkboxlike(elt)) {
         if (elt.hasAttribute("data-default-checked"))
             return !!elt.getAttribute("data-default-checked");
+        else if (elt.hasAttribute("data-default-value"))
+            return elt.value == elt.getAttribute("data-default-value");
         else
             return elt.defaultChecked;
     } else {
@@ -1916,7 +1918,7 @@ function popup_near(elt, anchor) {
             efocus = this;
             return false;
         } else if (!efocus
-                   && !hasClass(this, "dangerous")
+                   && !hasClass(this, "btn-danger")
                    && !hasClass(this, "no-focus")) {
             efocus = this;
         }
@@ -2292,7 +2294,7 @@ handle_ui.on("js-tracker", function (event) {
                     && tr.papers[tr.paper_offset].pid
                     && (pos = ids.indexOf(tr.papers[tr.paper_offset].pid)) > -1)
                     ids[pos] = '<b>' + ids[pos] + '</b>';
-                hc.push('<div class="entryi"><label>Submissions</label><div class="entry"><input type="hidden" name="tr' + trno + '-p" disabled>' + ids.join(" ") + '</div></div>');
+                hc.push('<div class="entryi"><label>Order</label><div class="entry"><input type="hidden" name="tr' + trno + '-p" disabled>' + ids.join(" ") + '</div></div>');
             }
         } catch (e) {
         }
@@ -2411,8 +2413,8 @@ handle_ui.on("js-tracker", function (event) {
         hc.push_actions();
         hc.push('<button type="submit" name="save" class="btn-primary">Save changes</button><button type="button" name="cancel">Cancel</button>');
         if (nshown) {
-            hc.push('<button type="button" name="stopall" class="dangerous btnl">Stop all</button>');
-            hc.push('<a class="btn btnl" target="_blank" href="' + hoturl("buzzer") + '">Tracker status page</a>');
+            hc.push('<button type="button" name="stopall" class="btn-danger float-left">Stop all</button>');
+            hc.push('<a class="btn float-left" target="_blank" href="' + hoturl("buzzer") + '">Tracker status page</a>');
         }
         $d = hc.show();
         show_elapsed();
@@ -2798,13 +2800,17 @@ function foldup(event, opts) {
     }
     if (!("n" in opts)
         && e.hasAttribute("data-fold-target")
-        && (m = e.getAttribute("data-fold-target").match(/^(\D[^#]*$|.*(?=#)|)#?(\d*)([co]?)$/))) {
+        && (m = e.getAttribute("data-fold-target").match(/^(\D[^#]*$|.*(?=#)|)#?(\d*)([cou]?)$/))) {
         if (m[1] !== "") {
             e = document.getElementById(m[1]);
         }
         opts.n = parseInt(m[2]) || 0;
         if (!("f" in opts) && m[3] !== "") {
-            opts.f = m[3] === "c";
+            if (this.tagName === "INPUT" && this.type === "checkbox" && m[3] === "u") {
+                opts.f = this.checked;
+            } else {
+                opts.f = m[3] === "c";
+            }
         }
     }
     var foldname = "fold" + (opts.n || "");
@@ -2979,7 +2985,7 @@ function jump_hash(hash, focus) {
     // find destination element
     if (hash
         && (e = document.getElementById(hash))
-        && (p = e.closest(".papeg, .f-i, .settings-g, .entryi, .checki"))) {
+        && (p = e.closest(".papeg, .f-i, .form-g, .entryi, .checki"))) {
         var eg = $(e).geometry(), pg = $(p).geometry(), wh = $(window).height();
         if ((eg.width <= 0 && eg.height <= 0)
             || (pg.top <= eg.top && eg.top - pg.top <= wh * 0.75)) {
@@ -3902,6 +3908,8 @@ function add_review(rrow) {
             revname = '[' + revname + ']';
         if (rrow.reviewer_email)
             revname = '<span title="' + rrow.reviewer_email + '">' + revname + '</span>';
+    } else {
+        revname = "";
     }
     if (rrow.rtype) {
         revname += (revname ? " " : "") + '<span class="rto rt' + rrow.rtype +
@@ -3972,12 +3980,21 @@ window.papercomment = (function ($) {
 var vismap = {rev: "hidden from authors",
               pc: "hidden from authors and external reviewers",
               admin: "shown only to administrators"};
-var cmts = {}, newcmt, has_unload = false;
-var resp_rounds = {}, detwiddle;
-if (hotcrp_user && hotcrp_user.cid)
-    detwiddle = new RegExp("^" + hotcrp_user.cid + "~");
-else
-    detwiddle = /^~/;
+var cmts = {}, newcmt, has_unload = false, resp_rounds = {},
+    twiddle_start = hotcrp_user && hotcrp_user.cid ? hotcrp_user.cid + "~" : "###";
+
+function unparse_tag(tag, strip_value) {
+    var pos;
+    if (tag.startsWith(twiddle_start)) {
+        tag = tag.substring(twiddle_start.length - 1);
+    }
+    if (tag.endsWith("#0")) {
+        tag = tag.substring(0, tag.length - 2);
+    } else if (strip_value && (pos = tag.indexOf("#")) > 0) {
+        tag = tag.substring(0, pos);
+    }
+    return tag;
+}
 
 function $cmt(e) {
     var $c = $(e).closest(".cmtg");
@@ -3997,7 +4014,7 @@ function cj_cid(cj) {
 }
 
 function comment_identity_time(cj) {
-    var t = [], res = [], x, i, tag;
+    var t = [], res = [], x, i;
     if (cj.response || cj.is_new) {
     } else if (cj.editable) {
         t.push('<div class="cmtnumid"><a href="#' + cj_cid(cj) +
@@ -4040,8 +4057,7 @@ function comment_identity_time(cj) {
     if (!cj.response && cj.tags) {
         x = [];
         for (i in cj.tags) {
-            tag = cj.tags[i].replace(detwiddle, "~");
-            x.push('<a class="qq" href="' + hoturl_html("search", {q: "cmt:#" + tag}) + '">#' + tag + '</a>');
+            x.push('<a class="qq" href="' + hoturl_html("search", {q: "cmt:#" + unparse_tag(cj.tags[i], true)}) + '">#' + unparse_tag(cj.tags[i]) + '</a>');
         }
         t.push('<div class="cmttags">' + x.join(" ") + '</div>');
     }
@@ -4240,7 +4256,7 @@ function activate_editing($c, cj) {
         .change();
 
     for (i in cj.tags || []) {
-        tags.push(cj.tags[i].replace(detwiddle, "~"));
+        tags.push(unparse_tag(cj.tags[i]));
     }
     if (tags.length) {
         fold($c.find(".cmteditinfo")[0], false, 3);
@@ -4790,12 +4806,10 @@ function nextprev_shortcut(evt, key) {
 }
 
 function blur_keyup_shortcut(evt) {
-    var code;
     // IE compatibility
     evt = evt || window.event;
-    code = evt.charCode || evt.keyCode;
     // reject modified keys, interesting targets
-    if (code != 27 || evt.altKey || evt.ctrlKey || evt.metaKey)
+    if (evt.altKey || evt.ctrlKey || evt.metaKey || event_key(evt) !== "Escape")
         return true;
     document.activeElement && document.activeElement.blur();
     if (evt.preventDefault)
@@ -6109,7 +6123,7 @@ handle_ui.on("js-annotate-order", function () {
         return false;
     }
     function ondeleteclick() {
-        var $div = $(this).closest(".settings-g"), annoid = $div.attr("data-anno-id");
+        var $div = $(this).closest(".form-g"), annoid = $div.attr("data-anno-id");
         $div.find("input[name='tagval_" + annoid + "']").after("[deleted]").remove();
         $div.append('<input type="hidden" name="deleted_' + annoid + '" value="1">');
         $div.find("input[name='heading_" + annoid + "']").prop("disabled", true);
@@ -6130,7 +6144,7 @@ handle_ui.on("js-annotate-order", function () {
         var annoid = anno.annoid;
         if (annoid == null)
             annoid = "n" + (last_newannoid += 1);
-        hc.push('<div class="settings-g" data-anno-id="' + annoid + '">', '</div>');
+        hc.push('<div class="form-g" data-anno-id="' + annoid + '">', '</div>');
         hc.push('<div class="entryi"><label for="htctl-taganno-' + annoid + '-d">Heading</label><input id="htctl-taganno-' + annoid + '-d" name="heading_' + annoid + '" type="text" placeholder="none" size="32" class="need-autogrow"></div>');
         hc.push('<div class="entryi"><label for="htctl-taganno-' + annoid + '-tagval">Tag value</label><div class="entry"><input id="htctl-taganno-' + annoid + '-tagval" name="tagval_' + annoid + '" type="text" size="5">', '</div></div>');
         if (anno.annoid)
@@ -6876,7 +6890,7 @@ function make_tagmap() {
             else if (p > 0)
                 x.push(t.replace('\\*', '.*'));
             else if (t === "any")
-                x.push('(?:' + (hotcrp_user.cid || 0) + '~.*|~~.*|(?!.*~).*)');
+                x.push('(?:' + (hotcrp_user.cid || 0) + '~.*|~~.*|(?!\\d+~).*)');
             else
                 x.push(t);
         }
@@ -7405,9 +7419,14 @@ handle_ui.on("js-signin", function (event) {
     });
 });
 
+handle_ui.on("js-no-signin", function (event) {
+    var e = this.closest(".js-signin");
+    e && removeClass(e, "ui-submit");
+});
+
 handle_ui.on("js-href-add-email", function (event) {
     var e = this.closest("form");
-    if (e && e.email) {
+    if (e && e.email && e.email.value !== "") {
         this.href = hoturl_add(this.href, "email=" + urlencode(e.email.value));
     }
 });
@@ -7475,7 +7494,7 @@ handle_ui.on("js-check-submittable", function (event) {
     if (readye && readye.type === "checkbox")
         is = readye.checked && $(readye).is(":visible");
     var t;
-    if (f.getAttribute("data-contacts-only")) {
+    if (f.hasAttribute("data-contacts-only")) {
         t = "Save contacts";
     } else if (!is) {
         t = "Save draft";
@@ -7593,7 +7612,7 @@ handle_ui.on("js-delete-paper", function (event) {
     var f = this.closest("form"),
         hc = popup_skeleton({anchor: this, action: f});
     hc.push('<p>Be careful: This will permanently delete all information about this submission from the database and <strong>cannot be undone</strong>.</p>');
-    hc.push_actions(['<button type="submit" name="delete" value="1" class="dangerous">Delete</button>',
+    hc.push_actions(['<button type="submit" name="delete" value="1" class="btn-danger">Delete</button>',
         '<button type="button" name="cancel">Cancel</button>']);
     var $d = hc.show();
     transfer_form_values($d.find("form"), $(f), ["doemail", "emailNote"]);
@@ -7642,53 +7661,69 @@ var edit_conditions = {};
 
 function prepare_psedit(url) {
     var self = this,
-        $ctl = $(self).find("select, textarea").first(),
-        val = $ctl.val();
+        ctl = $(self).find("select, textarea").first()[0],
+        val = $(ctl).val(),
+        keyed = 0;
     function cancel() {
-        $ctl.val(val);
+        $(ctl).val(val);
         foldup.call(self, null, {f: true});
     }
     function done(ok, message) {
         $(self).find(".psfn .savesuccess, .psfn .savefailure").remove();
-        var s = $("<span class=\"save" + (ok ? "success" : "failure") + "\"></span>");
-        s.appendTo($(self).find(".psfn"));
+        var $s = $("<span class=\"save" + (ok ? "success" : "failure") + "\"></span>");
+        $s.appendTo($(self).find(".psfn"));
         if (ok)
-            s.delay(1000).fadeOut();
+            $s.delay(1000).fadeOut();
         else
-            $ctl.val(val);
+            $(ctl).val(val);
         if (message)
-            make_bubble(message, "errorbubble").dir("l").near(s[0]);
-        $ctl.prop("disabled", false);
+            make_bubble(message, "errorbubble").dir("l").near($s[0]);
     }
-    function change() {
-        var saveval = $ctl.val();
-        $.post(hoturl_post("api", url),
-            $(self).find("form").serialize(),
-            function (data) {
-                if (data.ok) {
-                    done(true);
-                    foldup.call(self, null, {f: true});
-                    val = saveval;
-                    var $p = $(self).find(".js-psedit-result").first();
-                    $p.html(data.result || $ctl[0].options[$ctl[0].selectedIndex].innerHTML);
-                    if (data.color_classes) {
-                        make_pattern_fill(data.color_classes || "");
-                        $p.html('<span class="taghh ' + data.color_classes + '">' + $p.html() + '</span>');
-                    }
-                } else {
-                    done(false, data.error);
+    function make_callback(saveval) {
+        return function (data) {
+            if (data.ok) {
+                val = saveval;
+                done(true);
+                foldup.call(self, null, {f: true});
+                var $p = $(self).find(".js-psedit-result").first();
+                $p.html(data.result || ctl.options[ctl.selectedIndex].innerHTML);
+                if (data.color_classes) {
+                    make_pattern_fill(data.color_classes || "");
+                    $p.html('<span class="taghh ' + data.color_classes + '">' + $p.html() + '</span>');
                 }
-            });
-        $ctl.prop("disabled", true);
+            } else {
+                done(false, data.error);
+            }
+            ctl.disabled = false;
+        };
+    }
+    function change(evt) {
+        var saveval = $(ctl).val();
+        if ((keyed && evt.type !== "blur" && now_msec() <= keyed + 1)
+            || ctl.disabled) {
+        } else if (saveval !== val) {
+            $.post(hoturl_post("api", url), $(self).find("form").serialize(),
+                   make_callback(saveval));
+            ctl.disabled = true;
+        } else {
+            cancel();
+        }
     }
     function keyup(evt) {
-        if ((evt.charCode || evt.keyCode) == 27
-            && !evt.altKey && !evt.ctrlKey && !evt.metaKey) {
+        if (event_key(evt) === "Escape" && !evt.altKey && !evt.ctrlKey && !evt.metaKey) {
             cancel();
             evt.preventDefault();
         }
     }
-    $ctl.on("change", change).on("keyup", keyup);
+    function keypress(evt) {
+        if (event_key(evt) === " ")
+            /* nothing */;
+        else if (event_key.printable(evt))
+            keyed = now_msec();
+        else
+            keyed = 0;
+    }
+    $(ctl).on("change blur", change).on("keyup", keyup).on("keypress", keypress);
 }
 
 function reduce_tag_report(tagreport, min_status, tags) {
@@ -8044,18 +8079,10 @@ handle_ui.on("js-delete-user", function (event) {
     hc.push('<p>Be careful: This will permanently delete all information about this user from the database and <strong>cannot be undone</strong>.</p>');
     if ((x = this.getAttribute("data-delete-info")))
         hc.push(x);
-    hc.push_actions(['<button type="submit" name="delete" value="1" class="dangerous">Delete user</button>',
+    hc.push_actions(['<button type="submit" name="delete" value="1" class="btn-danger">Delete user</button>',
         '<button type="button" name="cancel">Cancel</button>']);
     var $d = hc.show();
     $d.on("submit", "form", function () { addClass(f, "submitting"); });
-});
-
-handle_ui.on("js-plaintext-password", function (event) {
-    foldup.call(this);
-    var open = $(this).closest(".foldo, .foldc").hasClass("foldo");
-    var form = $(this).closest("form")[0];
-    if (form && form.whichpassword)
-        form.whichpassword.value = open ? "t" : "";
 });
 
 var profile_ui = (function ($) {
@@ -8097,7 +8124,7 @@ handle_ui.on("js-delete-review", function () {
     var f = this.closest("form"),
         hc = popup_skeleton({anchor: this, action: f});
     hc.push('<p>Be careful: This will permanently delete all information about this review assignment from the database and <strong>cannot be undone</strong>.</p>');
-    hc.push_actions(['<button type="submit" name="deletereview" value="1" class="dangerous">Delete review</button>',
+    hc.push_actions(['<button type="submit" name="deletereview" value="1" class="btn-danger">Delete review</button>',
         '<button type="button" name="cancel">Cancel</button>']);
     hc.show();
 });
@@ -8679,17 +8706,28 @@ function populate_pcselector(pcs) {
     else
         optids = optids.split(/[\s,]+/);
     var selected = this.getAttribute("data-pcselector-selected"), selindex = -1;
-    var last_first = pcs.__sort__ === "last", used = {};
+    var last_first = pcs.__sort__ === "last", used = {}, opt, curgroup = this;
 
     for (var i = 0; i < optids.length; ++i) {
         var cid = optids[i], email, name, p;
-        if (cid === "" || cid === "*")
+        if (cid === "" || cid === "*") {
             optids.splice.apply(optids, [i + 1, 0].concat(pcs.__order__));
-        else if (cid === "assignable")
+        } else if (cid === "assignable") {
             optids.splice.apply(optids, [i + 1, 0].concat(pcs.__assignable__[hotcrp_paperid] || []));
-        else if (cid === "selected") {
+        } else if (cid === "selected") {
             if (selected != null)
                 optids.splice.apply(optids, [i + 1, 0, selected]);
+        } else if (cid === "extrev") {
+            var extrevs = pcs.__extrev__ ? pcs.__extrev__[hotcrp_paperid] : null;
+            if (extrevs && extrevs.length) {
+                optids.splice.apply(optids, [i + 1, 0].concat(extrevs));
+                optids.splice(i + 1 + extrevs.length, 0, "endgroup");
+                curgroup = document.createElement("optgroup");
+                curgroup.setAttribute("label", "External reviewers");
+                this.appendChild(curgroup);
+            }
+        } else if (cid === "endgroup") {
+            curgroup = this;
         } else {
             cid = +optids[i];
             if (!cid) {
@@ -8697,21 +8735,23 @@ function populate_pcselector(pcs) {
                 name = optids[i];
                 if (name === "" || name === "0")
                     name = "None";
-            } else if ((p = pcs[cid])) {
+            } else if ((p = pcs[cid])
+                       || (pcs.__other__ && (p = pcs.__other__[cid]))) {
                 email = p.email;
                 name = p.name;
                 if (last_first && p.lastpos) {
                     var nameend = p.emailpos ? p.emailpos - 1 : name.length;
                     name = name.substring(p.lastpos, nameend) + ", " + name.substring(0, p.lastpos - 1) + name.substring(nameend);
                 }
-            } else
+            } else {
                 continue;
+            }
             if (!used[email]) {
                 used[email] = true;
-                var opt = document.createElement("option");
+                opt = document.createElement("option");
                 opt.setAttribute("value", email);
                 opt.text = name;
-                this.add(opt);
+                curgroup.appendChild(opt);
                 if (email === selected || (email !== "none" && cid == selected))
                     selindex = this.options.length - 1;
             }
@@ -8719,9 +8759,9 @@ function populate_pcselector(pcs) {
     }
 
     if (selindex < 0) {
-        if (selected == 0 || selected == null)
+        if (selected == 0 || selected == null) {
             selindex = 0;
-        else {
+        } else {
             var opt = document.createElement("option");
             if ((p = pcs[selected])) {
                 opt.setAttribute("value", p.email);
@@ -8730,7 +8770,7 @@ function populate_pcselector(pcs) {
                 opt.setAttribute("value", selected);
                 opt.text = "[removed from PC]";
             }
-            this.add(opt);
+            this.appendChild(opt);
             selindex = this.options.length - 1;
         }
     }

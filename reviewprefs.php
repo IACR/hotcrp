@@ -1,6 +1,6 @@
 <?php
 // reviewprefs.php -- HotCRP review preference global settings page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papersearch.php");
@@ -180,7 +180,7 @@ function parseUploadedPreferences($text, $filename, $apply) {
 
         $actions = Ht::actions([
             Ht::submit("Apply changes", ["class" => "btn-success"]),
-            Ht::submit("cancel", "Cancel")
+            Ht::submit("cancel", "Cancel", ["formnovalidate" => true])
         ], ["class" => "aab aabig"]);
         if (count($assignset->assigned_pids()) >= 4)
             echo $actions;

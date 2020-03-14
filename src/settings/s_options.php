@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_options.php -- HotCRP settings > submission form page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Options_SettingRenderer {
     private $option_classes = [];
@@ -67,8 +67,8 @@ class Options_SettingRenderer {
             . '</div></div>';
     }
     static function render_presence_property(SettingValues $sv, PaperOption $o, $xpos, $self, $gj) {
-        $self->add_option_class("fold5" . ($o->final || !$o->id ? "o" : "c"));
-        return '<div class="' . $sv->control_class("optec_$xpos", "entryi fx5")
+        $self->add_option_class("fold10" . ($o->final || !$o->id ? "o" : "c"));
+        return '<div class="' . $sv->control_class("optec_$xpos", "entryi fx10")
             . '">' . $sv->label("optec_$xpos", "Condition")
             . '<div class="entry">'
             . '<span class="sep">'
@@ -191,7 +191,7 @@ class Options_SettingRenderer {
     }
 
     static function render(SettingValues $sv) {
-        echo "<h3 class=\"settings\">Submission fields</h3>\n";
+        echo "<h3 class=\"form-h\">Submission fields</h3>\n";
         echo "<hr class=\"g\">\n",
             Ht::hidden("has_options", 1), "\n\n";
 
