@@ -81,6 +81,12 @@ class Home_Partial {
         $gx->render_group("home/sidebar/admin");
         echo '</ul></div>';
     }
+    static function render_admin_iacr(Contact $user) {
+        global $Opt;
+        if (isset($Opt["iacrType"])) {
+            echo '<li>', Ht::link("IACR Integration", $user->conf->hoturl("iacr")), '</li>';
+        }
+    }
     static function render_admin_settings(Contact $user) {
         echo '<li>', Ht::link("Settings", $user->conf->hoturl("settings")), '</li>';
     }
