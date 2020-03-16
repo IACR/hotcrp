@@ -36,6 +36,10 @@
         "render_callback": "Home_Partial::render_admin_sidebar"
     },
     {
+        "name": "home/sidebar/admin/iacr", "position": 5, "allow_if": "chair",
+        "render_callback": "Home_Partial::render_admin_iacr"
+    },
+    {
         "name": "home/sidebar/admin/settings", "position": 10, "allow_if": "chair",
         "render_callback": "Home_Partial::render_admin_settings"
     },

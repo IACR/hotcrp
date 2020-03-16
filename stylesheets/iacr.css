@@ -1,4 +1,4 @@
-body#body-help, body#body-settings {
+body#body-help, body#body-settings, body.leftmenu {
   background: linear-gradient(to bottom, white, white 105px, transparent 10px, transparent),
   linear-gradient(to right, #ecf2f4, #ecf2f4 164px, white 164px, white);
 
@@ -127,7 +127,6 @@ div#iacrError {
 
 select#iacrvenue, input#year, textarea#pclist {
   /* mimic .form-control from Bootstrap 4.3, minus display block & width 100 */
-  height: calc(1.5em + .75rem + 2px);
   padding: .375rem .75rem;
   font-size: 1rem;
   font-weight: 400;

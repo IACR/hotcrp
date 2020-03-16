@@ -1380,6 +1380,7 @@ topics. We use this information to help match papers to reviewers.</p>',
             "placeholder" => "Enter users one per line",
             "class" => "want-focus need-autogrow"
         ]);
+        include "iacr/committee.php";
         echo '<div class="g"><strong>OR</strong>  ',
             '<input type="file" name="bulk" size="30"></div>';
     }
