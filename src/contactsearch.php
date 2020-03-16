@@ -1,6 +1,6 @@
 <?php
 // papersearch.php -- HotCRP helper class for searching for users
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class ContactSearch {
     const F_QUOTED = 1;
@@ -110,8 +110,9 @@ class ContactSearch {
         } else if ($need) {
             $this->warn_html = "No users are tagged “" . htmlspecialchars($this->text) . "”.";
             return array();
-        } else
+        } else {
             return false;
+        }
     }
     private function check_user() {
         if (strcasecmp($this->text, "anonymous") == 0

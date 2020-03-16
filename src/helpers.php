@@ -1,6 +1,6 @@
 <?php
 // helpers.php -- HotCRP non-class helper functions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 function mkarray($value) {
     if (is_array($value))
@@ -72,7 +72,6 @@ function hoturl_post($page, $param = null) {
 class JsonResult {
     public $status;
     public $content;
-    public $has_messages = false;
 
     function __construct($values = null) {
         if (is_int($values)) {
@@ -106,14 +105,13 @@ class JsonResult {
         return $jr;
     }
     function take_messages(Contact $user) {
-        if (($msgs = $user->session("msgs", []))) {
-            $user->save_session("msgs", null);
-            foreach ($msgs as $msg) {
+        if (($msgs = $user->session("msgs", []))
+            && count($msgs) > $user->conf->initial_msg_count()) {
+            $xmsgs = array_splice($msgs, $user->conf->initial_msg_count());
+            $user->save_session("msgs", empty($msgs) ? null : $msgs);
+            foreach ($xmsgs as $msg) {
                 list($text, $type) = $msg;
-                if ($type !== "merror" && $type !== "xmerror") {
-                    error_log(var_export($type, true) . " " . $text);
-                }
-                assert($type === "merror" || $type === "xmerror");
+                error_log($_SERVER["REQUEST_URI"] . " JsonResult::take_messages " . $type . " " . json_encode($text));
                 if (is_string($text)) {
                     $text = [$text];
                 }
@@ -130,7 +128,6 @@ class JsonResult {
                     }
                 }
             }
-            $this->has_messages = true;
         }
     }
     function export_errors() {
@@ -242,12 +239,14 @@ function goPaperForm($baseUrl = null, $args = array()) {
         return "";
     $list = $Conf->active_list();
     $x = Ht::form($Conf->hoturl($baseUrl ? : "paper"), ["method" => "get", "class" => "gopaper"]);
-    if ($baseUrl == "profile")
+    if ($baseUrl == "profile") {
         $x .= Ht::entry("u", "", array("id" => "quicklink-search", "size" => 15, "placeholder" => "User search", "aria-label" => "User search", "class" => "usersearch need-autogrow"));
-    else
+    } else {
         $x .= Ht::entry("p", "", array("id" => "quicklink-search", "size" => 10, "placeholder" => "(All)", "aria-label" => "Search", "class" => "papersearch need-suggest need-autogrow"));
-    foreach ($args as $k => $v)
+    }
+    foreach ($args as $k => $v) {
         $x .= Ht::hidden($k, $v);
+    }
     $x .= "&nbsp; " . Ht::submit("Search") . "</form>";
     return $x;
 }
@@ -259,24 +258,27 @@ function rm_rf_tempdir($tempdir) {
 
 function clean_tempdirs() {
     $dir = sys_get_temp_dir() ? : "/";
-    while (substr($dir, -1) === "/")
+    while (substr($dir, -1) === "/") {
         $dir = substr($dir, 0, -1);
+    }
     $dirh = opendir($dir);
     $now = time();
-    while (($fname = readdir($dirh)) !== false)
+    while (($fname = readdir($dirh)) !== false) {
         if (preg_match('/\Ahotcrptmp\d+\z/', $fname)
             && is_dir("$dir/$fname")
             && ($mtime = @filemtime("$dir/$fname")) !== false
             && $mtime < $now - 1800)
             rm_rf_tempdir("$dir/$fname");
+    }
     closedir($dirh);
 }
 
 function tempdir($mode = 0700) {
     $dir = sys_get_temp_dir() ? : "/";
-    while (substr($dir, -1) === "/")
+    while (substr($dir, -1) === "/") {
         $dir = substr($dir, 0, -1);
-    for ($i = 0; $i < 100; $i++) {
+    }
+    for ($i = 0; $i !== 100; $i++) {
         $path = $dir . "/hotcrptmp" . mt_rand(0, 9999999);
         if (mkdir($path, $mode)) {
             register_shutdown_function("rm_rf_tempdir", $path);
@@ -542,6 +544,9 @@ function whyNotText($whyNot, $text_only = false) {
 
 function actionBar($mode = null, $qreq = null) {
     global $Me, $Conf;
+    if ($Me->is_disabled()) {
+        return "";
+    }
     $forceShow = ($Me->is_admin_force() ? "&amp;forceShow=1" : "");
 
     $paperArg = "p=*";
@@ -549,18 +554,19 @@ function actionBar($mode = null, $qreq = null) {
     $listtype = "p";
 
     $goBase = "paper";
-    if ($mode == "assign")
+    if ($mode == "assign") {
         $goBase = "assign";
-    else if ($mode == "re")
+    } else if ($mode == "re") {
         $goBase = "review";
-    else if ($mode == "account") {
+    } else if ($mode == "account") {
         $listtype = "u";
         if ($Me->privChair) {
             $goBase = "profile";
             $xmode["search"] = 1;
         }
-    } else if ($qreq && ($qreq->m || $qreq->mode))
+    } else if ($qreq && ($qreq->m || $qreq->mode)) {
         $xmode["m"] = $qreq->m ? : $qreq->mode;
+    }
 
     // quicklinks
     $x = "";
@@ -570,22 +576,25 @@ function actionBar($mode = null, $qreq = null) {
             $x .= _one_quicklink($prev, $goBase, $xmode, $listtype, true) . " ";
         if ($list->description) {
             $url = $list->full_site_relative_url();
-            if ($url)
+            if ($url) {
                 $x .= '<a id="quicklink-list" class="x" href="' . htmlspecialchars(Navigation::siteurl() . $url) . "\">" . $list->description . "</a>";
-            else
+            } else {
                 $x .= '<span id="quicklink-list">' . $list->description . '</span>';
+            }
         }
         if (($next = $list->neighbor_id(1)) !== false)
             $x .= " " . _one_quicklink($next, $goBase, $xmode, $listtype, false);
         $x .= '</td>';
 
-        if ($Me->is_track_manager() && $listtype == "p")
+        if ($Me->is_track_manager() && $listtype == "p") {
             $x .= '<td id="tracker-connect" class="vbar"><a id="tracker-connect-btn" class="ui js-tracker tbtn need-tooltip" href="" aria-label="Start meeting tracker">&#9759;</a><td>';
+        }
     }
 
     // paper search form
-    if ($Me->isPC || $Me->is_reviewer() || $Me->is_author())
+    if ($Me->isPC || $Me->is_reviewer() || $Me->is_author()) {
         $x .= '<td class="vbar gopaper">' . goPaperForm($goBase, $xmode) . '</td>';
+    }
 
     return $x ? '<table class="vbar"><tr>' . $x . '</tr></table>' : '';
 }

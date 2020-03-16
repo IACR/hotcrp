@@ -1,6 +1,6 @@
 <?php
 // a_review.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Review_AssignmentParser extends AssignmentParser {
     private $rtype;
@@ -273,10 +273,9 @@ class Review_Assigner extends Assigner {
         if ($this->notify) {
             $reviewer = $aset->conf->user_by_id($this->cid);
             $prow = $aset->conf->fetch_paper($this->pid, $reviewer);
-            HotCRPMailer::send_to($reviewer, $this->notify, $prow, [
-                "requester_contact" => $aset->user,
-                "reason" => $this->item["_reason"],
-                "rrow" => $prow->fresh_review_of_user($this->cid)
+            HotCRPMailer::send_to($reviewer, $this->notify, [
+                "prow" => $prow, "rrow" => $prow->fresh_review_of_user($this->cid),
+                "requester_contact" => $aset->user, "reason" => $this->item["_reason"]
             ]);
         }
     }

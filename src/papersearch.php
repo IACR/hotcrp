@@ -1,6 +1,6 @@
 <?php
 // papersearch.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class SearchWord {
     public $qword;
@@ -23,6 +23,15 @@ class SearchWord {
             $text = "\"" . str_replace("\"", "\\\"", $text) . "\"";
         }
         return $text;
+    }
+    static function unquote($text) {
+        if ($text !== ""
+            && $text[0] === "\""
+            && strpos($text, "\"", 1) === strlen($text) - 1) {
+            return substr($text, 1, -1);
+        } else {
+            return $text;
+        }
     }
 }
 
@@ -1675,14 +1684,6 @@ class PaperSearch {
         $this->_allow_deleted = $x;
     }
 
-    function __get($name) {
-        error_log("PaperSearch::$name " . json_encode(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS)));
-        if ($name === "privChair")
-            return $this->user->privChair;
-        else
-            return null;
-    }
-
     function limit() {
         return $this->_limit_qe->limit;
     }
@@ -2395,10 +2396,11 @@ class PaperSearch {
         $old_overrides = $this->user->add_overrides(Contact::OVERRIDE_CONFLICT);
         foreach ($this->_matches as $pid) {
             $row = $rowset->get($pid);
-            if ($row->has_viewable_tag($dt->tag, $this->user))
+            if ($row->has_viewable_tag($dt->tag, $this->user)) {
                 $tag_order[] = [$row->paperId, $row->tag_value($dt->tag)];
-            else
+            } else {
                 $tag_order[] = [$row->paperId, TAG_INDEXBOUND];
+            }
         }
         $this->user->set_overrides($old_overrides);
         usort($tag_order, "TagInfo::id_index_compar");
@@ -3141,7 +3143,7 @@ class PaperSearch {
             }
             foreach ($this->conf->paper_column_factories() as $fxj) {
                 if (!$this->conf->xt_allowed($fxj, $this->user)
-                    || Conf::xt_disabled($fxj))
+                    || !Conf::xt_enabled($fxj))
                     continue;
                 if (isset($fxj->completion_callback)) {
                     Conf::xt_resolve_require($fxj);

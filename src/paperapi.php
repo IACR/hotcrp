@@ -1,6 +1,6 @@
 <?php
 // paperapi.php -- HotCRP paper-related API calls
-// Copyright (c) 2008-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class PaperApi {
     static function tagreport(Contact $user, $prow) {
@@ -29,7 +29,7 @@ class PaperApi {
                 if ($myvotes[$lbase] < $t->vote) {
                     $ret->tagreport[] = (object) ["tag" => "~{$t->tag}", "status" => 0, "message" => plural($t->vote - $myvotes[$lbase], "vote") . " remaining", "search" => "editsort:-#~{$t->tag}"];
                 } else if ($myvotes[$lbase] > $t->vote) {
-                    $ret->tagreport[] = (object) ["tag" => "~{$t->tag}", "status" => 1, "message" => plural($myvotes[$lbase] - $t->vote, "vote") . " over", "search" => "editsort:-#~{$t->tag}"];
+                    $ret->tagreport[] = (object) ["tag" => "~{$t->tag}", "status" => 1, "message" => plural($myvotes[$lbase] - $t->vote, "overvote"), "search" => "editsort:-#~{$t->tag}"];
                 }
             }
         }
@@ -102,10 +102,12 @@ class PaperApi {
 
     static function votereport_api(Contact $user, Qrequest $qreq, PaperInfo $prow) {
         $tagger = new Tagger($user);
-        if (!($tag = $tagger->check($qreq->tag, Tagger::NOVALUE)))
+        if (!($tag = $tagger->check($qreq->tag, Tagger::NOVALUE))) {
             json_exit(["ok" => false, "error" => $tagger->error_html]);
-        if (!$user->can_view_peruser_tags($prow, $tag))
+        }
+        if (!$user->can_view_peruser_tag($prow, $tag)) {
             json_exit(["ok" => false, "error" => "Permission error."]);
+        }
         $votemap = [];
         preg_match_all('/ (\d+)~' . preg_quote($tag) . '#(\S+)/i', $prow->all_tags_text(), $m);
         $is_approval = $user->conf->tags()->is_approval($tag);

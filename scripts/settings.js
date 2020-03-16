@@ -1,5 +1,5 @@
 // settings.js -- HotCRP JavaScript library for settings
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 function next_lexicographic_permutation(i, size) {
     var y = (i & -i) || 1, c = i + y, highbit = 1 << size;
@@ -35,7 +35,7 @@ handle_ui.on("js-settings-option-description", function () {
 });
 
 handle_ui.on("js-settings-option-presence", function (event) {
-    foldup.call(this, null, {n: 5, f: false});
+    foldup.call(this, null, {n: 10, f: false});
     foldup.call(this, null, {n: 9, f: false});
     if (document.activeElement === this)
         $(this).closest(".settings-opt").find(".settings-opt-presence").focus();
@@ -681,7 +681,7 @@ handle_ui.on("js-settings-resp-round-new", function () {
     var i, j;
     for (i = 1; jQuery("#response_" + i).length; ++i)
         /* do nothing */;
-    jQuery("#response_n").before("<div id=\"response_" + i + "\" class=\"settings-g\"></div>");
+    jQuery("#response_n").before("<div id=\"response_" + i + "\" class=\"form-g\"></div>");
     j = jQuery("#response_" + i);
     j.html(jQuery("#response_n").html().replace(/_n\"/g, "_" + i + "\""));
     j.find("textarea").css({height: "auto"}).autogrow().val(jQuery("#response_n textarea").val());

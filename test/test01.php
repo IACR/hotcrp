@@ -1,6 +1,6 @@
 <?php
 // test01.php -- HotCRP tests: permissions, assignments, search
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 global $ConfSitePATH;
 $ConfSitePATH = preg_replace(",/[^/]+/[^/]+$,", "", __FILE__);
@@ -755,11 +755,11 @@ xassert_assign($user_marina, "paper,user,pref\n4,chair@_.com,12\n");
 
 xassert_assign($user_marina, "paper,user,action\n4,chair@_.com,noconflict\n");
 
-$paper1->load_reviewer_preferences();
-xassert_eqq($paper1->reviewer_preference($user_marina), [12, null]);
+$paper1->load_preferences();
+xassert_eqq($paper1->preference($user_marina), [12, null]);
 xassert_assign($user_marina, "paper,pref\n1,13\n");
-$paper1->load_reviewer_preferences();
-xassert_eqq($paper1->reviewer_preference($user_marina), [13, null]);
+$paper1->load_preferences();
+xassert_eqq($paper1->preference($user_marina), [13, null]);
 
 // remove paper administrators
 xassert($user_marina->is_manager());
@@ -1148,16 +1148,28 @@ xassert_assign($user_mogul, "paper,action,reason\n16,revive,Sucky\n");
 $Conf->save_setting("tag_vote", 1, "vote#10 crap#3");
 $Conf->save_setting("tag_approval", 1, "app#0");
 xassert_assign($user_chair,
-    "paper,tag\n16,+huitema~vote#5 +crowcroft~vote#1 +crowcroft~crap#2 +estrin~app +estrin~crap#1");
+    "paper,tag\n16,+huitema~vote#5 +crowcroft~vote#1 +crowcroft~crap#2 +estrin~app +estrin~crap#1 +estrin~bar");
 $paper16 = fetch_paper(16, $user_chair);
 xassert_eqq($paper16->tag_value("{$user_estrin->contactId}~crap"), 1.0);
 xassert_eqq($paper16->tag_value("{$user_estrin->contactId}~app"), 0.0);
 xassert_eqq($paper16->tag_value("vote"), 6.0);
 xassert_eqq($paper16->tag_value("crap"), 3.0);
 xassert_eqq($paper16->tag_value("app"), 1.0);
+xassert_eqq($paper16->sorted_viewable_tags($user_chair), " app#1 crap#3 vote#6");
+xassert_eqq($paper16->sorted_searchable_tags($user_chair), " 2~vote#5 4~app#0 4~bar#0 4~crap#1 8~crap#2 8~vote#1 app#1 crap#3 vote#6");
+xassert(!$user_marina->allow_administer($paper16));
+xassert_eqq($paper16->sorted_viewable_tags($user_marina), " app#1 crap#3 vote#6");
+xassert_eqq($paper16->sorted_searchable_tags($user_marina), " 2~vote#5 4~app#0 4~crap#1 8~crap#2 8~vote#1 app#1 crap#3 vote#6");
+$Conf->save_setting("tag_approval", null);
+$paper16 = fetch_paper(16, $user_chair);
+xassert_eqq($paper16->sorted_viewable_tags($user_marina), " app#1 crap#3 vote#6");
+xassert_eqq($paper16->sorted_searchable_tags($user_marina), " 2~vote#5 4~crap#1 8~crap#2 8~vote#1 app#1 crap#3 vote#6");
+$Conf->save_setting("tag_approval", 1, "app#0");
 xassert_assign($user_chair, "paper,action\n16,withdraw\n");
-$paper16b = fetch_paper(16, $user_chair);
-xassert_eqq($paper16b->all_tags_text(), "");
+$paper16 = fetch_paper(16, $user_chair);
+xassert_eqq($paper16->all_tags_text(), " 4~bar#0");
+xassert_eqq($paper16->sorted_searchable_tags($user_marina), "");
+xassert_eqq($paper16->sorted_searchable_tags($user_estrin), " 4~bar#0");
 
 $Conf->check_invariants();
 
@@ -1193,10 +1205,10 @@ xassert_eqq(PaperSearch::canonical_query("foo HIGHLIGHT:pink bar", "", "", "tag"
             "#foo HIGHLIGHT:pink #bar");
 
 // assignment synonyms
-xassert_eqq($paper16->reviewer_preference($user_varghese), [0, null]);
+xassert_eqq($paper16->preference($user_varghese), [0, null]);
 xassert_assign($user_varghese, "ID,Title,Preference\n16,Potential Benefits of Delta Encoding and Data Compression for HTTP,1X\n");
-$paper16->load_reviewer_preferences();
-xassert_eqq($paper16->reviewer_preference($user_varghese), [1, 1]);
+$paper16->load_preferences();
+xassert_eqq($paper16->preference($user_varghese), [1, 1]);
 
 xassert_eq($paper16->leadContactId, 0);
 xassert_assign($user_chair, "paperID,lead\n16,varghese\n", true);
@@ -1228,7 +1240,6 @@ xassert_eqq($u->email, "sclinx@leland.stanford.edu");
 xassert_eqq($u->firstName, "Stephen");
 xassert_eqq($u->lastName, "Lon");
 xassert_eqq($u->affiliation, "Fart World");
-xassert(preg_match('/\A[-a-zA-Z0-9_=+@]+\z/', $u->plaintext_password()));
 
 xassert(!user("scliny@leland.stanford.edu"));
 $u = Contact::create($Conf, null, ["email" => "scliny@leland.stanford.edu", "affiliation" => "Fart World"]);
@@ -1238,7 +1249,6 @@ xassert_eqq($u->email, "scliny@leland.stanford.edu");
 xassert_eqq($u->firstName, "");
 xassert_eqq($u->lastName, "");
 xassert_eqq($u->affiliation, "Fart World");
-xassert(preg_match('/\A[-a-zA-Z0-9_=+@]+\z/', $u->plaintext_password()));
 
 xassert(!user("thalerd@eecs.umich.edu"));
 $u = Contact::create($Conf, null, ["email" => "thalerd@eecs.umich.edu"]);
@@ -1248,7 +1258,6 @@ xassert_eqq($u->email, "thalerd@eecs.umich.edu");
 xassert_eqq($u->firstName, "David");
 xassert_eqq($u->lastName, "Thaler");
 xassert_eqq($u->affiliation, "University of Michigan");
-xassert(preg_match('/\A[-a-zA-Z0-9_=+@]+\z/', $u->plaintext_password()));
 xassert(fetch_paper(27)->has_author($u));
 
 xassert(!user("cengiz@isi.edu"));
@@ -1259,13 +1268,12 @@ xassert_eqq($u->email, "cengiz@isi.edu");
 xassert_eqq($u->firstName, "cengiz!");
 xassert_eqq($u->lastName, "ALAETTINOGLU");
 xassert_eqq($u->affiliation, "USC ISI");
-xassert(preg_match('/\A[-a-zA-Z0-9_=+@]+\z/', $u->plaintext_password()));
 xassert(fetch_paper(27)->has_author($u));
 
 xassert(!user("anonymous10"));
 $u = Contact::create($Conf, null, ["email" => "anonymous10"], Contact::SAVE_ANY_EMAIL);
 xassert($u->contactId > 0);
-xassert_eqq($Conf->fetch_value("select password from ContactInfo where email='anonymous10'"), "*");
+xassert_eqq($Conf->fetch_value("select password from ContactInfo where email='anonymous10'"), " nologin");
 
 // contact tags
 xassert($user_chair->can_view_user_tags());

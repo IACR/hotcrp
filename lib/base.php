@@ -1,6 +1,6 @@
 <?php
 // base.php -- HotCRP base helper functions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 // type helpers
 
@@ -13,17 +13,20 @@ function is_number($x) {
 
 function str_starts_with($haystack, $needle) {
     $nl = strlen($needle);
-    return $nl <= strlen($haystack) && substr($haystack, 0, $nl) === $needle;
+    $hl = strlen($haystack);
+    return $nl === 0 || ($hl >= $nl && substr_compare($haystack, $needle, 0, $nl) === 0);
 }
 
 function str_ends_with($haystack, $needle) {
-    $p = strlen($haystack) - strlen($needle);
-    return $p >= 0 && substr($haystack, $p) === $needle;
+    $nl = strlen($needle);
+    $hl = strlen($haystack);
+    return $nl === 0 || ($hl >= $nl && substr_compare($haystack, $needle, -$nl) === 0);
 }
 
 function stri_ends_with($haystack, $needle) {
-    $p = strlen($haystack) - strlen($needle);
-    return $p >= 0 && strcasecmp(substr($haystack, $p), $needle) == 0;
+    $nl = strlen($needle);
+    $hl = strlen($haystack);
+    return $nl === 0 || ($hl >= $nl && substr_compare($haystack, $needle, -$nl, $nl, true) === 0);
 }
 
 function preg_matchpos($pattern, $subject) {
@@ -55,6 +58,10 @@ function space_join(/* $str_or_array, ... */) {
         } else if ($arg !== "" && $arg !== false && $arg !== null)
             $t .= ($t === "" ? "" : " ") . $arg;
     return $t;
+}
+
+function is_usascii($str) {
+    return !preg_match('/[\x80-\xFF]/', $str);
 }
 
 function is_valid_utf8($str) {
@@ -286,7 +293,7 @@ function uploaded_file_error($finfo) {
 
 function make_qreq() {
     $qreq = new Qrequest($_SERVER["REQUEST_METHOD"]);
-    $qreq->set_path(Navigation::path());
+    $qreq->set_page_path(Navigation::page(), Navigation::path());
     foreach ($_GET as $k => $v) {
         $qreq->set_req($k, $v);
     }

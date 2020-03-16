@@ -1,18 +1,39 @@
 <?php
 // src/groupedextensions.php -- HotCRP extensible groups
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class GroupedExtensions {
-    private $user;
-    private $_groups;
-    private $_all;
+    private $_jall = [];
+    private $_potential_members = [];
+    private $conf;
+    private $viewer;
+    public $root;
+    private $_raw = [];
+    private $_callables;
     private $_render_state;
     private $_render_stack;
-    private $_render_classes;
     private $_annexes = [];
     static private $next_placeholder;
 
     function _add_json($fj) {
+        if (is_array($fj)) {
+            $fja = $fj;
+            if (count($fja) < 3 || !is_string($fja[0])) {
+                return false;
+            }
+            $fj = (object) [
+                "name" => $fja[0], "position" => $fja[1],
+                "__subposition" => ++Conf::$next_xt_subposition
+            ];
+            if (strpos($fja[2], "::")) {
+                $fj->render_callback = $fja[2];
+            } else {
+                $fj->alias = $fja[2];
+            }
+            if (isset($fja[3]) && is_number($fja[3])) {
+                $fj->priority = $fja[3];
+            }
+        }
         if (!isset($fj->name)) {
             $fj->name = "__" . self::$next_placeholder . "__";
             ++self::$next_placeholder;
@@ -30,55 +51,54 @@ class GroupedExtensions {
             $x = substr($fj->name, $pos + 1);
             $fj->anchorid = preg_replace('/\A[^A-Za-z]+|[^A-Za-z0-9_:.]+/', "-", strtolower($x));
         }
-        $this->_all[$fj->name][] = $fj;
+        $this->_jall[$fj->name][] = $fj;
+        if ($fj->group === $fj->name) {
+            assert(strpos($fj->group, "/") === false);
+            $this->_potential_members[""][] = $fj->name;
+        } else {
+            $this->_potential_members[$fj->group][] = $fj->name;
+        }
         return true;
     }
-    function __construct(Contact $user, $args /* ... */) {
-        $conf = $user->conf;
-        $this->user = $user;
+
+    function __construct(Contact $viewer, $args /* ... */) {
+        $this->conf = $viewer->conf;
+        $this->viewer = $viewer;
         self::$next_placeholder = 1;
-        // read all arguments; produce _all: name => array
-        $this->_all = [];
         foreach (func_get_args() as $i => $arg) {
             if ($i > 0 && $arg)
                 expand_json_includes_callback($arg, [$this, "_add_json"]);
         }
-        // reduce _all to one entry per name, produce _groups
-        $sgs = $this->_all;
-        $this->_all = $this->_groups = [];
-        foreach ($sgs as $name => $xtl) {
-            if (($xt = $conf->xt_search_name($sgs, $name, $user, null, true))
-                && Conf::xt_enabled($xt)
-                && (!isset($xt->position) || $xt->position !== false)) {
-                $this->_all[$name] = $xt;
-                if ($xt->name === $xt->group && !isset($xt->alias)) {
-                    $this->_groups[$name] = $xt;
-                }
-            }
-        }
-        $this->reset_render();
+        $this->reset_context();
     }
-    function subgroup_compare($aj, $bj) {
-        if ($aj->group !== $bj->group) {
-            if (isset($this->_groups[$aj->group])) {
-                $aj = $this->_groups[$aj->group];
+    function reset_context() {
+        assert(empty($this->_render_stack));
+        $this->root = null;
+        $this->_raw = [];
+        $this->_callables = ["Conf" => $this->conf];
+        $this->_render_state = [null, null, "h3", null];
+    }
+    function viewer() {
+        return $this->viewer;
+    }
+
+    function get_raw($name) {
+        if (!array_key_exists($name, $this->_raw)) {
+            $old_context = $this->conf->xt_swap_context($this);
+            if (($xt = $this->conf->xt_search_name($this->_jall, $name, $this->viewer, null, true))
+                && Conf::xt_enabled($xt)) {
+                $this->_raw[$name] = $xt;
+            } else {
+                $this->_raw[$name] = null;
             }
-            if (isset($this->_groups[$bj->group])) {
-                $bj = $this->_groups[$bj->group];
-            }
+            $this->conf->xt_context = $old_context;
         }
-        $aisg = $aj->group === $aj->name;
-        $bisg = $bj->group === $bj->name;
-        if ($aisg !== $bisg) {
-            return $aisg ? -1 : 1;
-        } else {
-            return Conf::xt_position_compare($aj, $bj);
-        }
+        return $this->_raw[$name];
     }
     function get($name) {
-        $gj = get($this->_all, $name);
-        for ($nalias = 0; $nalias < 5 && $gj && isset($gj->alias); ++$nalias) {
-            $gj = get($this->_all, $gj->alias);
+        $gj = $this->get_raw($name);
+        for ($nalias = 0; $gj && isset($gj->alias) && $nalias < 5; ++$nalias) {
+            $gj = $this->get_raw($gj->alias);
         }
         return $gj;
     }
@@ -90,27 +110,25 @@ class GroupedExtensions {
             return false;
         }
     }
-    function members($name) {
-        if ((string) $name === "") {
-            return $this->groups();
-        }
+    function members($name, $require_key = false) {
         if (($gj = $this->get($name))) {
             $name = $gj->name;
         }
         $r = [];
         $alias = false;
-        foreach ($this->_all as $gj) {
-            if ($gj->group === $name && $gj->name !== $name) {
-                if (!isset($gj->alias)) {
-                    $r[] = $gj;
-                } else if (isset($gj->position)) {
-                    $r[] = $gj;
-                    $alias = true;
-                }
+        foreach (array_unique($this->_potential_members[$name] ?? []) as $subname) {
+            if (($gj = $this->get_raw($subname))
+                && $gj->group === ($name === "" ? $gj->name : $name)
+                && $gj->name !== $name
+                && (!$require_key || isset($gj->$require_key))
+                && (!isset($gj->alias) || isset($gj->position))
+                && (!isset($gj->position) || $gj->position !== false)) {
+                $r[] = $gj;
+                $alias = $alias || isset($gj->alias);
             }
         }
-        usort($r, [$this, "subgroup_compare"]);
-        if ($alias) {
+        usort($r, "Conf::xt_position_compare");
+        if ($alias && !empty($r)) {
             $rr = [];
             foreach ($r as $gj) {
                 $rr[] = isset($gj->alias) ? $this->get($gj->alias) : $gj;
@@ -120,77 +138,133 @@ class GroupedExtensions {
             return $r;
         }
     }
-    function all() {
-        uasort($this->_all, [$this, "subgroup_compare"]);
-        return $this->_all;
-    }
     function groups() {
-        uasort($this->_groups, "Conf::xt_position_compare");
-        return $this->_groups;
+        return $this->members("");
     }
 
-    private function call_callback($cb, $args) {
-        if ($cb[0] === "*") {
+    function allowed($allowed, $gj) {
+        if (isset($allowed)) {
+            $old_context = $this->conf->xt_swap_context($this);
+            $ok = $this->conf->xt_check($allowed, $gj, $this->viewer);
+            $this->conf->xt_context = $old_context;
+            return $ok;
+        } else {
+            return true;
+        }
+    }
+    function callable($name) {
+        if (!isset($this->_callables[$name])
+            && ($args = $this->_render_state[0]) !== null) {
+            $this->_callables[$name] = new $name(...$args);
+        }
+        return $this->_callables[$name] ?? null;
+    }
+    function set_callable($name, $callable) {
+        assert(!isset($this->_callables[$name]));
+        $this->_callables[$name] = $callable;
+    }
+    function call_callback($cb, $gj) {
+        Conf::xt_resolve_require($gj);
+        $args = $this->_render_state[0];
+        $args[] = $gj;
+        if (is_string($cb) && $cb[0] === "*") {
             $colons = strpos($cb, ":");
-            $klass = substr($cb, 1, $colons - 1);
-            if (!isset($this->_render_classes[$klass])) {
-                $this->_render_classes[$klass] = new $klass(...$args);
-            }
-            $cb = [$this->_render_classes[$klass], substr($cb, $colons + 2)];
+            $cb = [$this->callable(substr($cb, 1, $colons - 1)), substr($cb, $colons + 2)];
         }
         return call_user_func_array($cb, $args);
     }
 
-    function request($gj, Qrequest $qreq, $args) {
-        if (isset($gj->request_callback)) {
-            Conf::xt_resolve_require($gj);
-            if (!isset($gj->allow_request_if)
-                || $this->user->conf->xt_check($gj->allow_request_if, $gj, $this->user, $qreq))
-                $this->call_callback($gj->request_callback, $args);
+    function set_context($options) {
+        if (isset($options["root"]))  {
+            assert(is_string($options["root"]));
+            $this->root = $options["root"];
+        }
+        if (isset($options["args"])) {
+            assert(is_array($options["args"]));
+            $this->_render_state[0] = $options["args"];
+        }
+        if (isset($options["htag"])) {
+            assert(is_string($options["htag"]));
+            $this->_render_state[2] = $options["htag"];
+        }
+        if (isset($options["hclass"])) {
+            assert(is_string($options["hclass"]));
+            $this->_render_state[3] = $options["hclass"];
         }
     }
+    function args() {
+        return $this->_render_state[0];
+    }
+    function arg($i) {
+        return $this->_render_state[0][$i] ?? null;
+    }
 
-    function reset_render() {
-        assert(!isset($this->_render_state));
-        $this->_render_classes = ["Conf" => $this->user->conf];
-    }
-    function start_render($heading_number = 3, $heading_class = null) {
+    function start_render($options = null) {
         $this->_render_stack[] = $this->_render_state;
-        $this->_render_state = [null, $heading_number, $heading_class];
+        $this->_render_state = array_slice($this->_render_state, 0, 4);
+        if (!empty($options)) {
+            $this->set_context($options);
+        }
     }
-    function push_render_cleanup($name) {
-        assert(isset($this->_render_state));
-        $this->_render_state[] = $name;
+    function push_render_cleanup($cleaner) {
+        assert(!empty($this->_render_stack));
+        $this->_render_state[] = $cleaner;
     }
     function end_render() {
         assert(!empty($this->_render_stack));
-        for ($i = count($this->_render_state) - 1; $i > 2; --$i) {
-            if (($gj = $this->get($this->_render_state[$i])))
-                $this->render($gj, [$this]);
+        for ($i = count($this->_render_state) - 1; $i > 3; --$i) {
+            $cleaner = $this->_render_state[$i];
+            if (is_string($cleaner) && ($gj = $this->get($cleaner))) {
+                $this->render($gj);
+            } else if (is_callable($cleaner)) {
+                $this->call_callback($cleaner, null);
+            }
         }
         $this->_render_state = array_pop($this->_render_stack);
     }
-    function render($gj, $args) {
-        assert($this->_render_state !== null);
+    function render($gj) {
+        if (is_string($gj)) {
+            if (!($gj = $this->get($gj))) {
+                return null;
+            }
+        }
         if (isset($gj->title)
-            && $gj->title !== $this->_render_state[0]
+            && $gj->title !== $this->_render_state[1]
             && $gj->group !== $gj->name) {
-            echo '<h', $this->_render_state[1];
-            if ($this->_render_state[2]) {
-                echo ' class="', $this->_render_state[2], '"';
+            echo '<', $this->_render_state[2];
+            if ($this->_render_state[3]) {
+                echo ' class="', $this->_render_state[3], '"';
             }
             if (isset($gj->anchorid)) {
                 echo ' id="', htmlspecialchars($gj->anchorid), '"';
             }
-            echo '>', $gj->title, "</h", $this->_render_state[1], ">\n";
-            $this->_render_state[0] = $gj->title;
+            echo '>', $gj->title, '</', $this->_render_state[2], ">\n";
+            $this->_render_state[1] = $gj->title;
         }
         if (isset($gj->render_callback)) {
-            Conf::xt_resolve_require($gj);
-            return $this->call_callback($gj->render_callback, $args);
+            return $this->call_callback($gj->render_callback, $gj);
         } else if (isset($gj->render_html)) {
             echo $gj->render_html;
+            return null;
+        } else {
+            return null;
         }
+    }
+    function render_group($name, $options = null) {
+        $this->start_render($options);
+        $result = null;
+        if (!empty($options) && isset($options["top"]) && $options["top"]) {
+            if (($gj = $this->get($name))) {
+                $result = $this->render($gj);
+            }
+        }
+        foreach ($this->members($name) as $gj) {
+            if ($result !== false) {
+                $result = $this->render($gj);
+            }
+        }
+        $this->end_render();
+        return $result;
     }
 
     function has_annex($name) {

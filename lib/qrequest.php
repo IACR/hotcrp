@@ -1,6 +1,6 @@
 <?php
 // qrequest.php -- HotCRP helper class for request objects (no warnings)
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
     // NB see also count()
@@ -10,6 +10,7 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     private $____x = [];
     private $____post_ok = false;
     private $____post_empty = false;
+    private $____page = false;
     private $____path = false;
     function __construct($method, $data = null) {
         $this->____method = $method;
@@ -19,6 +20,10 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
             }
         }
     }
+    function set_page_path($page, $path) {
+        $this->____page = $page;
+        $this->____path = $path;
+    }
     function method() {
         return $this->____method;
     }
@@ -27,6 +32,22 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     }
     function is_post() {
         return $this->____method === "POST";
+    }
+    function page() {
+        return $this->____page;
+    }
+    function path() {
+        return $this->____path;
+    }
+    function path_component($n, $decoded = false) {
+        if ((string) $this->____path !== "") {
+            $p = explode("/", substr($this->____path, 1));
+            if ($n + 1 < count($p)
+                || ($n + 1 == count($p) && $p[$n] !== "")) {
+                return $decoded ? urldecode($p[$n]) : $p[$n];
+            }
+        }
+        return false;
     }
     function offsetExists($offset) {
         return property_exists($this, $offset);
@@ -99,7 +120,7 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
     }
     function count() {
-        return count(get_object_vars($this)) - 7;
+        return count(get_object_vars($this)) - 8;
     }
     function jsonSerialize() {
         return $this->as_array();
@@ -190,10 +211,25 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     function post_empty() {
         return $this->____post_empty;
     }
-    function path() {
-        return $this->____path;
-    }
-    function set_path($path) {
-        $this->____path = $path;
+
+    function xt_allow($e) {
+        if ($e === "post") {
+            return $this->method() === "POST" && $this->post_ok();
+        } else if ($e === "anypost") {
+            return $this->method() === "POST";
+        } else if ($e === "getpost") {
+            return ($this->method() === "POST" || $this->method() === "GET")
+                && $this->post_ok();
+        } else if (str_starts_with($e, "req.")) {
+            foreach (explode(" ", $e) as $w) {
+                if (str_starts_with($w, "req.")
+                    && property_exists($this, substr($w, 4))) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return null;
+        }
     }
 }

@@ -1,6 +1,6 @@
 <?php
 // index.php -- HotCRP home page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("lib/navigation.php");
 $nav = Navigation::get();
@@ -19,53 +19,47 @@ if ($nav->page === "u") {
     }
 }
 
+function gx_call_requests($conf, $user, $qreq, $group, $gx) {
+    $i = $conf->xt_add_allow_checker([$qreq, "xt_allow"]);
+    $reqgj = [];
+    $not_allowed = false;
+    foreach ($gx->members($group, "request_callback") as $gj) {
+        if ($gx->allowed($gj->allow_request_if ?? null, $gj)) {
+            $reqgj[] = $gj;
+        } else {
+            $not_allowed = true;
+        }
+    }
+    $conf->xt_remove_allow_checker($i);
+    if ($not_allowed && $qreq->method() === "POST" && !$qreq->post_ok()) {
+        $conf->msg($conf->_i("badpost"), 2);
+    }
+    foreach ($reqgj as $gj) {
+        if ($gx->call_callback($gj->request_callback, $gj) === false) {
+            break;
+        }
+    }
+}
+
 // handle special pages
 if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "stylesheets") {
     $_GET["file"] = $nav->page . $nav->path;
     include("cacheable.php");
-    exit;
 } else if ($nav->page === "api" || $nav->page === "cacheable") {
     include("{$nav->page}.php");
-    exit;
-}
-
-// ADDED FOR IACR
-if ($nav->page === "iacrcopyright") {
-    include("iacrcopyright/index.php");
-    exit;
-}
-
-require_once("src/initweb.php");
-$page_template = $Conf->page_template($nav->page);
-
-if ($page_template && isset($page_template->require)) {
-    include($page_template->require);
 } else {
-    $gx = new GroupedExtensions($Me, ["etc/pagepartials.json"], $Conf->opt("pagePartials"));
-
-    if ($page_template) {
-        $group = $page_template->group;
-    } else {
-        $group = $gx->canonical_group($nav->page);
-    }
-
-    if ($group && !str_starts_with($group, "__")) {
-        // handle signin/signout -- may change $Me
-        if ($group === "index" || $group === "home") {
-            $Me = Home_Partial::signin_requests($Me, $Qreq);
-            // that also got rid of disabled users
-        }
-        foreach ($gx->members($group) as $gj) {
-            if ($gx->request($gj, $Qreq, [$Me, $Qreq, $gx, $gj]) === false)
-                break;
-        }
-        $gx->start_render();
-        foreach ($gx->members($group) as $gj) {
-            if ($gx->render($gj, [$Me, $Qreq, $gx, $gj]) === false)
-                break;
-        }
-        $gx->end_render();
-    } else {
+    require_once("src/initweb.php");
+    $gx = $Conf->page_partials($Me);
+    $pagej = $gx->get($nav->page);
+    if (!$pagej || str_starts_with($pagej->name, "__")) {
         header("HTTP/1.0 404 Not Found");
+    } else if ($Me->is_disabled() && !($pagej->allow_disabled ?? false)) {
+        header("HTTP/1.0 403 Forbidden");
+    } else if (isset($pagej->render_php)) {
+        include($pagej->render_php);
+    } else {
+        $gx->set_context(["root" => $pagej->group, "args" => [$Me, $Qreq, $gx]]);
+        gx_call_requests($Conf, $Me, $Qreq, $pagej->group, $gx);
+        $gx->render_group($pagej->group, ["top" => true]);
     }
 }

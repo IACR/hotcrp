@@ -1,6 +1,6 @@
 <?php
 // manualassign.php -- HotCRP chair's paper assignment page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papersearch.php");
@@ -138,7 +138,7 @@ Assignment methods:
 
 
 if ($reviewer)
-    echo "<h2 style=\"margin-top:1em\">Assignments for ", $Me->name_html_for($reviewer), ($reviewer->affiliation ? " (" . htmlspecialchars($reviewer->affiliation) . ")" : ""), "</h2>\n";
+    echo "<h2 style=\"margin-top:1em\">Assignments for ", $Me->reviewer_html_for($reviewer), ($reviewer->affiliation ? " (" . htmlspecialchars($reviewer->affiliation) . ")" : ""), "</h2>\n";
 else
     echo "<h2 style=\"margin-top:1em\">Assignments by PC member</h2>\n";
 

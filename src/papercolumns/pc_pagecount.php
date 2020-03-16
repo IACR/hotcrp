@@ -1,6 +1,6 @@
 <?php
 // pc_pagecount.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class PageCount_PaperColumn extends PaperColumn {
     function __construct(Conf $conf, $cj) {
@@ -31,9 +31,6 @@ class PageCount_PaperColumn extends PaperColumn {
             return $ac === $bc ? 0 : ($ac === null ? -1 : 1);
         else
             return $ac == $bc ? 0 : ($ac < $bc ? -1 : 1);
-    }
-    function header(PaperList $pl, $is_text) {
-        return "Page count";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
         return !$pl->user->can_view_pdf($row);

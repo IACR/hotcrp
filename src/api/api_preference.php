@@ -1,6 +1,6 @@
 <?php
 // api_preference.php -- HotCRP preference API call
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Preference_API {
     static function pref_api(Contact $user, $qreq, $prow) {
@@ -26,10 +26,10 @@ class Preference_API {
             $aset->parse("paper,user,preference\n{$prow->paperId}," . CsvGenerator::quote($u->email) . "," . CsvGenerator::quote($qreq->pref, true));
             if (!$aset->execute())
                 return $aset->json_result();
-            $prow->load_reviewer_preferences();
+            $prow->load_preferences();
         }
 
-        $pref = $prow->reviewer_preference($u, true);
+        $pref = $prow->preference($u, true);
         $value = unparse_preference($pref[0], $pref[1]);
         $jr = new JsonResult(["ok" => true, "value" => $value === "0" ? "" : $value, "pref" => $pref[0]]);
         if ($pref[1] !== null)

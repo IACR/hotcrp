@@ -1,6 +1,6 @@
 <?php
 // autoassigner.php -- HotCRP helper classes for autoassignment
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class AutoassignerCosts implements JsonSerializable {
     public $assignment = 100;
@@ -186,7 +186,7 @@ class Autoassigner {
         while (($row = PaperInfo::fetch($result, null, $this->conf))) {
             $pid = $row->paperId;
             foreach ($this->pcm as $cid => $p) {
-                $px = $row->reviewer_preference($p, true);
+                $px = $row->preference($p, true);
                 $rt = $row->review_type($p);
                 $this->prefinfo[$cid][$pid] = $px;
                 if ($rt == $reviewtype)

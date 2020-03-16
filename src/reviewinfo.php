@@ -1,6 +1,6 @@
 <?php
 // reviewinfo.php -- HotCRP class representing reviews
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class ReviewInfo {
     public $conf;
@@ -260,10 +260,10 @@ class ReviewInfo {
         $data = $this->$field;
         $field_deaccent = $field . "_deaccent";
         if (!isset($this->$field_deaccent)) {
-            if (preg_match('/[\x80-\xFF]/', $data)) {
-                $this->$field_deaccent = UnicodeHelper::deaccent($data);
-            } else {
+            if (is_usascii($data)) {
                 $this->$field_deaccent = false;
+            } else {
+                $this->$field_deaccent = UnicodeHelper::deaccent($data);
             }
         }
         return Text::match_pregexes($reg, $data, $this->$field_deaccent);

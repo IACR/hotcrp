@@ -1,6 +1,6 @@
 <?php
 // papertable.php -- HotCRP helper class for producing paper tables
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class PaperTable {
     public $conf;
@@ -102,101 +102,6 @@ class PaperTable {
         if (isset($ms["re"]) && isset($this->qreq->reviewId)) {
             $this->mode = "re";
         }
-
-        // choose list
-        if (!$this->conf->has_active_list()) {
-            $this->conf->set_active_list($this->find_session_list($prow->paperId));
-        } else {
-            $list = $this->conf->active_list();
-            assert($list && ($list->set_current_id($prow->paperId) || $list->digest));
-        }
-
-        $this->matchPreg = [];
-        if (($list = $this->conf->active_list())
-            && $list->highlight
-            && preg_match('_\Ap/([^/]*)/([^/]*)(?:/|\z)_', $list->listid, $m)) {
-            $hlquery = is_string($list->highlight) ? $list->highlight : urldecode($m[2]);
-            $ps = new PaperSearch($user, ["t" => $m[1], "q" => $hlquery]);
-            foreach ($ps->field_highlighters() as $k => $v)
-                $this->matchPreg[$k] = $v;
-        }
-        if (empty($this->matchPreg)) {
-            $this->matchPreg = null;
-        }
-    }
-    private function find_session_list($pid) {
-        if (($list = SessionList::load_cookie("p"))
-            && ($list->set_current_id($pid) || $list->digest)) {
-            return $list;
-        }
-
-        // look up list description
-        $list = null;
-        $listdesc = $this->qreq->ls;
-        if ($listdesc) {
-            if (($opt = PaperSearch::unparse_listid($listdesc))) {
-                $list = $this->try_list($opt, $pid);
-            }
-            if (!$list && preg_match('{\A(all|s):(.*)\z}s', $listdesc, $m)) {
-                $list = $this->try_list(["t" => $m[1], "q" => $m[2]], $pid);
-            }
-            if (!$list && preg_match('{\A[a-z]+\z}', $listdesc)) {
-                $list = $this->try_list(["t" => $listdesc], $pid);
-            }
-            if (!$list) {
-                $list = $this->try_list(["q" => $listdesc], $pid);
-            }
-        }
-
-        // default lists
-        if (!$list) {
-            $list = $this->try_list([], $pid);
-        }
-        if (!$list && $this->user->privChair) {
-            $list = $this->try_list(["t" => "all"], $pid);
-        }
-
-        return $list;
-    }
-    private function try_list($opt, $pid) {
-        $srch = new PaperSearch($this->user, $opt);
-        $list = $srch->session_list_object();
-        return $list->set_current_id($pid);
-    }
-
-    private static function _combine_match_preg($m1, $m) {
-        if (is_object($m)) {
-            $m = get_object_vars($m);
-        }
-        if (!is_array($m)) {
-            $m = ["abstract" => $m, "title" => $m,
-                  "authorInformation" => $m, "collaborators" => $m];
-        }
-        foreach ($m as $k => $v) {
-            if (!isset($m1[$k]) || !$m1[$k])
-                $m1[$k] = $v;
-        }
-        return $m1;
-    }
-
-    function initialize($editable, $useRequest) {
-        $this->editable = $editable;
-        $this->useRequest = $useRequest;
-        $this->allFolded = $this->mode === "re" || $this->mode === "assign"
-            || ($this->mode !== "edit"
-                && (!empty($this->all_rrows) || !empty($this->crows)));
-    }
-
-    function set_edit_status(PaperStatus $status) {
-        $this->edit_status = $status;
-    }
-
-    function set_review_values(ReviewValues $rvalues = null) {
-        $this->review_values = $rvalues;
-    }
-
-    function can_view_reviews() {
-        return $this->can_view_reviews;
     }
 
     static function do_header($paperTable, $id, $action_mode, $qreq) {
@@ -217,6 +122,7 @@ class PaperTable {
             $title = $Conf->_c("paper_title", "New submission");
             $t .= '">' . $title;
         } else {
+            $paperTable->initialize_list();
             $title = "#" . $prow->paperId;
             $viewable_tags = $prow->viewable_tags($Me);
             if ($viewable_tags || $Me->can_view_tags($prow)) {
@@ -224,13 +130,13 @@ class PaperTable {
                 if (($color = $prow->conf->tags()->color_classes($viewable_tags)))
                     $t .= ' ' . $color;
             }
-            $t .= '"><a class="q" href="' . hoturl("paper", array("p" => $prow->paperId, "ls" => null))
+            $t .= '"><a class="q" href="' . $prow->hoturl()
                 . '"><span class="taghl"><span class="pnum">' . $title . '</span>'
                 . ' &nbsp; ';
 
             $highlight_text = null;
             $title_matches = 0;
-            if ($paperTable && $paperTable->matchPreg
+            if ($paperTable->matchPreg
                 && ($highlight = get($paperTable->matchPreg, "title"))) {
                 $highlight_text = Text::highlight($prow->title, $highlight, $title_matches);
             }
@@ -267,6 +173,110 @@ class PaperTable {
         if ($format) {
             echo Ht::unstash_script("render_text.on_page()");
         }
+    }
+
+    private function initialize_list() {
+        assert(!$this->conf->has_active_list());
+        $list = $this->find_session_list();
+        $this->conf->set_active_list($list);
+
+        $this->matchPreg = [];
+        if (($list = $this->conf->active_list())
+            && $list->highlight
+            && preg_match('_\Ap/([^/]*)/([^/]*)(?:/|\z)_', $list->listid, $m)) {
+            $hlquery = is_string($list->highlight) ? $list->highlight : urldecode($m[2]);
+            $ps = new PaperSearch($this->user, ["t" => $m[1], "q" => $hlquery]);
+            foreach ($ps->field_highlighters() as $k => $v) {
+                $this->matchPreg[$k] = $v;
+            }
+        }
+        if (empty($this->matchPreg)) {
+            $this->matchPreg = null;
+        }
+    }
+    private function find_session_list() {
+        $prow = $this->prow;
+        if ($prow->paperId <= 0) {
+            return null;
+        }
+
+        if (($list = SessionList::load_cookie("p"))
+            && ($list->set_current_id($prow->paperId) || $list->digest)) {
+            return $list;
+        }
+
+        // look up list description
+        $list = null;
+        $listdesc = $this->qreq->ls;
+        if ($listdesc) {
+            if (($opt = PaperSearch::unparse_listid($listdesc))) {
+                $list = $this->try_list($opt, $prow);
+            }
+            if (!$list && preg_match('{\A(all|s):(.*)\z}s', $listdesc, $m)) {
+                $list = $this->try_list(["t" => $m[1], "q" => $m[2]], $prow);
+            }
+            if (!$list && preg_match('{\A[a-z]+\z}', $listdesc)) {
+                $list = $this->try_list(["t" => $listdesc], $prow);
+            }
+            if (!$list) {
+                $list = $this->try_list(["q" => $listdesc], $prow);
+            }
+        }
+
+        // default lists
+        if (!$list) {
+            $list = $this->try_list([], $prow);
+        }
+        if (!$list && $this->user->privChair) {
+            $list = $this->try_list(["t" => "all"], $prow);
+        }
+
+        return $list;
+    }
+    private function try_list($opt, $prow) {
+        $srch = new PaperSearch($this->user, $opt);
+        if ($srch->test($prow)) {
+            $list = $srch->session_list_object();
+            $list->set_current_id($prow->paperId);
+            return $list;
+        } else {
+            return null;
+        }
+    }
+
+    private static function _combine_match_preg($m1, $m) {
+        if (is_object($m)) {
+            $m = get_object_vars($m);
+        }
+        if (!is_array($m)) {
+            $m = ["abstract" => $m, "title" => $m,
+                  "authorInformation" => $m, "collaborators" => $m];
+        }
+        foreach ($m as $k => $v) {
+            if (!isset($m1[$k]) || !$m1[$k])
+                $m1[$k] = $v;
+        }
+        return $m1;
+    }
+
+    function initialize($editable, $useRequest) {
+        $this->editable = $editable;
+        $this->useRequest = $useRequest;
+        $this->allFolded = $this->mode === "re" || $this->mode === "assign"
+            || ($this->mode !== "edit"
+                && (!empty($this->all_rrows) || !empty($this->crows)));
+    }
+
+    function set_edit_status(PaperStatus $status) {
+        $this->edit_status = $status;
+    }
+
+    function set_review_values(ReviewValues $rvalues = null) {
+        $this->review_values = $rvalues;
+    }
+
+    function can_view_reviews() {
+        return $this->can_view_reviews;
     }
 
     private function abstract_foldable($abstract) {
@@ -1066,7 +1076,7 @@ class PaperTable {
             }
             $x = $topics->unparse_name_html($tid);
             if ($this->user->isPC) {
-                $x = Ht::link($x, hoturl("search", ["q" => "topic:" . SearchWord::quote($tname)]), ["class" => "qq"]);
+                $x = Ht::link($x, $this->conf->hoturl("search", ["q" => "topic:" . SearchWord::quote($tname)]), ["class" => "qq"]);
             }
             $ts[] = $t . '">' . $x . '</li>';
             $lenclass = TopicSet::max_topici_lenclass($lenclass, $tname);
@@ -1410,7 +1420,7 @@ class PaperTable {
                 '"><div class="pspcard"><div class="ui pspcard-fold">',
                 '<div style="float:right;margin-left:1em;cursor:pointer"><span class="psfn">More ', expander(true), '</span></div>';
 
-            if (($viewable = $this->prow->viewable_tags($this->user))) {
+            if (($viewable = $this->prow->sorted_viewable_tags($this->user))) {
                 $tagger = new Tagger($this->user);
                 echo '<span class="psfn">Tags:</span> ',
                     $tagger->unparse_link($viewable);
@@ -1653,7 +1663,8 @@ class PaperTable {
     }
 
     private function _papstripLeadShepherd($type, $name, $showedit) {
-        $editable = ($type === "manager" ? $this->user->privChair : $this->admin);
+        $editable = $type === "manager" ? $this->user->privChair : $this->admin;
+        $extrev_shepherd = $type === "shepherd" && $this->conf->setting("extrev_shepherd");
 
         $field = $type . "ContactId";
         if ($this->prow->$field == 0 && !$editable) {
@@ -1664,18 +1675,26 @@ class PaperTable {
         $this->_papstripBegin($type, true, $editable ? ["class" => "ui-unfold js-unfold-pcselector"] : "");
         echo $this->papt($type, $name, array("type" => "ps", "fold" => $editable ? $type : false, "folded" => true)),
             '<div class="psv">';
-        if (($p = $this->conf->pc_member_by_id($value))) {
+        if (!$value) {
+            $n = "";
+        } else if (($p = $this->conf->cached_user_by_id($value))
+                   && ($p->isPC
+                       || ($extrev_shepherd && $this->prow->review_type($p) == REVIEW_EXTERNAL))) {
             $n = $this->user->reviewer_html_for($p);
         } else {
-            $n = $value ? "<strong>[removed from PC]</strong>" : "";
+            $n = "<strong>[removed from PC]</strong>";
         }
         echo '<div class="pscopen"><p class="fn odname js-psedit-result">',
             $n, '</p></div>';
 
         if ($editable) {
             $this->conf->stash_hotcrp_pc($this->user);
+            $selopt = "0 assignable";
+            if ($type === "shepherd" && $this->conf->setting("extrev_shepherd")) {
+                $selopt .= " extrev";
+            }
             echo '<form class="ui-submit uin fx"><div>',
-                Ht::select($type, [], 0, ["class" => "psc-select want-focus", "style" => "width:99%", "data-pcselector-options" => "0 assignable selected", "data-pcselector-selected" => $value]),
+                Ht::select($type, [], 0, ["class" => "psc-select want-focus w-99", "data-pcselector-options" => $selopt . " selected", "data-pcselector-selected" => $value]),
                 '</div></form>';
             Ht::stash_script('edit_paper_ui.prepare_psedit.call($$("fold' . $type . '"),{p:' . $this->prow->paperId . ',fn:"' . $type . '"})');
         }
@@ -1707,7 +1726,7 @@ class PaperTable {
 
         // Note that tags MUST NOT contain HTML special characters.
         $tagger = new Tagger($this->user);
-        $viewable = $this->prow->viewable_tags($this->user);
+        $viewable = $this->prow->sorted_viewable_tags($this->user);
 
         $tx = $tagger->unparse_link($viewable);
         $unfolded = $is_editable && ($this->has_problem_at("tags") || $this->qreq->atab === "tags");
@@ -1715,7 +1734,7 @@ class PaperTable {
         $this->_papstripBegin("tags", true);
 
         if ($is_editable) {
-            echo Ht::form(hoturl("paper", "p=" . $this->prow->paperId), ["data-pid" => $this->prow->paperId, "data-no-tag-report" => $unfolded ? 1 : null]);
+            echo Ht::form($this->prow->hoturl(), ["data-pid" => $this->prow->paperId, "data-no-tag-report" => $unfolded ? 1 : null]);
             Ht::stash_script('edit_paper_ui.prepare_pstags.call($$("foldtags"))');
         }
 
@@ -1732,7 +1751,7 @@ class PaperTable {
             $tms = 0;
             foreach ($treport->tagreport as $tr) {
                 $search = isset($tr->search) ? $tr->search : "#" . $tr->tag;
-                $tm = Ht::link("#" . $tr->tag, hoturl("search", ["q" => $search]), ["class" => "q"]) . ": " . $tr->message;
+                $tm = Ht::link("#" . $tr->tag, $this->conf->hoturl("search", ["q" => $search]), ["class" => "q"]) . ": " . $tr->message;
                 $tms = max($tms, $tr->status);
                 $tm0[] = $tm;
                 if ($tr->status > 0 && $this->prow->has_tag($tagger->expand($tr->tag))) {
@@ -1753,7 +1772,7 @@ class PaperTable {
                 echo Ht::msg($tm0, $tms);
             }
             echo "</div>";
-            $editable = $this->prow->editable_tags($this->user);
+            $editable = $this->prow->sorted_editable_tags($this->user);
             echo '<textarea cols="20" rows="4" name="tags" class="w-99 want-focus need-suggest tags">',
                 $tagger->unparse($editable),
                 '</textarea>',
@@ -1762,7 +1781,7 @@ class PaperTable {
                 '</div><div class="aabut">',
                 Ht::submit("cancel", "Cancel"),
                 "</div></div>",
-                '<span class="hint"><a href="', hoturl("help", "t=tags"), '">Learn more</a> <span class="barsep">·</span> <strong>Tip:</strong> Twiddle tags like “~tag” are visible only to you.</span>',
+                '<span class="hint"><a href="', $this->conf->hoturl("help", "t=tags"), '">Learn more</a> <span class="barsep">·</span> <strong>Tip:</strong> Twiddle tags like “~tag” are visible only to you.</span>',
                 "</div>";
         } else {
             echo '<div class="js-tag-result">', ($tx === "" ? "None" : $tx), '</div>';
@@ -1811,6 +1830,9 @@ class PaperTable {
     }
 
     private function papstrip_tag_float($tag, $kind, $type) {
+        if (!$this->user->can_view_tag($this->prow, $tag)) {
+            return "";
+        }
         $class = "is-nonempty-tags float-right";
         if (($totval = $this->prow->tag_value($tag)) === false) {
             $totval = "";
@@ -1818,12 +1840,13 @@ class PaperTable {
         }
         $reverse = $type !== "rank";
         $extradiv = "";
-        if ($type === "vote" || $type === "approval") {
+        if (($type === "vote" || $type === "approval")
+            && $this->user->can_view_peruser_tag($this->prow, $tag)) {
             $class .= " need-tooltip";
             $extradiv = ' data-tooltip-dir="h" data-tooltip-info="votereport" data-tag="' . htmlspecialchars($tag) . '"';
         }
         return '<div class="' . $class . '"' . $extradiv
-            . '><a class="qq" href="' . hoturl("search", "q=" . urlencode("show:#$tag sort:" . ($reverse ? "-" : "") . "#$tag")) . '">'
+            . '><a class="qq" href="' . $this->conf->hoturl("search", "q=" . urlencode("show:#$tag sort:" . ($reverse ? "-" : "") . "#$tag")) . '">'
             . '<span class="is-tag-index" data-tag-base="' . $tag . '">' . $totval . '</span> ' . $kind . '</a></div>';
     }
 
@@ -1858,11 +1881,11 @@ class PaperTable {
                          array("type" => "ps", "fold" => $id, "float" => $totmark)),
             '<div class="psv"><div class="fx">',
             Ht::entry("tagindex", $myval,
-                      array("size" => 4, "class" => "is-tag-index want-focus",
-                            "data-tag-base" => "~$tag")),
+                      ["size" => 4, "class" => "is-tag-index want-focus",
+                       "data-tag-base" => "~$tag", "inputmode" => "decimal"]),
             ' <span class="barsep">·</span> ',
-            '<a href="', hoturl("search", "q=" . urlencode("editsort:#~$tag")), '">Edit all</a>',
-            ' <div class="hint" style="margin-top:4px"><strong>Tip:</strong> <a href="', hoturl("search", "q=" . urlencode("editsort:#~$tag")), '">Search “editsort:#~', $tag, '”</a> to drag and drop your ranking, or <a href="', hoturl("offline"), '">use offline reviewing</a> to rank many papers at once.</div>',
+            '<a href="', $this->conf->hoturl("search", "q=" . urlencode("editsort:#~$tag")), '">Edit all</a>',
+            ' <div class="hint" style="margin-top:4px"><strong>Tip:</strong> <a href="', $this->conf->hoturl("search", "q=" . urlencode("editsort:#~$tag")), '">Search “editsort:#~', $tag, '”</a> to drag and drop your ranking, or <a href="', $this->conf->hoturl("offline"), '">use offline reviewing</a> to rank many papers at once.</div>',
             "</div></div></form></div>\n";
         Ht::stash_script('edit_paper_ui.prepare_pstagindex()');
     }
@@ -1882,10 +1905,10 @@ class PaperTable {
         echo $this->papt($id, $this->papstrip_tag_entry_title("{{}} votes", $tag, $myval),
                          array("type" => "ps", "fold" => $id, "float" => $totmark)),
             '<div class="psv"><div class="fx">',
-            Ht::entry("tagindex", $myval, ["size" => 4, "class" => "is-tag-index want-focus", "data-tag-base" => "~$tag"]),
+            Ht::entry("tagindex", $myval, ["size" => 4, "class" => "is-tag-index want-focus", "data-tag-base" => "~$tag", "inputmode" => "decimal"]),
             " &nbsp;of $allotment",
             ' <span class="barsep">·</span> ',
-            '<a href="', hoturl("search", "q=" . urlencode("editsort:-#~$tag")), '">Edit all</a>',
+            '<a href="', $this->conf->hoturl("search", "q=" . urlencode("editsort:-#~$tag")), '">Edit all</a>',
             "</div></div></form></div>\n";
         Ht::stash_script('edit_paper_ui.prepare_pstagindex()');
     }
@@ -1973,7 +1996,7 @@ class PaperTable {
             if ($sub_open <= 0 || $sub_open > $Now) {
                 $msg = "The site is not open for submissions." . $this->_deadline_override_message();
             } else {
-                $msg = 'The <a href="' . hoturl("deadlines") . '">deadline</a> for registering submissions has passed.' . $this->deadline_setting_is("sub_reg") . $this->_deadline_override_message();
+                $msg = 'The <a href="' . $this->conf->hoturl("deadlines") . '">deadline</a> for registering submissions has passed.' . $this->deadline_setting_is("sub_reg") . $this->_deadline_override_message();
             }
             if (!$this->admin) {
                 $this->quit = true;
@@ -2033,7 +2056,7 @@ class PaperTable {
                 if ($this->conf->deadlinesBetween("", "sub_sub", "sub_grace")) {
                     return Ht::msg('The site is not open for updates at the moment.' . $this->_deadline_override_message(), 1);
                 } else {
-                    return Ht::msg('The <a href="' . hoturl("deadlines") . '">submission deadline</a> has passed and the submission will not be reviewed.' . $this->deadline_setting_is("sub_sub") . $this->_deadline_override_message(), 1);
+                    return Ht::msg('The <a href="' . $this->conf->hoturl("deadlines") . '">submission deadline</a> has passed and the submission will not be reviewed.' . $this->deadline_setting_is("sub_sub") . $this->_deadline_override_message(), 1);
                 }
             } else {
                 return Ht::msg('The submission is not ready for review and can’t be changed further. It will not be reviewed.' . $this->_deadline_override_message(), 1);
@@ -2118,7 +2141,7 @@ class PaperTable {
             if ($revivable) {
                 return [Ht::submit("revive", "Revive submission", ["class" => "btn-primary"])];
             } else if ($this->admin) {
-                return [[Ht::button("Revive submission", ["class" => "ui js-override-deadlines", "data-override-text" => 'The <a href="' . hoturl("deadlines") . '">deadline</a> for reviving withdrawn submissions has passed. Are you sure you want to override it?', "data-override-submit" => "revive"]), "(admin only)"]];
+                return [[Ht::button("Revive submission", ["class" => "ui js-override-deadlines", "data-override-text" => 'The <a href="' . $this->conf->hoturl("deadlines") . '">deadline</a> for reviving withdrawn submissions has passed. Are you sure you want to override it?', "data-override-submit" => "revive"]), "(admin only)"]];
             } else {
                 return [];
             }
@@ -2149,7 +2172,7 @@ class PaperTable {
                        && $this->user->can_finalize_paper($this->prow)) {
                 $buttons[] = Ht::submit("update", $save_name, ["class" => "btn-savepaper"]);
             } else if ($this->prow->paperId) {
-                $buttons[] = Ht::submit("updatecontacts", "Save contacts", ["class" => "btn-primary"]);
+                $buttons[] = Ht::submit("updatecontacts", "Save contacts", ["class" => "btn-savepaper btn-primary", "data-contacts-only" => 1]);
             }
             if (!empty($buttons)) {
                 $buttons[] = Ht::submit("cancel", "Cancel");
@@ -2272,15 +2295,14 @@ class PaperTable {
             // home link
             $highlight = ($this->mode !== "assign" && $this->mode !== "edit"
                           && $this->mode !== "contact" && $this->mode !== "re");
-            $a = ""; // ($this->mode === "edit" || $this->mode === "re" ? "&amp;m=p" : "");
-            $t .= $this->_paptabTabLink("Main", hoturl("paper", "p=$pid$a"), "view48.png", $highlight);
+            $t .= $this->_paptabTabLink("Main", $this->prow->hoturl(), "view48.png", $highlight);
 
             if ($canEdit) {
-                $t .= $this->_paptabTabLink("Edit", hoturl("paper", "p=$pid&amp;m=edit"), "edit48.png", $this->mode === "edit");
+                $t .= $this->_paptabTabLink("Edit", $this->prow->hoturl(["m" => "edit"]), "edit48.png", $this->mode === "edit");
             }
 
             if ($canReview) {
-                $t .= $this->_paptabTabLink("Review", hoturl("review", "p=$pid&amp;m=re"), "review48.png", $this->mode === "re" && (!$this->editrrow || $this->editrrow->contactId == $this->user->contactId));
+                $t .= $this->_paptabTabLink("Review", $this->prow->reviewurl(["m" => "re"]), "review48.png", $this->mode === "re" && (!$this->editrrow || $this->editrrow->contactId == $this->user->contactId));
             }
 
             if ($canAssign) {
@@ -2424,7 +2446,7 @@ class PaperTable {
                    && $this->user->act_author_view($this->prow)
                    && !$this->user->contactId) {
             echo '<hr class="papcard-sep">',
-                "To edit this submission, <a href=\"", hoturl("index"), "\">sign in using your email and password</a>.";
+                "To edit this submission, <a href=\"", $this->conf->hoturl("index"), "\">sign in using your email and password</a>.";
         }
 
         Ht::stash_script("shortcut().add()");
@@ -2519,7 +2541,7 @@ class PaperTable {
         if (($nvisible > 1 || ($nvisible > 0 && !$myrr))
             && ($this->mode !== "p" || $editrrow)) {
             $this->allreviewslink = true;
-            $t[] = '<a href="' . hoturl("paper", "p=$prow->paperId") . '" class="xx revlink">'
+            $t[] = '<a href="' . $prow->hoturl() . '" class="xx revlink">'
                 . Ht::img("view48.png", "[All reviews]", $dlimgjs) . "&nbsp;<u>All reviews</u></a>";
         }
 
@@ -2527,7 +2549,7 @@ class PaperTable {
         if ($this->mode !== "edit"
             && $prow->has_author($this->user)
             && !$this->user->can_administer($prow)) {
-            $t[] = '<a href="' . hoturl("paper", "p=$prow->paperId&amp;m=edit") . '" class="xx revlink">'
+            $t[] = '<a href="' . $prow->hoturl(["m" => "edit"]) . '" class="xx revlink">'
                 . Ht::img("edit48.png", "[Edit]", $dlimgjs) . "&nbsp;<u><strong>Edit submission</strong></u></a>";
         }
 
@@ -2537,8 +2559,7 @@ class PaperTable {
             || !$prow) {
             /* no link */;
         } else if ($myrr && $editrrow != $myrr) {
-            $myrlink = $myrr->unparse_ordinal();
-            $a = '<a href="' . hoturl("review", "p=$prow->paperId&r=$myrlink") . '" class="xx revlink">';
+            $a = '<a href="' . $prow->reviewurl(["r" => $myrr->unparse_ordinal()]) . '" class="xx revlink">';
             if ($this->user->can_review($prow, $myrr)) {
                 $x = $a . Ht::img("review48.png", "[Edit review]", $dlimgjs) . "&nbsp;<u><b>Edit your review</b></u></a>";
             } else {
@@ -2546,7 +2567,7 @@ class PaperTable {
             }
             $t[] = $x;
         } else if (!$myrr && !$editrrow && $this->user->can_review($prow, null)) {
-            $t[] = '<a href="' . hoturl("review", "p=$prow->paperId&amp;m=re") . '" class="xx revlink">'
+            $t[] = '<a href="' . $prow->reviewurl(["m" => "re"]) . '" class="xx revlink">'
                 . Ht::img("review48.png", "[Write review]", $dlimgjs) . "&nbsp;<u><b>Write review</b></u></a>";
         }
 
@@ -2661,7 +2682,7 @@ class PaperTable {
         }
         if (!empty($viewable)) {
             echo '<div class="pcard notecard"><div class="notecard-body">',
-                '<a href="', hoturl("review", "p={$this->prow->paperId}&amp;m=r&amp;text=1"), '" class="xx">',
+                '<a href="', $this->prow->reviewurl(["m" => "r", "text" => 1]), '" class="xx">',
                 Ht::img("txt24.png", "[Text]", "dlimg"),
                 "&nbsp;<u>", ucfirst(join(" and ", $viewable)),
                 " in plain text</u></a></div></div>\n";
@@ -2828,7 +2849,7 @@ class PaperTable {
                 }
             }
             if ($this->conf->time_review_open()) {
-                $opt["editmessage"] = 'The <a href="' . hoturl("deadlines") . '">review deadline</a> has passed, so the review can no longer be changed.' . $override;
+                $opt["editmessage"] = 'The <a href="' . $this->conf->hoturl("deadlines") . '">review deadline</a> has passed, so the review can no longer be changed.' . $override;
             } else {
                 $opt["editmessage"] = "The site is not open for reviewing, so the review cannot be changed." . $override;
             }
@@ -2858,12 +2879,12 @@ class PaperTable {
         if (!isset($qreq->commentId) && isset($qreq->c)) {
             $qreq->commentId = $qreq->c;
         }
-        if (!isset($qreq->reviewId)
-            && preg_match(',\A/\d+[A-Z]+\z,i', Navigation::path())) {
-            $qreq->reviewId = substr(Navigation::path(), 1);
-        } else if (!isset($qreq->paperId)
-                   && ($pc = Navigation::path_component(0))) {
-            $qreq->paperId = $pc;
+        if (($pc = $qreq->path_component(0))) {
+            if (!isset($qreq->reviewId) && preg_match('/\A\d+[A-Z]+\z/i', $pc)) {
+                $qreq->reviewId = $pc;
+            } else if (!isset($qreq->paperId)) {
+                $qreq->paperId = $pc;
+            }
         }
         if (!isset($qreq->paperId)
             && isset($qreq->reviewId)
@@ -2939,8 +2960,8 @@ class PaperTable {
             if ($qreq->t) {
                 $q .= "&t=" . urlencode($qreq->t);
             }
-            if (Navigation::page() === "assign") {
-                $q .= "&linkto=" . Navigation::page();
+            if ($qreq->page() === "assign") {
+                $q .= "&linkto=" . $qreq->page();
             }
             go($user->conf->hoturl("search", $q));
         }

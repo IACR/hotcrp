@@ -1,6 +1,6 @@
 <?php
 // cleandocstore.php -- HotCRP maintenance script
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 $ConfSitePATH = preg_replace(',/batch/[^/]+,', '', __FILE__);
 require_once("$ConfSitePATH/lib/getopt.php");
@@ -76,7 +76,7 @@ foreach (array_merge([$confdp], get($arg, "_", [])) as $i => $dp) {
     }
     $ftrees[] = new DocumentFileTree($dp, $hash_matcher, count($ftrees));
     if (!$keep_temp) {
-        $ftrees[] = new DocumentFileTree(Filer::docstore_fixed_prefix($dp) . "tmp/%h%x", $hash_matcher, count($ftrees));
+        $ftrees[] = new DocumentFileTree(Filer::docstore_fixed_prefix($dp) . "tmp/%w", $hash_matcher, count($ftrees));
     } else {
         $ftrees[] = null;
     }
@@ -90,7 +90,9 @@ function fparts_random_match() {
             continue;
         }
         $n = 0;
-        for ($j = 0; $n < 5 && $j < ($n ? 10 : 10000); ++$j) {
+        for ($j = 0;
+             $n < 5 && $j < ($n ? 10 : 10000) && !$ftree->is_empty();
+             ++$j) {
             $fm = $ftree->random_match();
             if ($fm->is_complete()
                 && (($fm->treeid & 1) === 0

@@ -1,6 +1,6 @@
 <?php
 // search.php -- HotCRP paper search page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papersearch.php");
@@ -14,10 +14,24 @@ if (isset($Qreq->default) && $Qreq->defaultact) {
 assert(!$Qreq->ajax);
 
 
-// paper group
+// search canonicalization
+if ((isset($Qreq->qa) || isset($Qreq->qo) || isset($Qreq->qx)) && !isset($Qreq->q)) {
+    $Qreq->q = PaperSearch::canonical_query((string) $Qreq->qa, $Qreq->qo, $Qreq->qx, $Qreq->qt, $Conf);
+} else {
+    unset($Qreq->qa, $Qreq->qo, $Qreq->qx);
+}
 if (isset($Qreq->t) && !isset($Qreq->q)) {
     $Qreq->q = "";
 }
+if (isset($Qreq->q)) {
+    $Qreq->q = trim($Qreq->q);
+    if ($Qreq->q === "(All)") {
+        $Qreq->q = "";
+    }
+}
+
+
+// paper group
 $Qreq->t = PaperSearch::canonical_search_type(trim((string) $Qreq->t));
 $tOpt = PaperSearch::search_types($Me, $Qreq->t);
 if (empty($tOpt)) {
@@ -30,19 +44,6 @@ if ($Qreq->t !== "" && !isset($tOpt[$Qreq->t])) {
 }
 if (!isset($tOpt[$Qreq->t])) {
     $Qreq->t = key($tOpt);
-}
-
-// search canonicalization
-if (isset($Qreq->q)) {
-    $Qreq->q = trim($Qreq->q);
-}
-if (isset($Qreq->q) && $Qreq->q === "(All)") {
-    $Qreq->q = "";
-}
-if ((isset($Qreq->qa) || isset($Qreq->qo) || isset($Qreq->qx)) && !isset($Qreq->q)) {
-    $Qreq->q = PaperSearch::canonical_query((string) $Qreq->qa, $Qreq->qo, $Qreq->qx, $Qreq->qt, $Conf);
-} else {
-    unset($Qreq->qa, $Qreq->qo, $Qreq->qx);
 }
 
 
@@ -224,7 +225,9 @@ if ($pl_text) {
     $viewAllAuthors = ($Qreq->t == "a"
                        || ($Qreq->t == "acc" && $viewAcceptedAuthors)
                        || $Conf->subBlindNever());
-    if (!$Conf->subBlindAlways() || $viewAcceptedAuthors || $viewAllAuthors) {
+    if (!$Conf->subBlindAlways()
+        || (!$Me->privChair && $viewAcceptedAuthors)
+        || $viewAllAuthors) {
         $display_options->checkbox_item(1, "au", "Authors", ["id" => "showau"]);
         if ($Me->privChair && $viewAllAuthors)
             $display_options_extra .=
@@ -236,37 +239,44 @@ if ($pl_text) {
             Ht::checkbox("showau", 1, $pl->showing("anonau"),
                          ["id" => "showau_hidden", "class" => "uich js-plinfo hidden"]);
     }
-    if (!$Conf->subBlindAlways() || $viewAcceptedAuthors || $viewAllAuthors || $Me->privChair)
+    if (!$Conf->subBlindAlways() || $viewAcceptedAuthors || $viewAllAuthors || $Me->privChair) {
         $display_options->checkbox_item(1, "aufull", "Full author info", ["id" => "showaufull"]);
+    }
     if ($Me->privChair
         && !$Conf->subBlindNever()
-        && (!$Conf->subBlindAlways() || $viewAcceptedAuthors || $viewAllAuthors))
+        && (!$Conf->subBlindAlways() || $viewAllAuthors)) {
         $display_options->checkbox_item(1, "anonau", "Deblinded authors", ["disabled" => !$pl->has("anonau")]);
-    if ($pl->has("collab"))
+    }
+    if ($pl->has("collab")) {
         $display_options->checkbox_item(1, "collab", "Collaborators");
+    }
 
     // Abstract group
-    if ($Conf->has_topics())
+    if ($Conf->has_topics()) {
         $display_options->checkbox_item(1, "topics", "Topics");
+    }
 
     // Row numbers
-    if ($pl->has("sel"))
+    if ($pl->has("sel")) {
         $display_options->checkbox_item(1, "rownum", "Row numbers");
+    }
 
     // Options
-    foreach ($Conf->paper_opts->option_list() as $ox)
+    foreach ($Conf->paper_opts->option_list() as $ox) {
         if ($pl->has("opt$ox->id")
             && $ox->list_display(null)
             && $ox->example_searches())
             $display_options->checkbox_item(10, $ox->search_keyword(), $ox->name);
+    }
 
     // Reviewers group
     if ($Me->privChair) {
         $display_options->checkbox_item(20, "pcconflicts", "PC conflicts");
         $display_options->checkbox_item(20, "allpref", "Review preferences");
     }
-    if ($Me->can_view_some_review_identity())
+    if ($Me->can_view_some_review_identity()) {
         $display_options->checkbox_item(20, "reviewers", "Reviewers");
+    }
 
     // Tags group
     if ($Me->isPC && $pl->has("tags")) {
@@ -279,10 +289,12 @@ if ($pl_text) {
         }
     }
 
-    if ($Me->isPC && $pl->has("lead"))
+    if ($Me->isPC && $pl->has("lead")) {
         $display_options->checkbox_item(20, "lead", "Discussion leads");
-    if ($Me->isPC && $pl->has("shepherd"))
+    }
+    if ($Me->isPC && $pl->has("shepherd")) {
         $display_options->checkbox_item(20, "shepherd", "Shepherds");
+    }
 
     // Scores group
     foreach ($Conf->review_form()->user_visible_fields($Me) as $f) {
@@ -301,10 +313,12 @@ if ($pl_text) {
 
     // Formulas group
     $named_formulas = $Conf->viewable_named_formulas($Me, $Qreq->t == "a");
-    foreach ($named_formulas as $formula)
+    foreach ($named_formulas as $formula) {
         $display_options->checkbox_item(40, "formula:" . $formula->abbreviation(), htmlspecialchars($formula->name));
-    if ($named_formulas)
+    }
+    if ($named_formulas) {
         $display_options->set_header(40, "<strong>Formulas:</strong>");
+    }
     if ($Me->isPC && $Qreq->t != "a") {
         $display_options->item(40, '<div class="mt-2"><a class="ui js-edit-formulas" href="">Edit formulas</a></div>');
     }
@@ -514,7 +528,7 @@ if ($pl_text) {
 
     if ($pl->has("sel")) {
         echo Ht::form($Conf->selfurl($Qreq, ["post" => post_value(), "forceShow" => null]), ["id" => "sel", "class" => "ui-submit js-paperlist-submit"]),
-            Ht::hidden("defaultact", "", array("id" => "defaultact")),
+            Ht::hidden("defaultact", "", ["id" => "defaultact"]),
             Ht::hidden("forceShow", (string) $Qreq->forceShow, ["id" => "forceShow"]),
             Ht::hidden_default_submit("default", 1);
     }

@@ -1,6 +1,6 @@
 <?php
 // src/help/h_chairsguide.php -- HotCRP help functions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class ChairsGuide_HelpTopic {
     static function render_presubmission($hth, $gj) {
@@ -159,7 +159,7 @@ form also can include:</p>
         }
     }
 
-    static function render_chair_conflicts($hth, $gj) {
+    static function render_chair_conflicts($hth) {
         echo $hth->subhead("Chair conflicts");
         echo "<p>Chairs and system administrators can access any information stored in the
 conference system, including reviewer identities for conflicted papers.

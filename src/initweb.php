@@ -1,6 +1,6 @@
 <?php
 // initweb.php -- HotCRP initialization for web scripts
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("init.php");
 global $Conf, $Me, $Qreq;
@@ -81,21 +81,13 @@ function initialize_user() {
     $sn = session_name();
 
     // check CSRF token, using old value of session ID
-    if ($Qreq->post && $sn) {
-        if (isset($_COOKIE[$sn])) {
-            $sid = $_COOKIE[$sn];
-            $l = strlen($Qreq->post);
-            if ($l >= 8 && $Qreq->post === substr($sid, strlen($sid) > 16 ? 8 : 0, $l)) {
-                $Qreq->approve_post();
-            } else if ($_SERVER["REQUEST_METHOD"] === "POST") {
-                error_log("{$Conf->dbname}: bad post={$Qreq->post}, cookie={$sid}, url=" . $_SERVER["REQUEST_URI"]);
-            }
-        } else if ($Qreq->post === "<empty-session>"
-                   || $Qreq->post === ".empty") {
-            if ($_SERVER["REQUEST_METHOD"] === "POST") {
-                error_log("{$Conf->dbname}: empty post, url=" . $_SERVER["REQUEST_URI"]);
-            }
+    if ($Qreq->post && $sn && isset($_COOKIE[$sn])) {
+        $sid = $_COOKIE[$sn];
+        $l = strlen($Qreq->post);
+        if ($l >= 8 && $Qreq->post === substr($sid, strlen($sid) > 16 ? 8 : 0, $l)) {
             $Qreq->approve_post();
+        } else if ($_SERVER["REQUEST_METHOD"] === "POST") {
+            error_log("{$Conf->dbname}: bad post={$Qreq->post}, cookie={$sid}, url=" . $_SERVER["REQUEST_URI"]);
         }
     }
     ensure_session(ENSURE_SESSION_ALLOW_EMPTY);
@@ -147,11 +139,17 @@ function initialize_user() {
     }
     $Me = $Me->activate($Qreq, true);
 
+    // author view capability documents should not be indexed
+    if (!$Me->email
+        && $Me->has_author_view_capability()
+        && !$Conf->opt("allowIndexPapers")) {
+        header("X-Robots-Tag: noindex, noarchive");
+    }
+
     // redirect if disabled
     if ($Me->is_disabled()) {
-        if ($nav->page === "api") {
-            json_exit(["ok" => false, "error" => "Your account is disabled."]);
-        } else if (!in_array($nav->page, ["index", "resetpassword", "forgotpassword"])) {
+        $gj = $Conf->page_partials($Me)->get($nav->page);
+        if (!$gj || !get($gj, "allow_disabled")) {
             Navigation::redirect_site($Conf->hoturl_site_relative_raw("index"));
         }
     }
@@ -169,9 +167,10 @@ function initialize_user() {
         if ($lb[0] == $Conf->dsn
             && $lb[2] !== "index"
             && $lb[2] == Navigation::page()) {
-            foreach ($lb[3] as $k => $v)
+            foreach ($lb[3] as $k => $v) {
                 if (!isset($Qreq[$k]))
                     $Qreq[$k] = $v;
+            }
             $Qreq->set_annex("after_login", true);
         }
         unset($_SESSION["login_bounce"]);

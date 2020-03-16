@@ -1,6 +1,6 @@
 <?php
 // countmatcher.php -- HotCRP helper class for textual comparators
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class CountMatcher {
     private $_countexpr;
@@ -70,9 +70,6 @@ class CountMatcher {
             $cm = new CountMatcher($compar_y);
             return $cm->filter($x);
         }
-    }
-    function test_explicit_zero() {
-        return $this->value === 0.0 && ($this->allowed & 2);
     }
     function compar() {
         assert(!!$this->allowed);

@@ -1,6 +1,6 @@
 <?php
 // paper.php -- HotCRP paper view and edit page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 require_once("src/papertable.php");
@@ -13,21 +13,23 @@ foreach (["emailNote", "reason"] as $x) {
 }
 if (isset($Qreq->p)
     && ctype_digit($Qreq->p)
-    && !Navigation::path()
+    && !$Qreq->path()
     && !$Qreq->post_ok()) {
     $Conf->self_redirect($Qreq);
 }
 if (!isset($Qreq->p)
     && !isset($Qreq->paperId)
-    && ($x = Navigation::path_component(0)) !== false) {
+    && ($x = $Qreq->path_component(0)) !== false) {
     if (preg_match(',\A(?:new|\d+)\z,i', $x)) {
         $Qreq->p = $x;
-        if (!isset($Qreq->m) && ($x = Navigation::path_component(1)))
+        if (!isset($Qreq->m) && ($x = $Qreq->path_component(1))) {
             $Qreq->m = $x;
+        }
         if ($Qreq->m === "api"
             && !isset($Qreq->fn)
-            && ($x = Navigation::path_component(2)))
+            && ($x = $Qreq->path_component(2))) {
             $Qreq->fn = $x;
+        }
     }
 }
 
@@ -119,7 +121,7 @@ if (isset($Qreq->withdraw) && $prow && $Qreq->post_ok()) {
         if ($prow->reviews_by_id()) {
             $preps = [];
             $prow->notify_reviews(function ($prow, $minic) use ($reason, &$preps) {
-                if (($p = HotCRPMailer::prepare_to($minic, "@withdrawreviewer", $prow, ["reason" => $reason]))) {
+                if (($p = HotCRPMailer::prepare_to($minic, "@withdrawreviewer", ["prow" => $prow, "reason" => $reason]))) {
                     if (!$minic->can_view_review_identity($prow, null))
                         $p->unique_preparation = true;
                     $preps[] = $p;
@@ -151,8 +153,9 @@ if (isset($Qreq->revive) && $prow && $Qreq->post_ok()) {
 // send watch messages
 function final_submit_watch_callback($prow, $minic) {
     if ($minic->can_view_paper($prow)
-        && $minic->allow_administer($prow))
-        HotCRPMailer::send_to($minic, "@finalsubmitnotify", $prow);
+        && $minic->allow_administer($prow)) {
+        HotCRPMailer::send_to($minic, "@finalsubmitnotify", ["prow" => $prow]);
+    }
 }
 
 function update_paper(Qrequest $qreq, $action) {

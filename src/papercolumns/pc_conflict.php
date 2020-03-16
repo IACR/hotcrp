@@ -1,6 +1,6 @@
 <?php
 // pc_conflict.php -- HotCRP conflict list column
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Conflict_PaperColumn extends PaperColumn {
     private $contact;
@@ -11,11 +11,13 @@ class Conflict_PaperColumn extends PaperColumn {
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         $this->override = PaperColumn::OVERRIDE_IFEMPTY;
-        if (($this->show_user = isset($cj->user)))
+        if (($this->show_user = isset($cj->user))) {
             $this->contact = $conf->pc_member_by_email($cj->user);
-        $this->show_description = !!get($cj, "show_description");
-        if (get($cj, "edit"))
+        }
+        $this->show_description = !!($cj->show_description ?? false);
+        if ($cj->edit ?? false) {
             $this->mark_editable();
+        }
         $this->editable = !!get($cj, "edit");
     }
     function mark_editable() {
@@ -32,28 +34,32 @@ class Conflict_PaperColumn extends PaperColumn {
             $ct = $row->conflict_type($this->contact);
             if ($this->show_description
                 && $ct > 1
-                && !$pl->user->can_view_authors($row))
+                && !$pl->user->can_view_authors($row)) {
                 $ct = 1;
+            }
             return $ct;
-        } else
+        } else {
             return 0;
+        }
     }
     function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
         $act = $this->conflict_type($sorter->pl, $a);
         $bct = $this->conflict_type($sorter->pl, $b);
-        if ($this->show_description)
+        if ($this->show_description) {
             return $bct - $act;
-        else
+        } else {
             return ($bct ? 1 : 0) - ($act ? 1 : 0);
+        }
     }
     function header(PaperList $pl, $is_text) {
         if ((!$this->show_user && !$this->not_me && !$this->editable)
-            || $pl->report_id() === "conflictassign")
+            || $pl->report_id() === "conflictassign") {
             return "Conflict";
-        else if ($is_text)
-            return $pl->user->name_text_for($this->contact) . " conflict";
-        else
-            return $pl->user->name_html_for($this->contact) . "<br>conflict";
+        } else if ($is_text) {
+            return $pl->user->reviewer_text_for($this->contact) . " conflict";
+        } else {
+            return $pl->user->reviewer_html_for($this->contact) . "<br>conflict";
+        }
     }
     protected function checked(PaperList $pl, PaperInfo $row) {
         return $pl->is_selected($row->paperId, $row->conflict_type($this->contact) > 0);
@@ -63,43 +69,50 @@ class Conflict_PaperColumn extends PaperColumn {
     }
     function content(PaperList $pl, PaperInfo $row) {
         if ($this->editable
-            && ($t = $this->edit_content($pl, $row)))
+            && ($t = $this->edit_content($pl, $row))) {
             return $t;
+        }
         $ct = $this->conflict_type($pl, $row);
-        if (!$ct)
+        if (!$ct) {
             return "";
-        else if (!$this->show_description || $ct == 1)
+        } else if (!$this->show_description || $ct == 1) {
             return review_type_icon(-1);
-        else
+        } else {
             return $pl->conf->conflict_types()->unparse_html(min($ct, CONFLICT_AUTHOR));
+        }
     }
     function edit_content(PaperList $pl, PaperInfo $row) {
-        if (!$pl->user->allow_administer($row))
+        if (!$pl->user->allow_administer($row)) {
             return false;
+        }
         $ct = $row->conflict_type($this->contact);
-        if ($ct >= CONFLICT_AUTHOR)
+        if ($ct >= CONFLICT_AUTHOR) {
             return "Author";
+        }
         $t = '<input type="checkbox" class="uic uikd uich js-assign-review js-range-click" '
             . 'data-range-type="assrevu' . $this->contact->contactId
             . '" name="assrev' . $row->paperId . 'u' . $this->contact->contactId
-            . '" value="-1"' . ($ct ? " checked" : "");
-        if ($this->show_user)
+            . '" value="-1" autocomplete="off"' . ($ct ? " checked" : "");
+        if ($this->show_user) {
             $t .= ' title="' . $pl->user->name_text_for($this->contact) . ' conflict"';
+        }
         return $t . '>';
     }
     function text(PaperList $pl, PaperInfo $row) {
         $ct = $this->conflict_type($pl, $row);
-        if (!$ct)
+        if (!$ct) {
             return "N";
-        else if (!$this->show_description || $ct == 1)
+        } else if (!$this->show_description || $ct == 1) {
             return "Y";
-        else
+        } else {
             return $pl->conf->conflict_types()->unparse_text(min($ct, CONFLICT_AUTHOR));
+        }
     }
 
     static function expand($name, $user, $xfj, $m) {
-        if (!($fj = (array) $user->conf->basic_paper_column($m[1], $user)))
+        if (!($fj = (array) $user->conf->basic_paper_column($m[1], $user))) {
             return null;
+        }
         $rs = [];
         $cs = new ContactSearch(ContactSearch::F_PC | ContactSearch::F_TAG | ContactSearch::F_USER, $m[2], $user);
         foreach ($cs->ids as $cid) {
@@ -109,8 +122,9 @@ class Conflict_PaperColumn extends PaperColumn {
                 $rs[] = (object) $fj;
             }
         }
-        if (empty($rs))
+        if (empty($rs)) {
             $user->conf->xt_factory_error("No PC member matches “" . htmlspecialchars($m[2]) . "”.");
+        }
         return $rs;
     }
 }

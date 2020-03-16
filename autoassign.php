@@ -1,6 +1,6 @@
 <?php
 // autoassign.php -- HotCRP automatic paper assignment page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 if (!$Me->is_manager())
@@ -605,8 +605,9 @@ echo_radio_row("pctyp", "sel", "Use selected PC members:", ["open" => true]);
 echo " &nbsp; (select ";
 $pctyp_sel = array(array("all", "all"), array("none", "none"));
 $tagsjson = array();
-foreach ($Conf->pc_members() as $pc)
-    $tagsjson[$pc->contactId] = " " . trim(strtolower($pc->viewable_tags($Me))) . " ";
+foreach ($Conf->pc_members() as $pc) {
+    $tagsjson[$pc->contactId] = strtolower($pc->viewable_tags($Me));
+}
 Ht::stash_script("var hotcrp_pc_tags=" . json_encode($tagsjson) . ";");
 foreach ($Conf->viewable_user_tags($Me) as $pctag) {
     if ($pctag !== "pc")

@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_topics.php -- HotCRP settings > submission form page
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Topics_SettingRenderer {
     static function render(SettingValues $sv) {
@@ -15,8 +15,8 @@ class Topics_SettingRenderer {
         }
         Dbl::free($result);
 
-        echo "<h3 class=\"settings g\" id=\"topics\">Topics</h3>\n";
-        echo "<p class=\"settingtext\">Authors select the topics that apply to their submissions. PC members can indicate topics they’re interested in or search using the “topic:” keyword. Use a colon to create topic groups, as in “Systems: Correctness” and “Systems: Performance”.";
+        echo "<h3 class=\"form-h\" id=\"topics\">Topics</h3>\n";
+        echo "<p>Authors select the topics that apply to their submissions. PC members can indicate topics they’re interested in or search using the “topic:” keyword. Use a colon to create topic groups, as in “Systems: Correctness” and “Systems: Performance”.";
         if ($sv->conf->has_topics())
             echo " To delete an existing topic, remove its name.";
         echo "</p>\n", Ht::hidden("has_topics", 1);

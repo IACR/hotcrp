@@ -1,9 +1,9 @@
 <?php
 // listactions/la_getjsonrqc.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class GetJsonRQC_ListAction extends ListAction {
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->is_manager();
     }
     function run(Contact $user, $qreq, $ssel) {

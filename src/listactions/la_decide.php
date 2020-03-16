@@ -1,10 +1,10 @@
 <?php
 // listactions/la_decide.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Decide_ListAction extends ListAction {
-    function allow(Contact $user) {
-        return $user->can_set_some_decision() && Navigation::page() !== "reviewprefs";
+    function allow(Contact $user, Qrequest $qreq) {
+        return $user->can_set_some_decision() && $qreq->page() !== "reviewprefs";
     }
     static function render(PaperList $pl) {
         $opts = ["" => "Choose decision..."] + $pl->conf->decision_map();

@@ -1,6 +1,6 @@
 <?php
 // ht.php -- HotCRP HTML helper functions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Ht {
     public static $img_base = "";
@@ -27,8 +27,9 @@ class Ht {
                                        "multiple" => self::ATTR_BOOL,
                                        "novalidate" => self::ATTR_BOOL,
                                        "optionstyles" => self::ATTR_SKIP,
-                                       "spellcheck" => self::ATTR_BOOLTEXT,
                                        "readonly" => self::ATTR_BOOL,
+                                       "required" => self::ATTR_BOOL,
+                                       "spellcheck" => self::ATTR_BOOLTEXT,
                                        "type" => self::ATTR_SKIP);
 
     static function extra($js) {
@@ -212,17 +213,6 @@ class Ht {
         }
         if ($js["id"]) {
             self::$_lastcontrolid = $js["id"];
-        }
-        if (isset($js["data-default-checked"]) || isset($js["data-default-value"])) {
-            $dc = get($js, "data-default-checked");
-            if ($dc === null) {
-                $dc = get($js, "data-default-value");
-            }
-            $dc = $dc ? "1" : "";
-            if (!!$checked === !!$dc) {
-                $dc = null;
-            }
-            $js["data-default-checked"] = $dc;
         }
         $t = '<input type="checkbox"'; /* NB see Ht::radio */
         if ($name) {
@@ -535,12 +525,13 @@ class Ht {
     static function problem_status_at($field) {
         return self::$_msgset ? self::$_msgset->problem_status_at($field) : 0;
     }
+    static function messages_at($field, $full = false) {
+        return self::$_msgset ? self::$_msgset->messages_at($field, $full) : [];
+    }
     static function render_messages_at($field) {
         $t = "";
-        if (self::$_msgset) {
-            foreach (self::$_msgset->messages_at($field, true) as $mx) {
-                $t .= '<p class="' . MessageSet::status_class($mx[2], "f-h", "is-") . '">' . $mx[1] . '</p>';
-            }
+        foreach (self::messages_at($field, true) as $mx) {
+            $t .= '<p class="' . MessageSet::status_class($mx[2], "f-h", "is-") . '">' . $mx[1] . '</p>';
         }
         return $t;
     }

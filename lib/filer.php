@@ -1,6 +1,6 @@
 <?php
 // filer.php -- generic document helper class
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class HashAnalysis {
     private $prefix;
@@ -109,23 +109,27 @@ class Filer {
         if (($dar = $Conf->opt("docstoreAccelRedirect"))
             && ($ds = $Conf->opt("docstore"))
             && !$no_accel) {
-            if (!str_ends_with($ds, "/"))
+            if (!str_ends_with($ds, "/")) {
                 $ds .= "/";
+            }
             if (str_starts_with($filename, $ds)
                 && ($tail = substr($filename, strlen($ds)))
-                && preg_match(',\A[^/]+,', $tail)) {
-                if (!str_ends_with($dar, "/"))
+                && preg_match('/\A[^\/]+/', $tail)) {
+                if (!str_ends_with($dar, "/")) {
                     $dar .= "/";
+                }
                 header("X-Accel-Redirect: $dar$tail");
                 return;
             }
         }
         // write length header, flush output buffers
-        if (!$zlib_output_compression)
+        if (!$zlib_output_compression) {
             header("Content-Length: " . filesize($filename));
+        }
         flush();
-        while (@ob_end_flush())
-            /* do nothing */;
+        while (@ob_end_flush()) {
+            // do nothing
+        }
         // read file directly to output
         readfile($filename);
     }
@@ -265,7 +269,7 @@ class Filer {
         return $prefix;
     }
 
-    static function prepare_docstore($parent, $path) {
+    static private function prepare_docstore($parent, $path) {
         if (!self::_make_fpath_parents($parent, $path))
             return false;
         // Ensure an .htaccess file exists, even if someone else made the
@@ -277,6 +281,20 @@ class Filer {
             return false;
         }
         return true;
+    }
+
+    static function docstore_tmpdir($pattern) {
+        if (is_object($pattern)) {
+            $pattern = $pattern->opt("docstore");
+        }
+        if ($pattern
+            && ($prefix = self::docstore_fixed_prefix($pattern))) {
+            $tmpdir = $prefix . "tmp/";
+            if (self::prepare_docstore($tmpdir, $tmpdir)) {
+                return $tmpdir;
+            }
+        }
+        return false;
     }
 
     static private function _expand_docstore($pattern, DocumentInfo $doc, $extension) {

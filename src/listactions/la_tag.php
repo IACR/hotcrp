@@ -1,6 +1,6 @@
 <?php
 // listactions/la_tag.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2019 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Tag_ListAction extends ListAction {
     static function render(PaperList $pl) {
@@ -37,7 +37,7 @@ class Tag_ListAction extends ListAction {
         return [Ht::select("tagfn", $tagopt, $pl->qreq->tagfn, $tagextra) . " &nbsp;",
             ["linelink-class" => "has-fold foldc fold99c ui-unfold js-tag-list-action", "content" => $t]];
     }
-    function allow(Contact $user) {
+    function allow(Contact $user, Qrequest $qreq) {
         return $user->can_change_some_tag();
     }
     function run(Contact $user, $qreq, $ssel) {
