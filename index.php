@@ -47,6 +47,8 @@ if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "style
     include("cacheable.php");
 } else if ($nav->page === "api" || $nav->page === "cacheable") {
     include("{$nav->page}.php");
+} else if ($nav->page === "iacrcopyright") {
+    include("iacrcopyright/index.php");
 } else {
     require_once("src/initweb.php");
     $gx = $Conf->page_partials($Me);
