@@ -57,9 +57,11 @@ scores A, B, and D is A. For instance:</p>
         echo $hth->trow("<em>e1</em> &amp;&amp; <em>e2</em>", "Logical and (returns <em>e1</em> if <em>e1</em> is false, otherwise returns <em>e2</em>)");
         echo $hth->trow("<em>e1</em> || <em>e2</em>", "Logical or (returns <em>e1</em> if <em>e1</em> is true, otherwise returns <em>e2</em>)");
         echo $hth->trow("<em>test</em> ? <em>iftrue</em> : <em>iffalse</em>", "If-then-else operator");
+        echo $hth->trow("let <em>var</em> = <em>val</em> in <em>e</em>", "Local variable definition");
         echo $hth->trow("(<em>e</em>)", "Parentheses");
         echo $hth->trow("greatest(<em>e</em>, <em>e</em>, ...)", "Maximum");
         echo $hth->trow("least(<em>e</em>, <em>e</em>, ...)", "Minimum");
+        echo $hth->trow("coalesce(<em>e</em>, <em>e</em>, ...)", "Null coalescing: return first of <em>e</em>s that is not null");
         echo $hth->trow("log(<em>e</em>)", "Natural logarithm");
         echo $hth->trow("log(<em>e</em>, <em>b</em>)", "Log to the base <em>b</em>");
         echo $hth->trow("round(<em>e</em>[, <em>m</em>])", "Round to the nearest multiple of <em>m</em>");

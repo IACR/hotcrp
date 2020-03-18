@@ -27,19 +27,14 @@ class Fexpr implements JsonSerializable {
     public $op = "";
     public $args = [];
     public $text;
-    public $format_ = false;
+    public $_format = false;
     public $pos1;
     public $pos2;
 
-    const ASUBREV = 1;
-    const APREF = 2;
-    const APCCANREV = 4;
-    const ACONF = 8;
-    const APC = 16;
-
-    const LNONE = 0;
-    const LMY = 1;
-    const LALL = 2;
+    const IDX_NONE = 0;
+    const IDX_PC = 1;
+    const IDX_REVIEW = 2;
+    const IDX_MY = 4;
 
     const FNULL = -1;
     const FERROR = -2;
@@ -80,13 +75,16 @@ class Fexpr implements JsonSerializable {
     }
 
     function format() {
-        return $this->format_;
+        return $this->_format;
     }
     function math_format() {
-        return $this->format_ !== self::FREVIEWER;
+        return $this->_format !== self::FREVIEWER;
     }
     function error_format() {
-        return $this->format_ === self::FERROR;
+        return $this->_format === self::FERROR;
+    }
+    function unknown_format() {
+        return $this->_format === false;
     }
 
     static function common_format($args) {
@@ -107,7 +105,7 @@ class Fexpr implements JsonSerializable {
     function typecheck_resolve_neighbors(Formula $formula) {
         foreach ($this->args as $i => $a) {
             if ($a instanceof Constant_Fexpr
-                && $a->format_ === false
+                && $a->unknown_format()
                 && ($b = get($this->args, $i ? $i - 1 : $i + 1))) {
                 $a->resolve_neighbor($formula, $b);
             }
@@ -125,8 +123,8 @@ class Fexpr implements JsonSerializable {
                 $ok = false;
             }
         }
-        if ($ok && $this->format_ === false) {
-            $this->format_ = $this->typecheck_format();
+        if ($ok && $this->_format === false) {
+            $this->_format = $this->typecheck_format();
         }
         return $ok;
     }
@@ -137,6 +135,14 @@ class Fexpr implements JsonSerializable {
 
     function typecheck_format() {
         return null;
+    }
+
+    function inferred_index() {
+        $lt = 0;
+        foreach ($this->args as $a) {
+            $lt |= $a->inferred_index();
+        }
+        return $lt;
     }
 
     function view_score(Contact $user) {
@@ -165,12 +171,12 @@ class Fexpr implements JsonSerializable {
     }
 
     function compiled_comparator($cmp, Conf $conf, $other_expr = null) {
-        if ($this->format_
-            && $this->format_ instanceof ReviewField
-            && $this->format_->option_letter
+        if ($this->_format
+            && $this->_format instanceof ReviewField
+            && $this->_format->option_letter
             && !$conf->opt("smartScoreCompare")
             && (!$other_expr
-                || $other_expr->format() === $this->format_)) {
+                || $other_expr->format() === $this->_format)) {
             if ($cmp[0] == "<") {
                 return ">" . substr($cmp, 1);
             } else if ($cmp[0] == ">") {
@@ -197,7 +203,7 @@ class Constant_Fexpr extends Fexpr {
     private $x;
     function __construct($x, $format = null, $pos1 = null, $pos2 = null) {
         $this->x = $x;
-        $this->format_ = $format;
+        $this->_format = $format;
         $this->set_landmark($pos1, $pos2);
     }
     private function _check_revtype() {
@@ -210,18 +216,18 @@ class Constant_Fexpr extends Fexpr {
         }
     }
     function typecheck(Formula $formula) {
-        if ($this->format_ === self::FREVTYPE
+        if ($this->_format === self::FREVTYPE
             && is_string($this->x)
             && !$this->_check_revtype()) {
             return $formula->fexpr_lerror($this, "Unknown review type.");
-        } else if ($this->format_ === false) {
+        } else if ($this->_format === false) {
             return $formula->fexpr_lerror($this, "Undefined.");
         } else {
             return true;
         }
     }
     function resolve_neighbor(Formula $formula, $e) {
-        if ($this->format_ !== false
+        if ($this->_format !== false
             || !$e->typecheck($formula)) {
             return;
         }
@@ -244,7 +250,7 @@ class Constant_Fexpr extends Fexpr {
         } else {
             return;
         }
-        $this->format_ = $format;
+        $this->_format = $format;
     }
     function compile(FormulaCompiler $state) {
         return $this->x;
@@ -307,7 +313,7 @@ class Ternary_Fexpr extends Fexpr {
     }
     function matches_at_most_once() {
         return $this->args[0]->matches_at_most_once()
-            && $this->args[2]->format_ === self::FNULL;
+            && $this->args[2]->format() === self::FNULL;
     }
 }
 
@@ -315,7 +321,7 @@ class Equality_Fexpr extends Fexpr {
     function __construct($op, $e0, $e1) {
         assert($op === "==" || $op === "!=");
         parent::__construct($op, [$e0, $e1]);
-        $this->format_ = self::FBOOL;
+        $this->_format = self::FBOOL;
     }
     function typecheck(Formula $formula) {
         $this->typecheck_resolve_neighbors($formula);
@@ -332,7 +338,7 @@ class Inequality_Fexpr extends Fexpr {
     function __construct($op, $e0, $e1) {
         assert(in_array($op, ["<", ">", "<=", ">="]));
         parent::__construct($op, [$e0, $e1]);
-        $this->format_ = self::FBOOL;
+        $this->_format = self::FBOOL;
     }
     function typecheck(Formula $formula) {
         $this->typecheck_resolve_neighbors($formula);
@@ -383,7 +389,7 @@ class Or_Fexpr extends Fexpr {
 class Not_Fexpr extends Fexpr {
     function __construct(Fexpr $e) {
         parent::__construct("!", [$e]);
-        $this->format_ = self::FBOOL;
+        $this->_format = self::FBOOL;
     }
     function compile(FormulaCompiler $state) {
         $t = $state->_addltemp($this->args[0]->compile($state));
@@ -395,7 +401,7 @@ class Unary_Fexpr extends Fexpr {
     function __construct($op, Fexpr $e) {
         assert($op === "+" || $op === "-");
         parent::__construct($op, [$e]);
-        $this->format_ = null;
+        $this->_format = null;
     }
     function typecheck(Formula $formula) {
         return $this->typecheck_arguments($formula, true);
@@ -513,7 +519,7 @@ class In_Fexpr extends Fexpr {
     function __construct(Fexpr $e, array $values) {
         parent::__construct("in", [$e]);
         $this->values = $values;
-        $this->format_ = self::FBOOL;
+        $this->_format = self::FBOOL;
     }
     function compile(FormulaCompiler $state) {
         $t = $state->_addltemp($this->args[0]->compile($state));
@@ -523,7 +529,13 @@ class In_Fexpr extends Fexpr {
 
 class Extremum_Fexpr extends Fexpr {
     function __construct(FormulaCall $ff) {
-        $op = ($ff->name === "least" || $ff->name === "min" ? "least" : "greatest");
+        if ($ff->name === "min") {
+            $op = "least";
+        } else if ($ff->name === "max") {
+            $op = "greatest";
+        } else {
+            $op = $ff->name;
+        }
         parent::__construct($op, $ff->args);
     }
     function typecheck(Formula $formula) {
@@ -535,10 +547,16 @@ class Extremum_Fexpr extends Fexpr {
     }
     function compile(FormulaCompiler $state) {
         $cmp = $this->compiled_comparator($this->op === "greatest" ? ">" : "<", $state->conf);
-        $t1 = $state->_addltemp($this->args[0]->compile($state), true);
-        for ($i = 1; $i < count($this->args); ++$i) {
+        $t1 = "null";
+        for ($i = 0; $i < count($this->args); ++$i) {
             $t2 = $state->_addltemp($this->args[$i]->compile($state));
-            $state->lstmt[] = "$t1 = ($t1 === null || ($t2 !== null && $t2 $cmp $t1) ? $t2 : $t1);";
+            if ($i === 0) {
+                $t1 = $t2;
+            } else if ($this->op === "coalesce") {
+                $state->lstmt[] = "$t1 = $t1 ?? $t2;";
+            } else {
+                $state->lstmt[] = "$t1 = ($t1 === null || ($t2 !== null && $t2 $cmp $t1) ? $t2 : $t1);";
+            }
         }
         return $t1;
     }
@@ -592,10 +610,10 @@ class Round_Fexpr extends Fexpr {
 }
 
 class AggregateFexpr extends Fexpr {
-    public $datatype;
-    function __construct($fn, array $values, $datatype = null) {
+    public $index_type;
+    function __construct($fn, array $values, int $index_type) {
         parent::__construct($fn, $values);
-        $this->datatype = (int) $datatype;
+        $this->index_type = $index_type;
     }
     static function parse_modifier(FormulaCall $ff, $arg) {
         if (!$ff->modifier) {
@@ -603,7 +621,11 @@ class AggregateFexpr extends Fexpr {
         }
         if ($arg === ".pc"
             && !$ff->modifier[0]) {
-            $ff->modifier[0] = Fexpr::APC;
+            $ff->modifier[0] = Fexpr::IDX_PC;
+            return true;
+        } else if ($arg === ".re"
+                   && !$ff->modifier[0]) {
+            $ff->modifier[0] = Fexpr::IDX_REVIEW;
             return true;
         } else if (($ff->name === "variance" || $ff->name === "stddev")
                    && !$ff->modifier[1]
@@ -640,7 +662,7 @@ class AggregateFexpr extends Fexpr {
             || $op === "wavg" || $op === "quantile") {
             $arg_count = 2;
         }
-        if (count($ff->args) != $arg_count) {
+        if (count($ff->args) !== $arg_count) {
             $ff->lerror("Wrong number of arguments (expected $arg_count).");
             return null;
         }
@@ -648,7 +670,14 @@ class AggregateFexpr extends Fexpr {
             $op = "arg" . substr($op, 2, 3);
             $ff->args = [$ff->args[1], $ff->args[0]];
         }
-        return new AggregateFexpr($op, $ff->args, $ff->modifier ? $ff->modifier[0] : null);
+        if ($op === "my") {
+            $index_type = Fexpr::IDX_MY;
+        } else if ($ff->modifier) {
+            $index_type = $ff->modifier[0];
+        } else {
+            $index_type = 0;
+        }
+        return new AggregateFexpr($op, $ff->args, $index_type);
     }
 
     function typecheck(Formula $formula) {
@@ -659,6 +688,15 @@ class AggregateFexpr extends Fexpr {
         }
         if (count($this->args) > 1 && !$this->args[1]->math_format()) {
             $ok = $formula->fexpr_lerror($this->args[1], "Unusable in math expressions.");
+        }
+        if ($ok && !$this->index_type) {
+            $lt = parent::inferred_index();
+            if ($lt === 0 || ($lt & ($lt - 1)) === 0) {
+                $this->index_type = $lt;
+            } else {
+                $formula->fexpr_lerror($this, "Can’t infer index, specify “{$this->op}.pc” or “{$this->op}.re”.");
+                $ok = false;
+            }
         }
         return $ok;
     }
@@ -676,6 +714,10 @@ class AggregateFexpr extends Fexpr {
         } else {
             return null;
         }
+    }
+
+    function inferred_index() {
+        return 0;
     }
 
     static function quantile($a, $p) {
@@ -788,7 +830,10 @@ class Score_Fexpr extends Fexpr {
     private $field;
     function __construct(ReviewField $field) {
         parent::__construct("rf");
-        $this->field = $this->format_ = $field;
+        $this->field = $this->_format = $field;
+    }
+    function inferred_index() {
+        return self::IDX_REVIEW;
     }
     function view_score(Contact $user) {
         return $this->field->view_score;
@@ -797,7 +842,6 @@ class Score_Fexpr extends Fexpr {
         if ($this->field->view_score <= $state->user->permissive_view_score_bound()) {
             return "null";
         }
-        $state->datatype |= Fexpr::ASUBREV;
         $fid = $this->field->id;
         $state->_ensure_rrow_score($fid);
         $rrow = $state->_rrow();
@@ -810,15 +854,76 @@ class Score_Fexpr extends Fexpr {
     }
 }
 
-class Review_Fexpr extends Fexpr {
-    function view_score(Contact $user) {
-        if (!$user->conf->setting("rev_blind")) {
-            return VIEWSCORE_AUTHOR;
-        } else if ($user->conf->setting("pc_seeblindrev")) {
-            return VIEWSCORE_REVIEWERONLY;
+class Let_Fexpr extends Fexpr {
+    private $vardef;
+    function __construct(VarDef_Fexpr $vardef, Fexpr $val, Fexpr $body) {
+        parent::__construct("let", [$val, $body]);
+        $this->vardef = $vardef;
+    }
+    function typecheck(Formula $formula) {
+        if (($ok0 = $this->args[0]->typecheck($formula))) {
+            $this->vardef->_format = $this->args[0]->format();
+            $this->vardef->_index_type = $this->args[0]->inferred_index();
         } else {
-            return VIEWSCORE_PC;
+            $this->vardef->_format = self::FERROR;
+            $this->vardef->_index_type = 0;
         }
+        $ok1 = $this->args[1]->typecheck($formula);
+        $this->_format = $ok0 && $ok1 ? $this->args[1]->format() : self::FERROR;
+        return $ok0 && $ok1;
+    }
+    function compile(FormulaCompiler $state) {
+        $this->vardef->ltemp = $state->_addltemp($this->args[0]->compile($state));
+        return $this->args[1]->compile($state);
+    }
+    function compile_extractor(FormulaCompiler $state) {
+        $this->vardef->ltemp = $state->_addltemp($this->args[0]->compile($state));
+        return $this->args[1]->compile_extractor($state);
+    }
+    function jsonSerialize() {
+        return ["op" => "let", "name" => $this->vardef->name(),
+                "value" => $this->args[0], "body" => $this->args[1]];
+    }
+}
+
+class VarDef_Fexpr extends Fexpr {
+    private $name;
+    public $ltemp;
+    public $_index_type;
+    function __construct($name) {
+        parent::__construct("vardef");
+        $this->name = $name;
+    }
+    function name() {
+        return $this->name;
+    }
+    function inferred_index() {
+        assert($this->_index_type !== null);
+        return $this->_index_type;
+    }
+    function jsonSerialize() {
+        return ["op" => "vardef", "name" => $this->name];
+    }
+}
+
+class VarUse_Fexpr extends Fexpr {
+    private $vardef;
+    function __construct(VarDef_Fexpr $vardef) {
+        parent::__construct("varuse");
+        $this->vardef = $vardef;
+    }
+    function typecheck(Formula $formula) {
+        $this->_format = $this->vardef->format();
+        return true;
+    }
+    function inferred_index() {
+        return $this->vardef->inferred_index();
+    }
+    function compile(FormulaCompiler $state) {
+        return $this->vardef->ltemp;
+    }
+    function jsonSerialize() {
+        return ["op" => "varuse", "name" => $this->vardef->name()];
     }
 }
 
@@ -832,9 +937,8 @@ class FormulaCompiler {
     public $lstmt;
     public $fragments = array();
     public $combining = null;
-    public $looptype;
-    public $datatype;
-    public $all_datatypes = 0;
+    public $index_type;
+    public $indexed;
     private $_lprefix;
     private $_maxlprefix;
     private $_lflags;
@@ -857,8 +961,8 @@ class FormulaCompiler {
 
     function clear() {
         $this->gvar = $this->g0stmt = $this->gstmt = $this->lstmt = [];
-        $this->looptype = Fexpr::LNONE;
-        $this->datatype = 0;
+        $this->index_type = Fexpr::IDX_NONE;
+        $this->indexed = false;
         $this->_lprefix = 0;
         $this->_maxlprefix = 0;
         $this->_lflags = 0;
@@ -866,7 +970,7 @@ class FormulaCompiler {
     }
 
     function check_gvar($gvar) {
-        if (get($this->gvar, $gvar)) {
+        if ($this->gvar[$gvar] ?? false) {
             return false;
         } else {
             $this->gvar[$gvar] = $gvar;
@@ -888,15 +992,9 @@ class FormulaCompiler {
 
     function _add_pc() {
         if ($this->check_gvar('$pc')) {
-            $this->gstmt[] = "\$pc = \$contact->conf->pc_members_and_admins();";
+            $this->gstmt[] = "\$pc = \$contact->conf->pc_members();";
         }
         return '$pc';
-    }
-    function _add_pc_can_review() {
-        if ($this->check_gvar('$pc_can_review')) {
-            $this->gstmt[] = "\$pc_can_review = \$prow->pc_can_become_reviewer_ignore_conflict();";
-        }
-        return '$pc_can_review';
     }
     function _add_vsreviews() {
         if ($this->check_gvar('$vsreviews')) {
@@ -939,9 +1037,10 @@ class FormulaCompiler {
     }
 
     function loop_cid($aggregate = false) {
-        if ($this->looptype === Fexpr::LNONE) {
+        $this->indexed = true;
+        if ($this->index_type === Fexpr::IDX_NONE) {
             return '$rrow_cid';
-        } else if ($this->looptype === Fexpr::LMY) {
+        } else if ($this->index_type === Fexpr::IDX_MY) {
             return (string) $this->user->contactId;
         } else {
             if (!$aggregate) {
@@ -951,9 +1050,10 @@ class FormulaCompiler {
         }
     }
     function _rrow() {
-        if ($this->looptype === Fexpr::LNONE) {
+        $this->indexed = true;
+        if ($this->index_type === Fexpr::IDX_NONE) {
             return $this->define_gvar("rrow", "\$prow->review_of_user(\$rrow_cid)");
-        } else if ($this->looptype === Fexpr::LMY) {
+        } else if ($this->index_type === Fexpr::IDX_MY) {
             return $this->define_gvar("myrrow", "\$prow->review_of_user(" . $this->user->contactId . ")");
         } else {
             $this->_add_vsreviews();
@@ -963,9 +1063,9 @@ class FormulaCompiler {
     }
     function _rrow_view_score_bound() {
         $rrow = $this->_rrow();
-        if ($this->looptype === Fexpr::LNONE) {
+        if ($this->index_type === Fexpr::IDX_NONE) {
             return $this->define_gvar("rrow_vsb", "({$rrow} ? \$contact->view_score_bound(\$prow, {$rrow}) : " . VIEWSCORE_EMPTYBOUND . ")");
-        } else if ($this->looptype === Fexpr::LMY) {
+        } else if ($this->index_type === Fexpr::IDX_MY) {
             return $this->define_gvar("myrrow_vsb", "({$rrow} ? \$contact->view_score_bound(\$prow, {$rrow}) : " . VIEWSCORE_EMPTYBOUND . ")");
         } else {
             $this->_lflags |= self::LFLAG_RROW_VSB | self::LFLAG_CID;
@@ -989,18 +1089,17 @@ class FormulaCompiler {
     }
 
     private function _push() {
-        $this->_stack[] = [$this->_lprefix, $this->lstmt, $this->looptype, $this->datatype, $this->_lflags];
+        $this->_stack[] = [$this->_lprefix, $this->lstmt, $this->index_type, $this->indexed, $this->_lflags];
         $this->_lprefix = ++$this->_maxlprefix;
         $this->lstmt = array();
-        $this->looptype = Fexpr::LNONE;
-        $this->datatype = 0;
+        $this->index_type = Fexpr::IDX_NONE;
+        $this->indexed = false;
         $this->_lflags = 0;
         $this->indent += 2;
         return $this->_lprefix;
     }
     private function _pop() {
-        $this->all_datatypes |= $this->datatype;
-        list($this->_lprefix, $this->lstmt, $this->looptype, $this->datatype, $this->_lflags) = array_pop($this->_stack);
+        list($this->_lprefix, $this->lstmt, $this->index_type, $this->indexed, $this->_lflags) = array_pop($this->_stack);
         $this->indent -= 2;
     }
     function _addltemp($expr = "null", $always_var = false) {
@@ -1020,27 +1119,18 @@ class FormulaCompiler {
         return $t;
     }
 
-    function loop_variable($datatype) {
+    function loop_variable($index_types) {
         $g = array();
-        if ($datatype & Fexpr::ASUBREV) {
-            $g[] = $this->_add_vsreviews();
-        }
-        if ($datatype & Fexpr::APC) {
+        assert($index_types === ($index_types & (Fexpr::IDX_REVIEW | Fexpr::IDX_PC)));
+        if ($index_types & Fexpr::IDX_PC) {
             $g[] = $this->_add_pc();
-        } else {
-            if ($datatype & Fexpr::APCCANREV) {
-                $g[] = $this->_add_pc_can_review();
-            }
-            if ($datatype & Fexpr::APREF) {
-                $g[] = $this->_add_preferences();
-            }
-            if ($datatype & Fexpr::ACONF) {
-                $g[] = $this->_add_conflicts();
-            }
+        }
+        if ($index_types & Fexpr::IDX_REVIEW) {
+            $g[] = $this->_add_vsreviews();
         }
         if (count($g) > 1) {
             return join(" + ", $g);
-        } else if (count($g)) {
+        } else if (!empty($g)) {
             return $g[0];
         } else {
             return $this->define_gvar("trivial_loop", "[0]");
@@ -1050,8 +1140,7 @@ class FormulaCompiler {
         $t_result = $this->_addltemp($initial_value, true);
         $combiner = str_replace("~r~", $t_result, $combiner);
         $p = $this->_push();
-        $this->looptype = Fexpr::LALL;
-        $this->datatype = $e->datatype;
+        $this->index_type = $e->index_type;
         $loopstmt = [];
 
         preg_match_all('/~l(\d*)~/', $combiner, $m);
@@ -1077,7 +1166,7 @@ class FormulaCompiler {
         if ($this->_lflags) {
             $lstmt_pfx = [];
             if ($this->_lflags & self::LFLAG_RROW) {
-                if ($this->datatype === Fexpr::ASUBREV) {
+                if ($this->index_type === Fexpr::IDX_REVIEW) {
                     $v = "\$v$p";
                 } else {
                     $v = "(\$vsreviews[\$i$p] ?? null)";
@@ -1096,9 +1185,9 @@ class FormulaCompiler {
         }
 
         if ($this->combining !== null) {
-            $loop = "foreach (\$groups as \$v$p) " . $this->_join_lstmt(true);
+            $loop = "foreach (\$extractor_results as \$v$p) " . $this->_join_lstmt(true);
         } else {
-            $g = $this->loop_variable($this->datatype);
+            $g = $this->loop_variable($this->index_type);
             $loop = "foreach ($g as \$i$p => \$v$p) "
                 . str_replace("~i~", "\$i$p", $this->_join_lstmt(true));
             $loop = str_replace("({$g}[\$i$p] ?? null)", "\$v$p", $loop);
@@ -1112,7 +1201,7 @@ class FormulaCompiler {
 
     function _compile_my(Fexpr $e) {
         $p = $this->_push();
-        $this->looptype = Fexpr::LMY;
+        $this->index_type = Fexpr::IDX_MY;
         $t = $this->_addltemp($e->compile($this));
         $loop = $this->_join_lstmt(false);
         $this->_pop();
@@ -1129,26 +1218,36 @@ class FormulaCompiler {
     }
 }
 
-class Formula implements Abbreviator {
+class FormulaParse {
+    public $fexpr;
+    public $indexed;
+    public $index_type;
+    public $format = Fexpr::FERROR;
+    public $tagrefs;
+    public $lerrors;
+}
+
+class Formula implements Abbreviator, JsonSerializable {
     public $conf;
     public $user;
+
     public $formulaId;
     public $name;
     public $expression;
-    public $allowReview = false;
-    private $needsReview = false;
-    private $datatypes = 0;
     public $createdBy = 0;
     public $timeModified = 0;
+
+    private $_allow_indexed;
     private $_abbreviation;
+
+    private $_depth = 0;
+    private $_macro;
+    private $_bind;
+    private $_lerrors;
 
     private $_parse;
     private $_format;
-    private $_tagrefs;
-    private $_lerrors = [];
-    private $_recursion = 0;
-    private $_depth = 0;
-    private $_macro;
+
     private $_extractorf;
     private $_extractor_nfragments;
 
@@ -1162,36 +1261,41 @@ class Formula implements Abbreviator {
         "*" => 11, "/" => 11, "%" => 11,
         "+" => 10, "-" => 10,
         "<<" => 9, ">>" => 9,
-        "<" => 8, ">" => 8, "<=" => 8, ">=" => 8, "≤" => 8, "≥" => 8, // XXX value matters
+        "<" => 8, ">" => 8, "<=" => 8, ">=" => 8, "≤" => 8, "≥" => 8,
         "=" => 7, "==" => 7, "!=" => 7, "≠" => 7,
         "&" => 6,
         "^" => 5,
         "|" => 4,
         ":" => 3,
-        "&&" => 2,
-        "||" => 1,
-        "?:" => 0
+        "&&" => 2, "and" => 2,
+        "||" => 1, "or" => 1,
+        "?:" => 0,
+        "in" => -1
     );
 
-    private static $_oprassoc = array(
+    static private $_oprassoc = array(
         "**" => true
     );
 
-    private static $_oprewrite = array(
-        "=" => "==", ":" => "==", "≤" => "<=", "≥" => ">=", "≠" => "!="
+    static private $_oprewrite = array(
+        "=" => "==", ":" => "==", "≤" => "<=", "≥" => ">=", "≠" => "!=",
+        "and" => "&&", "or" => "||"
     );
 
-
-    function __construct($expr = null, $allow_review = false) {
+    const ALLOW_INDEXED = 1;
+    function __construct($expr = null, $flags = 0) {
+        if ($flags === true) {
+            $flags = self::ALLOW_INDEXED; // XXX backward compat
+        }
+        assert(is_int($flags));
         if ($expr !== null) {
             $this->expression = $expr;
-            $this->allowReview = $allow_review;
+            $this->_allow_indexed = ($flags & self::ALLOW_INDEXED) !== 0;
         }
         $this->merge();
     }
 
     private function merge() {
-        $this->allowReview = !!$this->allowReview;
         $this->formulaId = (int) $this->formulaId;
     }
 
@@ -1203,8 +1307,11 @@ class Formula implements Abbreviator {
                 $formula->merge();
             }
         }
-        assert(!$formula || $formula->datatypes === 0);
         return $formula;
+    }
+
+    static function span_maximal_formula($t) {
+        return self::span_parens_until($t, ",;)]}");
     }
 
 
@@ -1228,6 +1335,7 @@ class Formula implements Abbreviator {
         assert(!$this->conf || $this->conf === $user->conf);
         $this->conf = $user->conf;
         $this->user = $user;
+        $this->_parse = null;
     }
 
     function lerror($pos1, $pos2, $message_html) {
@@ -1240,121 +1348,108 @@ class Formula implements Abbreviator {
         return $this->lerror($expr->pos1, $expr->pos2, $message_html);
     }
 
-    private function parse_prefix(Contact $user = null, $allow_suffix) {
-        if ($user) {
-            $this->set_user($user);
+    private function parse(Contact $user) {
+        assert(!$this->conf || $this->conf === $user->conf);
+        assert($this->_depth === 0);
+        if ($user !== $this->user) {
+            $this->conf = $user->conf;
+            $this->user = $user;
         }
-        assert($this->conf && $this->user);
+        $this->_lerrors = [];
+        $this->_bind = [];
         $t = $this->expression;
         if ((string) $t === "") {
             $this->lerror(0, 0, "Empty formula.");
-            return false;
+            $e = null;
+        } else {
+            ++$this->_depth;
+            $e = $this->_parse_ternary($t, false);
+            --$this->_depth;
         }
-        $e = $this->_parse_ternary($t, false);
+        $fp = new FormulaParse;
         if (!$e
-            || ($t !== "" && !$allow_suffix)
+            || $t !== ""
             || !empty($this->_lerrors)) {
             if (empty($this->_lerrors)) {
                 $this->lerror(-strlen($t), 0, "Parse error.");
             }
         } else if (!$e->typecheck($this)) {
-            if (!$this->_lerrors) {
-                $this->fexpr_lerror($e, "Type error." . htmlspecialchars(json_encode($e)));
+            if (empty($this->_lerrors)) {
+                $this->fexpr_lerror($e, "Type error.");
             }
         } else {
             $state = new FormulaCompiler($this->user);
             $e->compile($state);
-            if ($state->datatype && !$this->allowReview && $e->matches_at_most_once()) {
+            if ($state->indexed && !$this->_allow_indexed
+                && $e->matches_at_most_once()) {
                 $e = new AggregateFexpr("some", [$e]);
                 $state = new FormulaCompiler($this->user);
                 $e->compile($state);
             }
-            $this->datatypes = $state->all_datatypes | $state->datatype;
-            if ($state->datatype && !$this->allowReview) {
+            if ($state->indexed && !$this->_allow_indexed) {
                 $this->fexpr_lerror($e, "Need an aggregate function like “sum” or “max”.");
             } else {
-                $e->text = $this->expression;
-                $this->needsReview = !!$state->datatype;
-                $this->_format = $e->format();
-                $this->_tagrefs = $state->tagrefs;
+                $fp->fexpr = $e;
+                $fp->indexed = !!$state->indexed;
+                if ($fp->indexed) {
+                    $fp->index_type = $e->inferred_index();
+                } else if ($e instanceof AggregateFexpr) {
+                    $fp->index_type = $e->index_type;
+                } else {
+                    $fp->index_type = 0;
+                }
+                $fp->format = $e->format();
+                $fp->tagrefs = $state->tagrefs;
             }
         }
-        if (($tlen = strlen($t)) > 0) {
-            $this->expression = rtrim(substr($this->expression, 0, -$tlen));
-        }
-        return empty($this->_lerrors) ? $e : false;
+        $fp->lerrors = $this->_lerrors;
+        $this->_lerrors = null;
+        $this->_bind = null;
+        return $fp;
     }
 
     function check(Contact $user = null) {
         if ($this->_parse === null || ($user && $user !== $this->user)) {
-            ++$this->_depth;
-            $this->_parse = $this->parse_prefix($user, false);
-            --$this->_depth;
+            $this->_parse = $this->parse($user ?? $this->user);
+            $this->_format = $this->_parse->format;
         }
-        return !!$this->_parse;
-    }
-    function check_prefix(Contact $user = null) {
-        $suffix = "";
-        if ($this->_parse === null || ($user && $user !== $this->user)) {
-            $expr = $this->expression;
-            $this->_parse = $this->parse_prefix($user, true);
-            $suffix = ltrim((string) substr($expr, strlen($this->expression)));
-        }
-        return $this->_parse ? $suffix : false;
+        return $this->_format !== Fexpr::FERROR;
     }
 
     function error_html() {
-        $this->check();
-        if (empty($this->_lerrors)) {
+        if ($this->check()) {
             return "";
         } else {
-            $expr = preg_replace('/\s/', " ", $this->expression);
             $x = [];
-            foreach ($this->_lerrors as $e) {
-                if ($e[0] !== $e[1]) {
-                    $t = htmlspecialchars(substr($expr, 0, $e[0]))
-                        . '<span class="is-error">'
-                        . htmlspecialchars(substr($expr, $e[0], $e[1] - $e[0]))
-                        . '</span>'
-                        . htmlspecialchars(substr($expr, $e[1]));
-                    $arrow = str_repeat("↑", $e[1] - $e[0]);
-                } else {
-                    $t = htmlspecialchars($expr);
-                    $arrow = "↑";
-                }
-                $space = str_repeat(" ", $e[0]);
-                $x[] = $t . "\n"
-                    . $space . '<span class="is-error">' . $arrow . "</span>\n"
-                    . $space . '<span class="text-default">' . $e[2] . "</span>\n";
+            foreach ($this->_parse->lerrors as $e) {
+                $x[] = Ht::contextual_diagnostic($this->expression, $e[0], $e[1], $e[2]);
             }
-            return "Formula error:<pre>" . join("", $x) . "</pre>";
+            return "<pre>" . join("", $x) . "</pre>";
         }
     }
 
-    private function _parse_ternary(&$t, $in_qc) {
-        $pos1 = -strlen($t);
-        $e = $this->_parse_expr($t, 0, $in_qc);
-        if (!$e && $this->_depth) {
-            $this->lerror($pos1, $pos1, "Expression expected.");
-            return $e;
-        } else if (!$e || ($t = ltrim($t)) === "" || $t[0] !== "?") {
-            return $e;
+    private static function span_parens_until($t, $span) {
+        $pos = 0;
+        $len = strlen($t);
+        while ($pos !== $len && strpos($t[$pos], $span) === false) {
+            $x = SearchSplitter::span_balanced_parens($t, $pos, function ($ch) use ($span) {
+                return strpos($ch, $span) !== false;
+            });
+            $pos = max($pos + 1, $x);
         }
-        $t = substr($t, 1);
-        ++$this->_depth;
-        $e1 = $this->_parse_ternary($t, true);
-        $e2 = null;
-        if (!$e1) {
-        } else if (($t = ltrim($t)) === "" || $t[0] !== ":") {
-            $this->lerror(-strlen($t), -strlen($t), "“:” expected.");
-        } else {
-            $t = substr($t, 1);
-            $e2 = $this->_parse_ternary($t, $in_qc);
+        return $pos;
+    }
+
+    private function _find_formula_function(&$m) {
+        while ($m[1] !== "") {
+            if (($kwdef = $this->conf->formula_function($m[1], $this->user))) {
+                return $kwdef;
+            }
+            $pos1 = strrpos($m[1], ":");
+            $pos2 = strrpos($m[1], ".");
+            $m[1] = substr($m[1], 0, max((int) $pos1, (int) $pos2));
         }
-        --$this->_depth;
-        $e = $e1 && $e2 ? new Ternary_Fexpr($e, $e1, $e2) : Constant_Fexpr::cerror();
-        $e->set_landmark($pos1, -strlen($t));
-        return $e;
+        return false;
     }
 
     private function _parse_function_args(FormulaCall $ff, &$t) {
@@ -1364,44 +1459,39 @@ class Formula implements Abbreviator {
         if ($t === "") {
             return $argtype === "optional" || !empty($ff->args);
         } else if ($t[0] === "(" && $argtype === "raw") {
-            $arg = "";
-            $t = substr($t, 1);
-            $depth = 1;
-            while ($t !== "") {
-                preg_match('/\A("[^"]+(?:"|\z)|\(|\)|[^()"]+)(.*)\z/s', $t, $m);
-                $t = $m[2];
-                if ($m[1] === ")") {
-                    if (--$depth === 0)
-                        break;
-                } else if ($m[1] === "(") {
-                    ++$depth;
-                }
-                $arg .= $m[1];
-            }
-            $ff->args[] = $arg;
+            $pos = self::span_parens_until($t, ")");
+            $ff->args[] = substr($t, 0, $pos);
+            $t = substr($t, $pos);
             return true;
         } else if ($t[0] === "(") {
-            $warned = false;
+            $warned = $comma = false;
             ++$this->_depth;
-            while (true) {
-                $t = substr($t, 1);
+            $t = ltrim(substr($t, 1));
+            while ($t !== "" && $t[0] !== ")") {
+                if ($comma && $t[0] === ",") {
+                    $t = ltrim(substr($t, 1));
+                }
+                $pos1 = -strlen($t);
                 $e = $this->_parse_ternary($t, false);
-                $ff->args[] = $e;
+                if ($e) {
+                    $ff->args[] = $e;
+                } else {
+                    $ff->args[] = Constant_Fexpr::cerror($pos1, -strlen($t));
+                }
                 $t = ltrim($t);
-                while ($t !== "" && $t[0] !== ")" && $t[0] !== ",") {
+                if ($t !== "" && $t[0] !== ")" && $t[0] !== ",") {
                     if (!$warned) {
                         $this->lerror(-strlen($t), -strlen($t), "Expected “,” or “)”.");
                         $warned = true;
                     }
-                    $t = substr($t, SearchSplitter::span_balanced_parens($t));
+                    $t = substr($t, self::span_parens_until($t, "),"));
                 }
-                if ($t === "") {
-                    $this->lerror(-strlen($t), -strlen($t), "Missing close parenthesis.");
-                    break;
-                } else if ($t[0] === ")") {
-                    $t = substr($t, 1);
-                    break;
-                }
+                $comma = true;
+            }
+            if ($t === "") {
+                $this->lerror(0, 0, "Missing “)”.");
+            } else {
+                $t = substr($t, 1);
             }
             --$this->_depth;
             return true;
@@ -1419,23 +1509,22 @@ class Formula implements Abbreviator {
         if (preg_match('/\s*((?:"[^"]*(?:"|\z)|[^\s()]*)*)(.*)\z/s', $t, $m) && $m[1] !== "")
             return $m;
         else
-            return array($t, "", $t);
+            return [$t, "", $t];
     }
 
     const ARGUMENT_REGEX = '((?:"[^"]*"|[-#a-zA-Z0-9_.@!*?~]+|:(?="|[-#a-zA-Z0-9_.@+!*\/?~]+(?![()])))+)';
 
-    private function _parse_function(&$t, $kwdef, $name) {
+    private function _parse_function(&$t, $name, $kwdef) {
         $ff = new FormulaCall($this, $kwdef, $name);
-        $args = get($kwdef, "args");
-        $has_args = $args !== null && $args !== false;
+        $args = $kwdef->args ?? false;
 
         $ff->pos1 = $pos1 = -strlen($t);
         $t = substr($t, strlen($name));
 
-        if (get($kwdef, "parse_modifier_callback")) {
+        if ($kwdef->parse_modifier_callback ?? false) {
             $xt = $name === "#" ? "#" . $t : $t;
             while (preg_match('/\A([.#:](?:"[^"]*(?:"|\z)|[-a-zA-Z0-9_.@!*?~:\/#]+))(.*)/s', $xt, $m)
-                   && ($has_args || !preg_match('/\A\s*\(/s', $m[2]))) {
+                   && ($args !== false || !preg_match('/\A\s*\(/s', $m[2]))) {
                 $ff->pos2 = -strlen($m[2]);
                 if (call_user_func($kwdef->parse_modifier_callback, $ff, $m[1], $m[2], $this)) {
                     $t = $xt = $m[2];
@@ -1445,7 +1534,7 @@ class Formula implements Abbreviator {
             }
         }
 
-        if ($has_args) {
+        if ($args !== false) {
             if (!$this->_parse_function_args($ff, $t)) {
                 $this->lerror($pos1, -strlen($t), "Function requires arguments.");
                 return Constant_Fexpr::cerror($pos1, -strlen($t));
@@ -1473,18 +1562,18 @@ class Formula implements Abbreviator {
                 }
             }
         } else if (isset($kwdef->macro)) {
-            if ($this->_recursion > 10) {
+            if ($this->_depth > 20) {
                 $this->lerror($pos1, -strlen($t), "Circular macro definition.");
                 $e = null;
             } else {
-                ++$this->_recursion;
+                ++$this->_depth;
                 $old_macro = $this->_macro;
                 $this->_macro = $ff;
                 $tt = $kwdef->macro;
                 $before = count($this->_lerrors);
                 $e = $this->_parse_ternary($tt, false);
                 $this->_macro = $old_macro;
-                --$this->_recursion;
+                --$this->_depth;
                 if (!$e || $tt !== "") {
                     if (count($this->_lerrors) === $before) {
                         $this->lerror($ff->pos1, $ff->pos2, "Parse error in macro.");
@@ -1535,11 +1624,11 @@ class Formula implements Abbreviator {
         }
     }
 
-    private function _reviewer_decoration($e0, &$ex) {
+    private function _reviewer_decoration(&$t, $e0) {
         $es = [];
         $rsm = new ReviewSearchMatcher;
-        while ($ex !== "") {
-            if (!preg_match('/\A:((?:"[^"]*(?:"|\z)|~*[-A-Za-z0-9_.#@]+(?!\s*\())+)(.*)/si', $ex, $m)
+        while ($t !== "") {
+            if (!preg_match('/\A:((?:"[^"]*(?:"|\z)|~*[-A-Za-z0-9_.#@]+(?!\s*\())+)(.*)/si', $t, $m)
                 || preg_match('/\A(?:null|false|true|pid|paperid)\z/i', $m[1])) {
                 break;
             }
@@ -1560,7 +1649,7 @@ class Formula implements Abbreviator {
                 }
                 $es[] = new ReviewerMatch_Fexpr($this->user, $m[1]);
             }
-            $ex = $m[2];
+            $t = $m[2];
         }
 
         $rsm->finish();
@@ -1617,16 +1706,31 @@ class Formula implements Abbreviator {
         return $e;
     }
 
-    private function _find_formula_function(&$m) {
-        while ($m[1] !== "") {
-            if (($kwdef = $this->conf->formula_function($m[1], $this->user))) {
-                return $kwdef;
+    private function _parse_field($pos1, &$t, $f) {
+        $pos2 = -strlen($t);
+        if ($f instanceof PaperOption) {
+            return $this->_parse_option($pos1, $pos2, $f->search_keyword());
+        } else if ($f instanceof ReviewField) {
+            if ($f->has_options) {
+                return $this->_reviewer_decoration($t, new Score_Fexpr($f));
+            } else {
+                $this->lerror($pos1, $pos2, "This review field can’t be used in formulas.");
             }
-            $pos1 = strrpos($m[1], ":");
-            $pos2 = strrpos($m[1], ".");
-            $m[1] = substr($m[1], 0, max((int) $pos1, (int) $pos2));
+        } else if ($f instanceof Formula) {
+            if ($f->_depth === 0) {
+                $fp = $f->parse($this->user);
+                if (!$fp->error_format()) {
+                    return $fp->fexpr;
+                } else {
+                    $this->lerror($pos1, $pos2, "This formula’s definition contains an error.");
+                }
+            } else {
+                $this->lerror($pos1, $pos2, "Self-referential formula.");
+            }
+        } else {
+            $this->lerror($pos1, $pos2, "Unknown field.");
         }
-        return false;
+        return Constant_Fexpr::cerror($pos1, $pos2);
     }
 
     private function _parse_expr(&$t, $level, $in_qc) {
@@ -1643,10 +1747,8 @@ class Formula implements Abbreviator {
             --$this->_depth;
             $t = ltrim($t);
             if ($t === "" || $t[0] !== ")") {
-                $this->lerror(-strlen($t), -strlen($t), "Expression expected.");
-                while ($t !== "" && $t[0] !== ")") {
-                    $t = substr($t, SearchSplitter::span_balanced_parens($t));
-                }
+                $this->lerror(-strlen($t), -strlen($t), "Missing “)”.");
+                $t = substr($t, self::span_parens_until($t, ")"));
             }
             if (!$e || $t === "") {
                 return $e;
@@ -1659,7 +1761,8 @@ class Formula implements Abbreviator {
                 return null;
             }
             $e = $op === "!" ? new Not_Fexpr($e) : new Unary_Fexpr($op, $e);
-        } else if (preg_match('/\Anot([\s(].*|)\z/si', $t, $m)) {
+        } else if ($t[0] === "n"
+                   && preg_match('/\Anot([\s(].*|)\z/s', $t, $m)) {
             $t = $m[1];
             if (!($e = $this->_parse_expr($t, self::$opprec["u!"], $in_qc))) {
                 return null;
@@ -1671,19 +1774,23 @@ class Formula implements Abbreviator {
         } else if (preg_match('/\A(false|true)\b(.*)\z/si', $t, $m)) {
             $e = new Constant_Fexpr($m[1], Fexpr::FBOOL);
             $t = $m[2];
-        } else if (preg_match('/\Anull\b(.*)\z/s', $t, $m)) {
+        } else if ($t[0] === "n"
+                   && preg_match('/\Anull\b(.*)\z/s', $t, $m)) {
             $e = Constant_Fexpr::cnull();
             $t = $m[1];
-        } else if (preg_match('/\Aopt(?:ion)?:\s*(.*)\z/s', $t, $m)) {
+        } else if ($t[0] === "o"
+                   && preg_match('/\Aopt(?:ion)?:\s*(.*)\z/s', $t, $m)) {
             $pos1 = -strlen($m[1]);
             $rest = self::_pop_argument($m[1]);
             $t = $rest[2];
             $e = $this->_parse_option($pos1, -strlen($t), $rest[1]);
-        } else if (preg_match('/\A(?:dec|decision):\s*([-a-zA-Z0-9_.#@*]+)(.*)\z/si', $t, $m)) {
+        } else if ($t[0] === "d"
+                   && preg_match('/\A(?:dec|decision):\s*([-a-zA-Z0-9_.#@*]+)(.*)\z/si', $t, $m)) {
             $me = PaperSearch::decision_matchexpr($this->conf, $m[1], false);
             $e = $this->field_search_fexpr(["outcome", $me]);
             $t = $m[2];
-        } else if (preg_match('/\A(?:dec|decision)\b(.*)\z/si', $t, $m)) {
+        } else if ($t[0] === "d"
+                   && preg_match('/\A(?:dec|decision)\b(.*)\z/si', $t, $m)) {
             $e = new Decision_Fexpr;
             $t = $m[1];
         } else if (preg_match('/\Ais:?rev?\b(.*)\z/is', $t, $m)) {
@@ -1698,64 +1805,40 @@ class Formula implements Abbreviator {
         } else if (preg_match('/\A(?:is|status):\s*([-a-zA-Z0-9_.#@*]+)(.*)\z/si', $t, $m)) {
             $e = $this->field_search_fexpr(PaperSearch::status_field_matcher($this->conf, $m[1]));
             $t = $m[2];
-        } else if (preg_match('/\A((?:r|re|rev|review)(?:type|round|words|auwords|)|round|reviewer)(?::|(?=#))\s*(.*)\z/is', $t, $m)) {
+        } else if ($t[0] === "r"
+                   && preg_match('/\A((?:r|re|rev|review)(?:type|round|words|auwords|)|round|reviewer)(?::|(?=#))\s*(.*)\z/is', $t, $m)) {
             $t = ":" . $m[2];
-            $e = $this->_reviewer_decoration($this->_reviewer_base($m[1]), $t);
-        } else if (preg_match('/\A((?:r|re|rev|review)(?:type|round|words|auwords)|round|reviewer|re|rev|review)\b\s*(?!\()(.*)\z/is', $t, $m)) {
+            $e = $this->_reviewer_decoration($t, $this->_reviewer_base($m[1]));
+        } else if ($t[0] === "r"
+                   && preg_match('/\A((?:r|re|rev|review)(?:type|round|words|auwords)|round|reviewer|re|rev|review)\b\s*(?!\()(.*)\z/is', $t, $m)) {
             $e = $this->_reviewer_base($m[1]);
             $t = $m[2];
-        } else if (preg_match('/\A(#|[A-Za-z][A-Za-z0-9_.@:]*)/is', $t, $m)
-                   && ($kwdef = $this->_find_formula_function($m))) {
-            $e = $this->_parse_function($t, $kwdef, $m[1]);
-        } else if (preg_match('/\A([-A-Za-z0-9_.@]+|\".*?\")(.*)\z/s', $t, $m)
-                   && $m[1] !== "\"\""
-                   && !preg_match('/\A\s*\(/s', $m[2])) {
-            $field = $m[1];
-            if (($quoted = $field[0] === "\"")) {
-                $field = substr($field, 1, strlen($field) - 2);
+        } else if ($t[0] === "l"
+                   && preg_match('/\Alet\s+([A-Za-z][A-Za-z0-9_]*)(\s*=\s*)(.*)\z/si', $t, $m)) {
+            $var = $m[1];
+            $varpos = -(strlen($m[1]) + strlen($m[2]) + strlen($m[3]));
+            if (preg_match('/\A(?:null|true|false|let|and|or|not|in)\z/', $var)) {
+                $this->lerror($varpos, $varpos + strlen($m[1]), "Reserved word.");
             }
-            while (1) {
-                if ($quoted || strlen($field) > 1) {
-                    $fs = $this->conf->find_all_fields($field);
-                } else {
-                    $fs = [];
-                }
-                if (count($fs) === 1) {
-                    $f = $fs[0];
-                    if ($f instanceof PaperOption) {
-                        $e = $this->_parse_option($pos1, -strlen($m[2]), $f->search_keyword());
-                    } else if ($f instanceof ReviewField) {
-                        if ($f->has_options) {
-                            $e = $this->_reviewer_decoration(new Score_Fexpr($f), $m[2]);
-                        } else {
-                            $this->lerror($pos1, -strlen($m[2]), "Textual review field can’t be used in formulas.");
-                        }
-                    } else if ($f instanceof Formula) {
-                        if ($f->_recursion === 0) {
-                            ++$this->_recursion;
-                            $f->set_user($this->user);
-                            $tt = $f->expression;
-                            $e = $f->_parse_ternary($tt, false);
-                            --$this->_recursion;
-                        } else {
-                            $this->lerror($pos1, -strlen($m[2]), "Circular formula reference.");
-                        }
-                    }
-                    break;
-                }
-                if ($quoted) {
-                    return null;
-                }
-                $dash = strrpos($field, "-");
-                if ($dash === false || $dash === 0) {
-                    $e = new Constant_Fexpr($field, false);
-                    break;
-                }
-                $m[2] = substr($field, $dash) . $m[2];
-                $field = substr($field, 0, $dash);
+            $vare = new VarDef_Fexpr($m[1]);
+            $vare->set_landmark($varpos, $varpos + strlen($m[1]));
+            $t = $m[3];
+            $e = $this->_parse_ternary($t, false);
+            if ($e && preg_match('/\A\s*in(?=[\s(])(.*)\z/si', $t, $m)) {
+                $t = $m[1];
+                $old_bind = $this->_bind[$var] ?? null;
+                $this->_bind[$var] = $vare;
+                $e2 = $this->_parse_ternary($t, $in_qc);
+                $this->_bind[$var] = $old_bind;
+            } else {
+                $this->lerror(-strlen($t), -strlen($t), "Expected “in”.");
+                $e2 = null;
             }
-            $t = $m[2];
-        } else if (preg_match('/\A\$(\d+)(.*)\z/s', $t, $m)
+            if ($e && $e2) {
+                $e = new Let_Fexpr($vare, $e, $e2);
+            }
+        } else if ($t[0] === "\$"
+                   && preg_match('/\A\$(\d+)(.*)\z/s', $t, $m)
                    && $this->_macro
                    && intval($m[1]) > 0) {
             if (intval($m[1]) <= count($this->_macro->args)) {
@@ -1764,12 +1847,49 @@ class Formula implements Abbreviator {
                 $e = Constant_Fexpr::cnull();
             }
             $t = $m[2];
+        } else if (($t[0] === "\"" && preg_match('/\A"(.*?)"(.*)\z/s', $t, $m))
+                   || ($t[0] === "\xE2" && preg_match('/\A[“”](.*?)["“”](.*)\z/su', $t, $m))) {
+            $fs = $m[1] === "" ? [] : $this->conf->find_all_fields($m[1]);
+            if (count($fs) !== 1) {
+                $e = new Constant_Fexpr($m[1], false);
+            } else {
+                $e = $this->_parse_field($pos1, $m[2], $fs[0]);
+            }
+            $t = $m[2];
+        } else if (!empty($this->_bind)
+                   && preg_match('/\A([A-Za-z][A-Za-z0-9_]*)/', $t, $m)
+                   && isset($this->_bind[$m[1]])) {
+            $e = new VarUse_Fexpr($this->_bind[$m[1]]);
+            $t = substr($t, strlen($m[1]));
+        } else if (preg_match('/\A(#|[A-Za-z][A-Za-z0-9_.@:]*)/is', $t, $m)
+                   && ($kwdef = $this->_find_formula_function($m))) {
+            $e = $this->_parse_function($t, $m[1], $kwdef);
+        } else if (preg_match('/\A([-A-Za-z0-9_.@]+)(.*)\z/s', $t, $m)
+                   && !preg_match('/\A\s*\(/s', $m[2])) {
+            $field = $m[1];
+            while (true) {
+                if (strlen($field) > 1) {
+                    $fs = $this->conf->find_all_fields($field);
+                    if (count($fs) === 1) {
+                        $e = $this->_parse_field($pos1, $m[2], $fs[0]);
+                        break;
+                    }
+                }
+                $dash = strrpos($field, "-");
+                if ($dash === false) {
+                    break;
+                }
+                $m[2] = substr($field, $dash) . $m[2];
+                $field = substr($field, 0, $dash);
+            }
+            $t = $m[2];
+            $e = $e ? : new Constant_Fexpr($field, false);
         } else if ($this->_depth
                    && preg_match('/\A([A-Za-z][A-Za-z0-9_.@:]*)/is', $t, $m)) {
-            $e = $this->_parse_function($t, (object) [
+            $e = $this->_parse_function($t, $m[1], (object) [
                 "name" => $m[1], "args" => true, "optional" => true,
                 "callback" => "Constant_Fexpr::make_error_call"
-            ], $m[1]);
+            ]);
         }
 
         if (!$e) {
@@ -1783,8 +1903,8 @@ class Formula implements Abbreviator {
             } else if (preg_match(self::BINARY_OPERATOR_REGEX, $t, $m)) {
                 $op = $m[0];
                 $tn = substr($t, strlen($m[0]));
-            } else if (preg_match('/\A(and|or)([\s(].*|)\z/i', $t, $m)) {
-                $op = strlen($m[1]) === 3 ? "&&" : "||";
+            } else if (preg_match('/\A(and|or|in)([\s(].*|)\z/s', $t, $m)) {
+                $op = $m[1];
                 $tn = $m[2];
             } else if (!$in_qc && substr($t, 0, 1) === ":") {
                 $op = ":";
@@ -1800,7 +1920,7 @@ class Formula implements Abbreviator {
 
             $t = $tn;
             $opx = self::$_oprewrite[$op] ?? $op;
-            $opassoc = get(self::$_oprassoc, $opx) ? $opprec : $opprec + 1;
+            $opassoc = (self::$_oprassoc[$opx] ?? false) ? $opprec : $opprec + 1;
 
             ++$this->_depth;
             $e2 = $this->_parse_expr($t, $opassoc, $in_qc);
@@ -1813,7 +1933,7 @@ class Formula implements Abbreviator {
 
             if (!$e2) {
                 if (!$e->error_format()) {
-                    $this->lerror(-strlen($t), -strlen($t), "Expression expected.");
+                    $this->lerror(-strlen($t), -strlen($t), "Missing expression.");
                 }
                 $e = Constant_Fexpr::cerror();
             } else if ($opx === "<" || $opx === ">" || $opx === "<=" || $opx === ">=") {
@@ -1839,6 +1959,32 @@ class Formula implements Abbreviator {
             }
             $e->set_landmark($pos1, -strlen($t));
         }
+    }
+
+    private function _parse_ternary(&$t, $in_qc) {
+        $pos1 = -strlen($t);
+        $e = $this->_parse_expr($t, 0, $in_qc);
+        if (!$e && $this->_depth) {
+            $this->lerror($pos1, $pos1, "Expression expected.");
+            return $e;
+        } else if (!$e || ($t = ltrim($t)) === "" || $t[0] !== "?") {
+            return $e;
+        }
+        $t = substr($t, 1);
+        ++$this->_depth;
+        $e1 = $this->_parse_ternary($t, true);
+        $e2 = null;
+        if (!$e1) {
+        } else if (($t = ltrim($t)) === "" || $t[0] !== ":") {
+            $this->lerror(-strlen($t), -strlen($t), "Expected “:”.");
+        } else {
+            $t = substr($t, 1);
+            $e2 = $this->_parse_ternary($t, $in_qc);
+        }
+        --$this->_depth;
+        $e = $e1 && $e2 ? new Ternary_Fexpr($e, $e1, $e2) : Constant_Fexpr::cerror();
+        $e->set_landmark($pos1, -strlen($t));
+        return $e;
     }
 
 
@@ -1868,10 +2014,10 @@ class Formula implements Abbreviator {
     private function _compile_function($sortable) {
         if ($this->check()) {
             $state = new FormulaCompiler($this->user);
-            $expr = $this->_parse->compile($state);
+            $expr = $this->_parse->fexpr->compile($state);
             $t = self::compile_body($this->user, $state, $expr, $sortable);
         } else {
-            $t = "return null;";
+            $t = "return null;\n";
         }
 
         $args = '$prow, $rrow_cid, $contact';
@@ -1891,9 +2037,9 @@ class Formula implements Abbreviator {
         return $this->_compile_function(2);
     }
 
-    static function compile_indexes_function(Contact $user, $datatypes) {
+    static function compile_indexes_function(Contact $user, $index_types) {
         $state = new FormulaCompiler($user);
-        $g = $state->loop_variable($datatypes);
+        $g = $state->loop_variable($index_types);
         $t = "assert(\$contact->contactId == $user->contactId);\n  "
             . join("\n  ", $state->gstmt)
             . "\n  return array_keys($g);\n";
@@ -1906,7 +2052,7 @@ class Formula implements Abbreviator {
         if ($this->_extractorf === null) {
             $this->check();
             $state = new FormulaCompiler($this->user);
-            if ($this->_parse && $this->_parse->compile_extractor($state)) {
+            if ($this->_parse && $this->_parse->fexpr->compile_extractor($state)) {
                 $t = self::compile_body($this->user, $state, null, 0);
                 if (count($state->fragments) === 1) {
                     $t .= "  return " . $state->fragments[0] . ";\n";
@@ -1935,11 +2081,11 @@ class Formula implements Abbreviator {
             $state = new FormulaCompiler($this->user);
             $state->combining = 0;
             $state->fragments = array_fill(0, $this->_extractor_nfragments, "0");
-            $t = self::compile_body(null, $state, $this->_parse->compile($state), 0);
+            $t = self::compile_body(null, $state, $this->_parse->fexpr->compile($state), 0);
         } else {
             $t = "return null;\n";
         }
-        $args = '$groups';
+        $args = '$extractor_results';
         self::DEBUG && Conf::msg_debugt("function ($args) {\n  // combiner " . simplify_whitespace($this->expression) . "\n  $t}\n");
         return eval("return function ($args) {\n  $t};");
     }
@@ -2068,28 +2214,23 @@ class Formula implements Abbreviator {
         if ($this->check()) {
             $state = new FormulaCompiler($this->user);
             $state->queryOptions =& $queryOptions;
-            $this->_parse->compile($state);
-            if ($this->needsReview) {
-                $state->loop_variable($state->all_datatypes);
+            $this->_parse->fexpr->compile($state);
+            if ($this->_parse->indexed) {
+                $state->loop_variable($this->_parse->index_type);
             }
         }
     }
 
     function view_score(Contact $user) {
         if ($this->check($this->user ? : $user)) {
-            return $this->_parse->view_score($user);
+            return $this->_parse->fexpr->view_score($user);
         } else {
-            return VIEWSCORE_EMPTY;
+            return VIEWSCORE_PC;
         }
     }
 
     function column_header() {
         return $this->name ? : $this->expression;
-    }
-
-    function is_indexed() {
-        $this->check();
-        return $this->needsReview;
     }
 
     function result_format() {
@@ -2111,10 +2252,26 @@ class Formula implements Abbreviator {
 
 
     function is_sum() {
-        return $this->check() && $this->_parse->op === "sum";
+        return $this->check() && $this->_parse->fexpr->op === "sum";
     }
 
-    function datatypes() {
-        return $this->check() ? $this->datatypes : 0;
+    function indexed() {
+        return $this->check() && $this->_parse->indexed;
+    }
+    function index_type() {
+        return $this->check() ? $this->_parse->index_type : 0;
+    }
+
+    function jsonSerialize() {
+        $j = [];
+        if ($this->formulaId) {
+            $j["id"] = $this->formulaId;
+        }
+        if ($this->name) {
+            $j["name"] = $this->name;
+        }
+        $j["expression"] = $this->expression;
+        $j["parse"] = $this->_parse->fexpr;
+        return $j;
     }
 }

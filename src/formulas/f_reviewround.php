@@ -4,15 +4,17 @@
 
 class ReviewRound_Fexpr extends Fexpr {
     function __construct() {
-        $this->format_ = self::FROUND;
+        $this->_format = self::FROUND;
+    }
+    function inferred_index() {
+        return Fexpr::IDX_PC;
     }
     function view_score(Contact $user) {
         return VIEWSCORE_PC;
     }
     function compile(FormulaCompiler $state) {
-        $state->datatype |= self::ASUBREV;
         $rrow = $state->_rrow();
-        if ($state->looptype === self::LMY) {
+        if ($state->index_type === Fexpr::IDX_MY) {
             return $state->define_gvar("myrevround", "{$rrow} ? {$rrow}->reviewRound : null");
         } else {
             $view_score = $state->user->permissive_view_score_bound();

@@ -14,13 +14,13 @@ class FormulaGraph_PaperColumn extends ScoreGraph_PaperColumn {
     function prepare(PaperList $pl, $visible) {
         if (!$this->formula->check($pl->user)
             || !($this->formula->result_format() instanceof ReviewField)
-            || !$pl->user->can_view_formula($this->formula, $pl->search->limit_author()))
+            || !$pl->user->can_view_formula($this->formula))
             return false;
         $this->format_field = $this->formula->result_format();
         $this->formula_function = $this->formula->compile_sortable_function();
         $this->indexes_function = null;
-        if ($this->formula->is_indexed())
-            $this->indexes_function = Formula::compile_indexes_function($pl->user, $this->formula->datatypes());
+        if ($this->formula->indexed())
+            $this->indexes_function = Formula::compile_indexes_function($pl->user, $this->formula->index_type());
         if ($visible)
             $this->formula->add_query_options($pl->qopts);
         parent::prepare($pl, $visible);
@@ -42,9 +42,9 @@ class FormulaGraph_PaperColumn extends ScoreGraph_PaperColumn {
     }
 
     static function expand($name, $user, $xfj, $m) {
-        $formula = new Formula($m[1], true);
+        $formula = new Formula($m[1], Formula::ALLOW_INDEXED);
         if (!$formula->check($user)) {
-            $user->conf->xt_factory_error($formula->error_html());
+            $user->conf->xt_factory_error("Formula error: " . $formula->error_html());
             return null;
         } else if (!($formula->result_format() instanceof ReviewField)) {
             $user->conf->xt_factory_error("Graphed formulas must return review fields.");

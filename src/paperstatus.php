@@ -33,11 +33,10 @@ class PaperStatus extends MessageSet {
 
     function __construct(Conf $conf, Contact $user = null, $options = array()) {
         $this->conf = $conf;
-        $this->user = $user;
-        foreach (array("no_notify", "export_ids", "hide_docids",
-                       "export_content", "disable_users",
-                       "allow_any_content_file", "content_file_prefix",
-                       "add_topics") as $k) {
+        $this->user = $user ?? $conf->site_contact();
+        foreach (["no_notify", "export_ids", "hide_docids", "add_topics",
+                  "export_content", "disable_users",
+                  "allow_any_content_file", "content_file_prefix"] as $k) {
             if (array_key_exists($k, $options))
                 $this->$k = $options[$k];
         }
@@ -163,15 +162,16 @@ class PaperStatus extends MessageSet {
         if (is_int($prow)) {
             $prow = $this->conf->fetch_paper(["paperId" => $prow, "topics" => true, "options" => true], $this->user);
         }
+
         $original_user = $user = $this->user;
         if (get($args, "forceShow")) {
-            $user = null;
+            $user = $this->conf->site_contact();
         }
-
-        if (!$prow || ($user && !$user->can_view_paper($prow))) {
+        if (!$prow || !$user->can_view_paper($prow)) {
             return null;
         }
         $this->user = $user;
+
         $original_no_msgs = $this->ignore_msgs;
         $this->ignore_msgs = true;
 
@@ -183,8 +183,7 @@ class PaperStatus extends MessageSet {
         $pj->title = $prow->title;
 
         $submitted_status = "submitted";
-        if ($prow->outcome != 0
-            && (!$user || $user->can_view_decision($prow))) {
+        if ($prow->outcome != 0 && $user->can_view_decision($prow)) {
             $pj->decision = $this->conf->decision_name($prow->outcome);
             if ($pj->decision === false) {
                 $pj->decision = (int) $prow->outcome;
@@ -299,7 +298,7 @@ class PaperStatus extends MessageSet {
 
         $options = array();
         foreach ($this->conf->paper_opts->option_list() as $o) {
-            if ($user && !$user->can_view_option($prow, $o)) {
+            if ($user && !$user->can_edit_option($prow, $o)) {
                 continue;
             }
             $ov = $prow->force_option($o);
@@ -804,7 +803,6 @@ class PaperStatus extends MessageSet {
         }
         // If user modifies paper, make them a contact (not just an author)
         if ($this->prow
-            && $this->user
             && !$this->user->allow_administer($this->prow)
             && $this->prow->conflict_type($this->user) === CONFLICT_AUTHOR) {
             if (!isset($pj->contacts)) {
@@ -1165,7 +1163,6 @@ class PaperStatus extends MessageSet {
                 if ($cflt->conflictType == CONFLICT_CHAIRMARK) {
                     $lemail = strtolower($cflt->email);
                     if (get_i($cflts, $lemail) < CONFLICT_CHAIRMARK
-                        && $this->user
                         && !$this->user->can_administer($this->prow)) {
                         $cflts[$lemail] = CONFLICT_CHAIRMARK;
                     }
@@ -1185,7 +1182,6 @@ class PaperStatus extends MessageSet {
             $ps->error_at("contacts", $ps->_("Each submission must have at least one contact."));
         }
         if ($ps->prow
-            && $ps->user
             && !$ps->user->allow_administer($ps->prow)
             && get($cflts, strtolower($ps->user->email), 0) < CONFLICT_AUTHOR) {
             $ps->error_at("contacts", $ps->_("You can’t remove yourself as submission contact. (Ask another contact to remove you.)"));
@@ -1226,7 +1222,7 @@ class PaperStatus extends MessageSet {
         }
     }
 
-    static function postcheck_contacts(PaperStatus $ps, $pj) {
+    static function check_contacts_last(PaperStatus $ps, $pj) {
         if (isset($ps->diffs["contacts"]) && !$ps->has_error_at("contacts")) {
             foreach (self::contacts_array($pj) as $c) {
                 $flags = get($c, "contact") ? 0 : Contact::SAVE_IMPORT;
@@ -1275,9 +1271,8 @@ class PaperStatus extends MessageSet {
         }
         if ($ps->_created_contacts !== null) {
             $rest = ["prow" => $ps->conf->fetch_paper($ps->paperId)];
-            if (!$ps->user
-                || ($ps->user->can_administer($rest["prow"])
-                    && !$rest["prow"]->has_author($ps->user))) {
+            if ($ps->user->can_administer($rest["prow"])
+                && !$rest["prow"]->has_author($ps->user)) {
                 $rest["adminupdate"] = true;
             }
             foreach ($ps->_created_contacts as $u) {
@@ -1341,7 +1336,7 @@ class PaperStatus extends MessageSet {
         self::check_options($this, $pj);
         self::check_status($this, $pj);
         self::check_final_status($this, $pj);
-        self::postcheck_contacts($this, $pj);
+        self::check_contacts_last($this, $pj);
         return true;
     }
 
@@ -1365,7 +1360,7 @@ class PaperStatus extends MessageSet {
         }
     }
 
-    static function postcheck_set_default_columns(PaperStatus $ps) {
+    static function preexecute_set_default_columns(PaperStatus $ps) {
         foreach (["title" => "", "abstract" => "", "authorInformation" => "",
                   "collaborators" => "", "paperStorageId" => 1,
                   "finalPaperStorageId" => 0] as $f => $v) {
@@ -1375,23 +1370,27 @@ class PaperStatus extends MessageSet {
         }
     }
 
-    static function postcheck_required_options(PaperStatus $ps) {
+    static function postexecute_check_required_options(PaperStatus $ps) {
         $prow = null;
-        $fail = false;
+        $required_failure = false;
         foreach ($ps->conf->paper_opts->option_list() as $o) {
             if (!$o->required) {
                 continue;
             }
             if (!$prow) {
-                $prow = $ps->conf->paper_set(["paperId" => $ps->paperId, "options" => true])->get($ps->paperId);
+                $prow = $ps->conf->paper_set(["paperId" => $ps->paperId, "options" => true], $ps->user)->get($ps->paperId);
             }
-            if (!$o->value_present($prow->force_option($o->id))
-                && $o->test_exists($prow)) {
+            if ($ps->user->can_edit_option($prow, $o)
+                && $o->test_required($prow)
+                && !$o->value_present($prow->force_option($o->id))) {
                 $ps->error_at_option($o, "Entry required.");
-                $fail = true;
+                $required_failure = true;
             }
         }
-        if ($fail && (!$ps->prow || $ps->prow->timeSubmitted == 0)) {
+        if ($required_failure
+            && (!$ps->prow || $ps->prow->timeSubmitted == 0)) {
+            // Some required option was missing and the paper was not submitted
+            // before, so it shouldn't be submitted now.
             $ps->conf->qe("update Paper set timeSubmitted=0 where paperId=?", $ps->paperId);
             $ps->_paper_submitted = false;
         }
@@ -1402,7 +1401,7 @@ class PaperStatus extends MessageSet {
         if (!empty($this->_paper_upd)) {
             $need_insert = $this->paperId <= 0;
             if ($need_insert) {
-                self::postcheck_set_default_columns($this);
+                self::preexecute_set_default_columns($this);
             }
 
             if ($this->conf->submission_blindness() == Conf::BLIND_NEVER) {
@@ -1496,11 +1495,13 @@ class PaperStatus extends MessageSet {
         self::execute_conflicts($this);
 
         if ($this->_paper_submitted) {
-            self::postcheck_required_options($this);
+            self::postexecute_check_required_options($this);
         }
 
         // maybe update `papersub` settings
-        $was_submitted = $this->prow && $this->prow->timeWithdrawn <= 0 && $this->prow->timeSubmitted > 0;
+        $was_submitted = $this->prow
+            && $this->prow->timeWithdrawn <= 0
+            && $this->prow->timeSubmitted > 0;
         if ($this->_paper_submitted != $was_submitted) {
             $this->conf->update_papersub_setting($this->_paper_submitted ? 1 : -1);
         }

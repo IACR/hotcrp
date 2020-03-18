@@ -16,10 +16,10 @@ class Formula_SearchTerm extends SearchTerm {
             $formula = $srch->conf->find_named_formula($word);
         }
         if (!$formula) {
-            $formula = new Formula($word, $is_graph);
+            $formula = new Formula($word, $is_graph ? Formula::ALLOW_INDEXED : 0);
         }
         if (!$formula->check($srch->user)) {
-            $srch->warn($formula->error_html());
+            $srch->warn("Formula error: " . $formula->error_html());
             $formula = null;
         }
         return $formula;

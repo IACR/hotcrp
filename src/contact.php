@@ -2760,8 +2760,7 @@ class Contact {
             || ($opt->final && !$this->allow_edit_final_paper($prow))
             || ($opt->id === 0 && $this->allow_edit_final_paper($prow))) {
             return 0;
-        }
-        if (!$opt->test_exists($prow)) {
+        } else if (!$opt->test_exists($prow)) {
             return $opt->compile_exists_condition($prow) ? 1 : 0;
         } else {
             return 2;
@@ -2775,19 +2774,21 @@ class Contact {
     }
 
     function user_option_list() {
-        if ($this->conf->has_any_accepted() && $this->can_view_some_decision())
+        if ($this->conf->has_any_accepted() && $this->can_view_some_decision()) {
             return $this->conf->paper_opts->option_list();
-        else
+        } else {
             return $this->conf->paper_opts->nonfinal_option_list();
+        }
     }
 
     function perm_view_option(PaperInfo $prow, $opt) {
-        if ($this->can_view_option($prow, $opt))
+        if ($this->can_view_option($prow, $opt)) {
             return null;
-        if (!is_object($opt) && !($opt = $this->conf->paper_opts->get($opt)))
+        } else if (!is_object($opt) && !($opt = $this->conf->paper_opts->get($opt))) {
             return $prow->make_whynot();
-        if (($whyNot = $this->perm_view_paper($prow, $opt->has_document())))
+        } else if (($whyNot = $this->perm_view_paper($prow, $opt->has_document()))) {
             return $whyNot;
+        }
         $whyNot = $prow->make_whynot();
         $rights = $this->rights($prow);
         $oview = $opt->visibility;
@@ -2817,8 +2818,9 @@ class Contact {
 
     function can_view_some_option(PaperOption $opt) {
         if (($opt->has_document() && !$this->can_view_some_pdf())
-            || ($opt->final && !$this->can_view_some_decision()))
+            || ($opt->final && !$this->can_view_some_decision())) {
             return false;
+        }
         $oview = $opt->visibility;
         return $this->is_author()
             || ($oview == "admin" && $this->is_manager())
@@ -3091,8 +3093,9 @@ class Contact {
     }
 
     function perm_request_review(PaperInfo $prow, $round, $check_time) {
-        if ($this->can_request_review($prow, $round, $check_time))
+        if ($this->can_request_review($prow, $round, $check_time)) {
             return null;
+        }
         $rights = $this->rights($prow);
         $whyNot = $prow->make_whynot();
         if (!$rights->allow_administer
@@ -3127,23 +3130,26 @@ class Contact {
                 && $this->is_owned_review($rrow))
             || ($rrow
                 && $rrow->contactId != $this->contactId
-                && $rights->allow_administer))
+                && $rights->allow_administer)) {
             return $this->conf->time_review($rrow, $rights->allow_pc, true);
-        else if ($rights->allow_review
-                 && $this->conf->setting("pcrev_any") > 0)
+        } else if ($rights->allow_review
+                   && $this->conf->setting("pcrev_any") > 0) {
             return $this->conf->time_review(null, true, true);
-        else
+        } else {
             return false;
+        }
     }
 
     function can_become_reviewer_ignore_conflict(PaperInfo $prow = null) {
-        if (!$prow)
+        if ($prow) {
+            $rights = $this->rights($prow);
+            return $rights->potential_reviewer
+                || ($rights->allow_pc_broad
+                    && $this->conf->check_tracks($prow, $this, Track::ASSREV));
+        } else {
             return $this->isPC
                 && $this->conf->check_all_tracks($this, Track::ASSREV);
-        $rights = $this->rights($prow);
-        return $rights->potential_reviewer
-            || ($rights->allow_pc_broad
-                && $this->conf->check_tracks($prow, $this, Track::ASSREV));
+        }
     }
 
     function allow_view_preference(PaperInfo $prow = null, $aggregate = false) {
@@ -3201,17 +3207,19 @@ class Contact {
     }
 
     private function rights_owned_review($rights, $rrow) {
-        if ($rrow)
+        if ($rrow) {
             return $rights->can_administer || $this->is_owned_review($rrow);
-        else
+        } else {
             return $rights->reviewType > 0;
+        }
     }
 
     function can_review(PaperInfo $prow, ReviewInfo $rrow = null, $submit = false) {
         assert(!$rrow || $rrow->paperId == $prow->paperId);
         $rights = $this->rights($prow);
-        if ($submit && !$this->can_clickthrough("review"))
+        if ($submit && !$this->can_clickthrough("review")) {
             return false;
+        }
         return ($this->rights_owned_review($rights, $rrow)
                 && $this->conf->time_review($rrow, $rights->allow_pc, true))
             || (!$rrow
@@ -3226,39 +3234,43 @@ class Contact {
     }
 
     function perm_review(PaperInfo $prow, $rrow, $submit = false) {
-        if ($this->can_review($prow, $rrow, $submit))
+        if ($this->can_review($prow, $rrow, $submit)) {
             return null;
+        }
         $rights = $this->rights($prow);
         $rrow_cid = $rrow ? $rrow->contactId : 0;
         // The "reviewNotAssigned" and "deadline" failure reasons are special.
         // If either is set, the system will still allow review form download.
         $whyNot = $prow->make_whynot();
         if ($rrow && $rrow_cid != $this->contactId
-            && !$rights->allow_administer)
+            && !$rights->allow_administer) {
             $whyNot["differentReviewer"] = 1;
-        else if (!$rights->allow_pc && !$this->rights_owned_review($rights, $rrow))
+        } else if (!$rights->allow_pc && !$this->rights_owned_review($rights, $rrow)) {
             $whyNot["permission"] = "review";
-        else if ($prow->timeWithdrawn > 0)
+        } else if ($prow->timeWithdrawn > 0) {
             $whyNot["withdrawn"] = 1;
-        else if ($prow->timeSubmitted <= 0)
+        } else if ($prow->timeSubmitted <= 0) {
             $whyNot["notSubmitted"] = 1;
-        else {
-            if ($rights->conflictType > 0 && !$rights->can_administer)
+        } else {
+            if ($rights->conflictType > 0 && !$rights->can_administer) {
                 $whyNot["conflict"] = 1;
-            else if ($rights->allow_review
-                     && !$this->rights_owned_review($rights, $rrow)
-                     && (!$rrow || $rrow_cid == $this->contactId))
+            } else if ($rights->allow_review
+                       && !$this->rights_owned_review($rights, $rrow)
+                       && (!$rrow || $rrow_cid == $this->contactId)) {
                 $whyNot["reviewNotAssigned"] = 1;
-            else if ($this->can_review($prow, $rrow, false)
-                     && !$this->can_clickthrough("review"))
+            } else if ($this->can_review($prow, $rrow, false)
+                       && !$this->can_clickthrough("review")) {
                 $whyNot["clickthrough"] = 1;
-            else
+            } else {
                 $whyNot["deadline"] = ($rights->allow_pc ? "pcrev_hard" : "extrev_hard");
+            }
             if ($rights->allow_administer
-                && ($rights->conflictType > 0 || $prow->timeSubmitted <= 0))
+                && ($rights->conflictType > 0 || $prow->timeSubmitted <= 0)) {
                 $whyNot["forceShow"] = 1;
-            if ($rights->allow_administer && isset($whyNot["deadline"]))
+            }
+            if ($rights->allow_administer && isset($whyNot["deadline"])) {
                 $whyNot["override"] = 1;
+            }
         }
         return $whyNot;
     }
@@ -3276,26 +3288,31 @@ class Contact {
     }
 
     function perm_create_review_from(PaperInfo $prow, Contact $user) {
-        if ($this->can_create_review_from($prow, $user))
+        if ($this->can_create_review_from($prow, $user)) {
             return null;
+        }
         $rights = $this->rights($prow);
         $whyNot = $prow->make_whynot();
-        if (!$rights->allow_administer)
+        if (!$rights->allow_administer) {
             $whyNot["administer"] = 1;
-        else if ($prow->timeWithdrawn > 0)
+        } else if ($prow->timeWithdrawn > 0) {
             $whyNot["withdrawn"] = 1;
-        else if ($prow->timeSubmitted <= 0)
+        } else if ($prow->timeSubmitted <= 0) {
             $whyNot["notSubmitted"] = 1;
-        else {
-            if ($user->isPC && !$user->can_accept_review_assignment($prow))
+        } else {
+            if ($user->isPC && !$user->can_accept_review_assignment($prow)) {
                 $whyNot["unacceptableReviewer"] = 1;
-            if (!$this->conf->time_review(null, true, true))
+            }
+            if (!$this->conf->time_review(null, true, true)) {
                 $whyNot["deadline"] = ($user->isPC ? "pcrev_hard" : "extrev_hard");
+            }
             if ($rights->allow_administer
-                && ($rights->conflictType > 0 || $prow->timeSubmitted <= 0))
+                && ($rights->conflictType > 0 || $prow->timeSubmitted <= 0)) {
                 $whyNot["forceShow"] = 1;
-            if ($rights->allow_administer && isset($whyNot["deadline"]))
+            }
+            if ($rights->allow_administer && isset($whyNot["deadline"])) {
                 $whyNot["override"] = 1;
+            }
         }
         return $whyNot;
     }
@@ -3305,8 +3322,9 @@ class Contact {
             $csha1 = sha1($this->conf->_i("clickthrough_$ctype"));
             $data = $this->data("clickthrough");
             return $data && get($data, $csha1);
-        } else
+        } else {
             return true;
+        }
     }
 
     function can_view_review_ratings(PaperInfo $prow, ReviewInfo $rrow = null, $override_self = false) {
@@ -3314,24 +3332,27 @@ class Contact {
         $rights = $this->rights($prow);
         if (!$this->can_view_review($prow, $rrow)
             || (!$rights->allow_pc && !$rights->allow_review)
-            || ($rs != REV_RATINGS_PC && $rs != REV_RATINGS_PC_EXTERNAL))
+            || ($rs != REV_RATINGS_PC && $rs != REV_RATINGS_PC_EXTERNAL)) {
             return false;
+        }
         if (!$rrow
             || $override_self
             || $rrow->contactId != $this->contactId
             || $this->can_administer($prow)
             || $this->conf->setting("pc_seeallrev")
-            || (isset($rrow->allRatings) && strpos($rrow->allRatings, ",") !== false))
+            || (isset($rrow->allRatings) && strpos($rrow->allRatings, ",") !== false)) {
             return true;
+        }
         // Do not show rating counts if rater identity is unambiguous.
         // See also PaperSearch::_clauseTermSetRating.
         $nsubraters = 0;
-        foreach ($prow->reviews_by_id() as $rrow)
+        foreach ($prow->reviews_by_id() as $rrow) {
             if ($rrow->reviewNeedsSubmit == 0
                 && $rrow->contactId != $this->contactId
                 && ($rs == REV_RATINGS_PC_EXTERNAL
                     || ($rs == REV_RATINGS_PC && $rrow->reviewType > REVIEW_EXTERNAL)))
                 ++$nsubraters;
+        }
         return $nsubraters >= 2;
     }
 
@@ -3353,16 +3374,18 @@ class Contact {
             return true;
         }
         if ($this->_review_tokens) {
-            foreach ($prow->reviews_of_user($crow->contactId) as $rrow)
+            foreach ($prow->reviews_of_user($crow->contactId) as $rrow) {
                 if ($rrow->reviewToken && in_array($rrow->reviewToken, $this->_review_tokens))
                     return true;
+            }
         }
         return false;
     }
 
     function can_comment(PaperInfo $prow, $crow, $submit = false) {
-        if ($crow && ($crow->commentType & COMMENTTYPE_RESPONSE))
+        if ($crow && ($crow->commentType & COMMENTTYPE_RESPONSE)) {
             return $this->can_respond($prow, $crow, $submit);
+        }
         $rights = $this->rights($prow);
         $author = $rights->act_author
             && $this->conf->setting("cmt_author") > 0
@@ -3579,9 +3602,8 @@ class Contact {
         return $this->can_administer(null);
     }
 
-    function can_view_formula(Formula $formula, $as_author = false) {
-        $bound = $this->permissive_view_score_bound($as_author);
-        return $formula->view_score($this) > $bound;
+    function can_view_formula(Formula $formula) {
+        return $formula->view_score($this) > $this->permissive_view_score_bound();
     }
 
     function can_edit_formula(Formula $formula) {
@@ -4106,8 +4128,9 @@ class Contact {
             $options = $pids;
         }
         $prows = $this->conf->paper_set($options, $this);
-        if ($ssel)
+        if ($ssel) {
             $prows->sort_by([$pids, "order_compare"]);
+        }
         return $prows;
     }
 

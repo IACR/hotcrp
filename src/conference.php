@@ -253,7 +253,7 @@ class Conf {
 
         // update schema
         $this->sversion = $this->settings["allowPaperOption"];
-        if ($this->sversion < 229) {
+        if ($this->sversion < 230) {
             require_once("updateschema.php");
             $old_nerrors = Dbl::$nerrors;
             updateSchema($this);
@@ -1087,27 +1087,31 @@ class Conf {
         if ($this->_defined_formulas === null) {
             $this->_defined_formulas = [];
             if ($this->setting("formulas")) {
-                $result = $this->q("select * from Formula order by lower(name)");
+                $result = $this->q("select * from Formula");
                 while ($result && ($f = Formula::fetch($this, $result))) {
                     $this->_defined_formulas[$f->formulaId] = $f;
                 }
                 Dbl::free($result);
+                uasort($this->_defined_formulas, function ($a, $b) {
+                    return strnatcasecmp($a->name, $b->name);
+                });
             }
         }
         return $this->_defined_formulas;
     }
 
-    function invalidate_named_formulas() {
-        $this->_defined_formulas = null;
+    function replace_named_formulas($formula_map) {
+        $this->_defined_formulas = $formula_map;
+        $this->_abbrev_matcher = null;
     }
 
     function find_named_formula($text) {
         return $this->abbrev_matcher()->find1($text, self::FSRCH_FORMULA);
     }
 
-    function viewable_named_formulas(Contact $user, $author_only = false) {
-        return array_filter($this->named_formulas(), function ($f) use ($user, $author_only) {
-            return $user->can_view_formula($f, $author_only);
+    function viewable_named_formulas(Contact $user) {
+        return array_filter($this->named_formulas(), function ($f) use ($user) {
+            return $user->can_view_formula($f);
         });
     }
 
@@ -1134,31 +1138,36 @@ class Conf {
     }
 
     function decision_name($dnum) {
-        if ($this->_decisions === null)
+        if ($this->_decisions === null) {
             $this->decision_map();
-        if (($dname = get($this->_decisions, $dnum)))
+        }
+        if (($dname = get($this->_decisions, $dnum))) {
             return $dname;
-        else
+        } else {
             return false;
+        }
     }
 
     static function decision_name_error($dname) {
         $dname = simplify_whitespace($dname);
-        if ((string) $dname === "")
+        if ((string) $dname === "") {
             return "Empty decision name.";
-        else if (preg_match(',\A(?:yes|no|any|none|unknown|unspecified|undecided|\?)\z,i', $dname))
+        } else if (preg_match('/\A(?:yes|no|any|none|unknown|unspecified|undecided|\?)\z/i', $dname)) {
             return "Decision name “{$dname}” is reserved.";
-        else
+        } else {
             return false;
+        }
     }
 
     function decision_matcher() {
         if ($this->_decision_matcher === null) {
             $this->_decision_matcher = new AbbreviationMatcher;
-            foreach ($this->decision_map() as $d => $dname)
+            foreach ($this->decision_map() as $d => $dname) {
                 $this->_decision_matcher->add($dname, $d);
-            foreach (["none", "unknown", "undecided", "?"] as $dname)
+            }
+            foreach (["none", "unknown", "undecided", "?"] as $dname) {
                 $this->_decision_matcher->add($dname, 0);
+            }
         }
         return $this->_decision_matcher;
     }
@@ -1174,8 +1183,9 @@ class Conf {
     }
 
     function topic_set() {
-        if ($this->_topic_set === null)
+        if ($this->_topic_set === null) {
             $this->_topic_set = new TopicSet($this);
+        }
         return $this->_topic_set;
     }
 
@@ -1189,8 +1199,9 @@ class Conf {
 
 
     function conflict_types() {
-        if ($this->_conflict_types === null)
+        if ($this->_conflict_types === null) {
             $this->_conflict_types = new Conflict($this);
+        }
         return $this->_conflict_types;
     }
 
@@ -1202,14 +1213,16 @@ class Conf {
     function abbrev_matcher() {
         if (!$this->_abbrev_matcher) {
             $this->_abbrev_matcher = new AbbreviationMatcher;
+            $this->_abbrev_matcher->set_priority(self::FSRCH_FORMULA, -1);
             // XXX exposes invisible paper options, review fields
             $this->paper_opts->populate_abbrev_matcher($this->_abbrev_matcher);
             foreach ($this->all_review_fields() as $f) {
                 $this->_abbrev_matcher->add($f->name, $f, self::FSRCH_REVIEW);
             }
             foreach ($this->named_formulas() as $f) {
-                if ($f->name)
+                if ($f->name) {
                     $this->_abbrev_matcher->add($f->name, $f, self::FSRCH_FORMULA);
+                }
             }
         }
         return $this->_abbrev_matcher;
@@ -1889,14 +1902,16 @@ class Conf {
     }
 
     function pc_members_and_admins() {
-        if ($this->_pc_members_and_admins_cache === null)
+        if ($this->_pc_members_and_admins_cache === null) {
             $this->pc_members();
+        }
         return $this->_pc_members_and_admins_cache;
     }
 
     function pc_chairs() {
-        if ($this->_pc_chairs_cache === null)
+        if ($this->_pc_chairs_cache === null) {
             $this->pc_members();
+        }
         return $this->_pc_chairs_cache;
     }
 
@@ -1917,13 +1932,14 @@ class Conf {
     }
 
     function pc_member_by_id($cid) {
-        return get($this->pc_members(), $cid);
+        return ($this->pc_members())[$cid] ?? null;
     }
 
     function pc_member_by_email($email) {
-        foreach ($this->pc_members() as $p)
+        foreach ($this->pc_members() as $p) {
             if (strcasecmp($p->email, $email) == 0)
                 return $p;
+        }
         return null;
     }
 

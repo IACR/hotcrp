@@ -27,7 +27,7 @@ class Formula_PaperColumn extends PaperColumn {
     }
     function prepare(PaperList $pl, $visible) {
         if (!$this->formula->check($pl->user)
-            || !$pl->user->can_view_formula($this->formula, $pl->search->limit_author())) {
+            || !$pl->user->can_view_formula($this->formula)) {
             return false;
         }
         $this->formula_function = $this->formula->compile_function();
@@ -205,7 +205,7 @@ class Formula_PaperColumnFactory {
                 return [Formula_PaperColumnFactory::make($ff, $xfj)];
             }
         } else if ($ff && $want_error) {
-            $user->conf->xt_factory_error($ff->error_html());
+            $user->conf->xt_factory_error("Formula error: " . $ff->error_html());
         }
         return null;
     }

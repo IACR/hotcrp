@@ -319,20 +319,23 @@ class PaperTable {
         }
         if ($this->foldmap[6]) {
             $abstract = $this->entryData("abstract");
-            if ($this->entryMatches || !$this->abstract_foldable($abstract))
+            if ($this->entryMatches || !$this->abstract_foldable($abstract)) {
                 $this->foldmap[6] = false;
+            }
         }
         if ($this->matchPreg && ($this->foldmap[8] || $this->foldmap[9])) {
             $this->entryData("authorInformation"); // check entryMatches
-            if ($this->entryMatches)
+            if ($this->entryMatches) {
                 $this->foldmap[8] = $this->foldmap[9] = false;
+            }
         }
 
         // collect folders
         $folders = ["clearfix", "need-fold-storage"];
         foreach ($this->foldmap as $num => $f) {
-            if ($num !== 8 || $this->user->view_authors_state($this->prow) === 1)
+            if ($num !== 8 || $this->user->view_authors_state($this->prow) === 1) {
                 $folders[] = "fold" . $num . ($f ? "c" : "o");
+            }
         }
 
         // echo div
@@ -349,11 +352,12 @@ class PaperTable {
     private function problem_status_at($f) {
         if ($this->edit_status) {
             if (str_starts_with($f, "au")) {
-                if ($f === "authorInformation")
+                if ($f === "authorInformation") {
                     $f = "authors";
-                else if (preg_match('/\A.*?(\d+)\z/', $f, $m)
-                         && ($ps = $this->edit_status->problem_status_at("author$m[1]")))
+                } else if (preg_match('/\A.*?(\d+)\z/', $f, $m)
+                           && ($ps = $this->edit_status->problem_status_at("author$m[1]"))) {
                     return $ps;
+                }
             }
             return $this->edit_status->problem_status_at($f);
         } else {
@@ -396,16 +400,6 @@ class PaperTable {
             echo '" id="' . $id;
         }
         echo '">', Ht::label($heading, $for === "checkbox" ? false : $for, ["class" => "papfn"]), '</div>';
-    }
-
-    function messages_at($field) {
-        $t = "";
-        if ($this->edit_status) {
-            foreach ($this->edit_status->messages_at($field, true) as $mx)
-                $t .= '<p class="' . MessageSet::status_class($mx[2], "settings-ap f-h", "is-")
-                    . '">' . $mx[1] . '</p>';
-        }
-        return $t;
     }
 
     private function papt($what, $name, $extra = array()) {
@@ -492,17 +486,18 @@ class PaperTable {
         return $table_type === "col" ? nl2br($text) : $text;
     }
 
-    function edit_title_html($option) {
-        $t = $option->edit_title();
-        if (str_ends_with($t, ")")
-            && preg_match('{\A([^()]* +)(\([^()]+\))\z}', $t, $m)) {
-            return htmlspecialchars($m[1]) . '<span class="n">' . htmlspecialchars($m[2]) . '</span>';
-        } else {
-            return htmlspecialchars($t);
+    function messages_at($field, $klass = "f-h") {
+        $t = "";
+        if ($this->edit_status) {
+            foreach ($this->edit_status->messages_at($field, true) as $mx) {
+                $t .= '<p class="' . MessageSet::status_class($mx[2], $klass, "is-") . '">' . $mx[1] . '</p>';
+            }
         }
+        return $t;
     }
 
     private function echo_field_hint($opt) {
+        echo $this->messages_at($opt->formid, "papalert");
         $fr = new FieldRender(FieldRender::CFHTML);
         $fr->value_format = 5;
         if ($opt->description_format !== null) {
@@ -512,6 +507,16 @@ class PaperTable {
                                        $opt->formid, $opt->description);
         if (!$fr->is_empty()) {
             echo $fr->value_html("paphint");
+        }
+    }
+
+    function edit_title_html($option) {
+        $t = $option->edit_title();
+        if (str_ends_with($t, ")")
+            && preg_match('{\A([^()]* +)(\([^()]+\))\z}', $t, $m)) {
+            return htmlspecialchars($m[1]) . '<span class="n">' . htmlspecialchars($m[2]) . '</span>';
+        } else {
+            return htmlspecialchars($t);
         }
     }
 
@@ -728,8 +733,7 @@ class PaperTable {
 
         echo '<div class="document-replacer">',
             Ht::button($doc ? "Replace" : "Upload", ["class" => "ui js-replace-document", "id" => $inputid]),
-            '</div>',
-            $this->messages_at($field), "</div></div>\n\n";
+            "</div></div></div>\n\n";
     }
 
     function render_abstract(FieldRender $fr, PaperOption $o) {
@@ -869,9 +873,7 @@ class PaperTable {
                 ++$n;
             } while ($n <= $min_authors);
         }
-        echo "</tbody></table>",
-            $this->messages_at("authors"),
-            "</div></div>\n\n";
+        echo "</tbody></table></div></div>\n\n";
     }
 
     private function authorData($table, $type, $viewAs = null) {
@@ -1397,7 +1399,7 @@ class PaperTable {
         }
         echo '</div><div class="ug">',
             Ht::button("Add contact", ["class" => "ui row-order-ui addrow"]),
-            "</div>", $this->messages_at("contacts"), "</div></div>\n\n";
+            "</div></div></div>\n\n";
     }
 
     function echo_editable_anonymity($option) {
@@ -1410,8 +1412,7 @@ class PaperTable {
         $heading = '<span class="checkc">' . Ht::checkbox("blind", 1, $blind, ["data-default-checked" => $pblind]) . "</span>" . $this->edit_title_html($option);
         $this->echo_editable_papt("blind", $heading, ["for" => "checkbox"]);
         $this->echo_field_hint($option);
-        echo $this->messages_at("blind"),
-            "</div>\n\n";
+        echo "</div>\n\n";
     }
 
     private function _papstrip_framework() {
@@ -1527,7 +1528,7 @@ class PaperTable {
                 echo '</div></div></div>';
             }
         }
-        echo "</div>", $this->messages_at("topics"), "</div></div>\n\n";
+        echo "</div></div></div>\n\n";
     }
 
     function echo_editable_option_papt(PaperOption $o, $heading = null, $rest = []) {
@@ -1638,7 +1639,7 @@ class PaperTable {
             }
             echo "</div></div>";
         }
-        echo "</div>", $this->messages_at("pcconf"), "</div></div>\n\n";
+        echo "</div></div></div>\n\n";
     }
 
     private function papstripPCConflicts() {
@@ -1862,7 +1863,7 @@ class PaperTable {
         return $s;
     }
 
-    private function papstripRank($tag) {
+    private function papstrip_rank($tag) {
         $id = "rank_" . html_id_encode($tag);
         if (($myval = $this->prow->tag_value($this->user->contactId . "~$tag")) === false) {
             $myval = "";
@@ -1887,7 +1888,7 @@ class PaperTable {
         Ht::stash_script('edit_paper_ui.prepare_pstagindex()');
     }
 
-    private function papstripVote($tag, $allotment) {
+    private function papstrip_allotment($tag, $allotment) {
         $id = "vote_" . html_id_encode($tag);
         if (($myval = $this->prow->tag_value($this->user->contactId . "~$tag")) === false) {
             $myval = "";
@@ -1900,7 +1901,7 @@ class PaperTable {
             echo Ht::hidden("forceShow", $this->qreq->forceShow);
         }
         echo $this->papt($id, $this->papstrip_tag_entry_title("{{}} votes", $tag, $myval),
-                         array("type" => "ps", "fold" => $id, "float" => $totmark)),
+                         ["type" => "ps", "fold" => $id, "float" => $totmark]),
             '<div class="psv"><div class="fx">',
             Ht::entry("tagindex", $myval, ["size" => 4, "class" => "is-tag-index want-focus", "data-tag-base" => "~$tag", "inputmode" => "decimal"]),
             " &nbsp;of $allotment",
@@ -1910,7 +1911,7 @@ class PaperTable {
         Ht::stash_script('edit_paper_ui.prepare_pstagindex()');
     }
 
-    private function papstripApproval($tag) {
+    private function papstrip_approval($tag) {
         $id = "approval_" . html_id_encode($tag);
         if (($myval = $this->prow->tag_value($this->user->contactId . "~$tag")) === false) {
             $myval = "";
@@ -2236,11 +2237,11 @@ class PaperTable {
         foreach ($this->conf->tags() as $ltag => $t) {
             if ($this->user->can_change_tag($this->prow, "~$ltag", null, 0)) {
                 if ($t->approval) {
-                    $this->papstripApproval($t->tag);
+                    $this->papstrip_approval($t->tag);
                 } else if ($t->vote) {
-                    $this->papstripVote($t->tag, $t->vote);
+                    $this->papstrip_allotment($t->tag, $t->vote);
                 } else if ($t->rank) {
-                    $this->papstripRank($t->tag);
+                    $this->papstrip_rank($t->tag);
                 }
             }
         }
