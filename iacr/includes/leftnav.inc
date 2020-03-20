@@ -3,7 +3,9 @@
   <div class="navheader font-weight-bold">Import</div>
   <div><a id="menucomm" class="navitem" href="comm.php">Program committee</a></div>
   <div><a id="menucoll" class="navitem" href="coll.php">PC Collaborators</a></div>
-  <div class="navheader font-weight-bold">Export</div>
+  <div class="navheader font-weight-bold">Final versions</div>
+  <div><a id="menuaccepted" class="navitem" href="copyright.php">Copyright forms</a></div>
+  <div><a id="menuaccepted" class="navitem" href="submit.php">Final papers</a></div>
   <div><a id="menuaccepted" class="navitem" href="accepted.php">Accepted papers</a></div>
   <div><a id="menulncs" class="navitem" href="lncs.php">LNCS table of contents</a></div>
   <div><a id="menuprogram" class="navitem" href="program.php">Program</a></div>
