@@ -92,6 +92,7 @@ switch($Opt["iacrType"]) {
     break;
   case "rump":
   case "rwc":
+    // TODO: fix this for video and slides.
     showError($Opt["iacrType"] . " doesn't use copyright form");
     $db = null;
     exit;
