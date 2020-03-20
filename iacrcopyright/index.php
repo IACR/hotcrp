@@ -73,9 +73,6 @@ $substitutions = array('[$action]' => $action,
    );
 // We use one of two different copyright forms.
 switch($Opt["iacrType"]) {
-  case "conference":
-    $file = "$ConfSitePATH/iacrcopyright/templates/conference_copyright.html";
-    break;
   case "tosc":
     $substitutions["longName"] = "IACR Transactions on Symmetric Cryptology";
     $substitutions["shortName"] = "ToSC";
@@ -86,7 +83,19 @@ switch($Opt["iacrType"]) {
     $substitutions["shortName"] = "TCHES";
     $file = "$ConfSitePATH/iacrcopyright/templates/journal_copyright.html";
     break;
-  default: // rump doesn't have copyright.
+  case "crypto": // otherwise it's a conference
+  case "eurocrypt":
+  case "asiacrypt":
+  case "tcc":
+  case "pkc":
+    $file = "$ConfSitePATH/iacrcopyright/templates/conference_copyright.html";
+    break;
+  case "rump":
+  case "rwc":
+    showError($Opt["iacrType"] . " doesn't use copyright form");
+    $db = null;
+    exit;
+  default:
     showError("unknown iacrType");
     $db = null;
     exit;
@@ -238,5 +247,3 @@ try {
   $db = null;
 }
 ?>
-</body>
-</html>
