@@ -2,6 +2,13 @@
 // papertable.php -- HotCRP helper class for producing paper tables
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
+///////////// Added for IACR functionality ////////////
+global $ConfSitePATH, $Opt;
+if (isset($Opt["iacrType"])) {
+  include "$ConfSitePATH/iacr/includes/papertable.php";
+}
+///////////////////////////////////////////////////////
+
 class PaperTable {
     public $conf;
     public $prow;
@@ -660,6 +667,11 @@ class PaperTable {
                 || $noPapers === true
                 || ($dtype == DTYPE_FINAL) !== $this->canUploadFinal)
                 return;
+        }
+        if (isset($docx->conf->opt["iacrType"]) && $dtype === DTYPE_FINAL) {
+          echo_iacr_final_upload($docx, $this->prow);
+          echo "</div>";
+          return;
         }
         $inputid = $dtype > 0 ? "opt" . $dtype : "paperUpload";
 
@@ -1532,13 +1544,14 @@ class PaperTable {
     }
 
     function echo_editable_option_papt(PaperOption $o, $heading = null, $rest = []) {
+        global $Opt;
         if (!$heading) {
             $heading = $this->edit_title_html($o);
         }
-        $this->echo_editable_papt($o->formid, $heading, $rest, $o);
         if ($o !== null && $o->readable_formid() === "iacr-copyright-agreement") {
-            echo "<strong><a href=\"../../iacrcopyright/" . $this->prow->paperId  . "\">IACR copyright form</a></strong>";
+            echo_iacrcopyright_button($this->prow->paperId, $Opt["shortName"]);
         }
+        $this->echo_editable_papt($o->formid, $heading, $rest, $o);
         $this->echo_field_hint($o);
         echo Ht::hidden("has_{$o->formid}", 1);
     }
@@ -2394,6 +2407,14 @@ class PaperTable {
         }
 
         echo "</div></form>";
+
+        // This is to disable the IACR checkboxes on the submission form for
+        // a paper. We control those separately when an appropriate action is
+        // completed.
+        if (array_key_exists("iacrType", $this->conf->opt)) {
+          Ht::stash_script("iacrSubmitAndUploadCheckboxes()");
+        }
+
         $this->user->set_overrides($overrides);
     }
 

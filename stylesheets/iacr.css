@@ -147,3 +147,20 @@ select#iacrvenue {
 button#fetchIACR {
   margin-left: 0.8rem;
 }
+
+/* buttons for submitting final paper and slides. */
+a.iacrSubmitButtons {
+  border-radius: 4px;
+  margin: .0 2rem .5rem 0rem;
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+  color: white;
+  padding: .4em;
+  text-decoration: none;
+  display: inline-block;
+}
+
+a.iacrSubmitButtons:hover {
+  background-color: #138496;
+  border-color: #117a8b;
+}
