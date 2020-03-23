@@ -1,7 +1,7 @@
 <?php
 // This is included from src/papertable.php.
 
-function echo_iacr_final_upload(DocumentPaperOption $docx, $paper) {
+function echo_iacr_final_upload(DocumentPaperOption $docx, $paper, $email) {
   include_once("/var/www/util/hotcrp/hmac.php");
   $paper_msg = get_paper_message($docx->conf->opt["iacrType"],
                                  $docx->conf->opt["year"],
@@ -11,7 +11,7 @@ function echo_iacr_final_upload(DocumentPaperOption $docx, $paper) {
   $querydata = array("venue" => $docx->conf->opt["iacrType"],
                      "year" => $docx->conf->opt["year"],
                      "paperId" => $paper->paperId,
-                     "email" => $Me->email,
+                     "email" => $email,
                      "shortName" => $docx->conf->opt["shortName"],
                      "auth" => get_hmac($paper_msg));
   $url = "https://iacr.org/submit/upload/paper.php?" . http_build_query($querydata);
