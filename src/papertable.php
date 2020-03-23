@@ -669,7 +669,8 @@ class PaperTable {
                 return;
         }
         if (isset($docx->conf->opt["iacrType"]) && $dtype === DTYPE_FINAL) {
-          echo_iacr_final_upload($docx, $this->prow);
+          global $Me;
+          echo_iacr_final_upload($docx, $this->prow, $Me->email);
           echo "</div>";
           return;
         }
