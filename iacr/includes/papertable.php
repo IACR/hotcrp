@@ -6,7 +6,7 @@ function echo_iacr_final_upload(DocumentPaperOption $docx, $paper, $email) {
   $paper_msg = get_paper_message($docx->conf->opt["iacrType"],
                                  $docx->conf->opt["year"],
                                  $paper->paperId,
-                                 $Me->email,
+                                 $email,
                                  $docx->conf->opt["shortName"]);
   $querydata = array("venue" => $docx->conf->opt["iacrType"],
                      "year" => $docx->conf->opt["year"],
