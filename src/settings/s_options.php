@@ -192,6 +192,16 @@ class Options_SettingRenderer {
 
     static function render(SettingValues $sv) {
         echo "<h3 class=\"form-h\">Submission fields</h3>\n";
+        global $Opt;
+        if (isset($Opt["iacrType"])) {
+          echo "<div class=\"msg msg-error\">Warning: do not change the fields for final versions and copyright. IACR handles them differently from HotCRP.";
+          if ($Opt["iacrType"] !== "tosc" &&
+              $Opt["iacrType"] !== "tches" &&
+              $Opt["iacrType"] !== "rump") {
+             echo " Accepted papers will also have an option to upload slides to the IACR server.";
+          }
+          echo "</div>";
+        }
         echo "<hr class=\"g\">\n",
             Ht::hidden("has_options", 1), "\n\n";
 
