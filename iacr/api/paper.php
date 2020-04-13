@@ -8,18 +8,10 @@ require 'lib.php';
 global $Opt;
 
 header('Content-Type: application/json');
-if (!isset($_GET['auth'])) {
-  showError('Unauthenticated request');
-  exit;
-}
-$msg = get_paper_message($Opt['iacrType'],
-                         $Opt['year'],
-                         $_GET['paperId'],
-                         $_GET['email'],
-                         $_GET['shortName']);
-
-if (!validate_hmac($_GET['auth'], $msg)) {
-  showError('Bad auth token');
+if ($Opt['iacrType'] !== $_GET['venue'] ||
+    strval($Opt['year']) !== $_GET['year'] ||
+    isAuthenticated($_GET) !== TRUE) {
+  showError('wrong year:' . $Opt['year']);
   exit;
 }
   
