@@ -670,6 +670,7 @@ class PaperTable {
         }
         if (isset($docx->conf->opt['iacrType']) && $dtype == DTYPE_FINAL) {
           // We don't show the final upload button.
+          // We may need a closing </div> (I can't tell).
           return;
         }
         $inputid = $dtype > 0 ? "opt" . $dtype : "paperUpload";
