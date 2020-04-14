@@ -2,6 +2,11 @@
 // paperoption.php -- HotCRP helper class for paper options
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
+global $ConfSitePATH, $Opt;
+if (isset($Opt["iacrType"])) {
+  require_once("$ConfSitePATH/iacr/includes/papertable.php");
+}
+
 class PaperValue {
     public $prow;
     public $id;
@@ -999,6 +1004,10 @@ class CheckboxPaperOption extends PaperOption {
         $cb = Ht::checkbox($this->formid, 1, !!$reqov->value, [
             "id" => $this->readable_formid(), "data-default-checked" => !!$ov->value
         ]);
+        // For IACR options, we put out a button on the final versions.
+        if ($this->conf->opt["iacrType"] && iacr_paper_option($this)) {
+           echo_iacr_button($this->id, $pt->conf, $pt->prow->paperId);
+        }
         $pt->echo_editable_option_papt($this,
             '<span class="checkc">' . $cb . '</span>' . $pt->edit_title_html($this),
             ["for" => "checkbox", "tclass" => "ui js-click-child"]);

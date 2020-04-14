@@ -26,5 +26,7 @@ function removeClickEventOnCheckbox(id) {
 function iacrSubmitAndUploadCheckboxes() {
   removeClickEventOnCheckbox('iacr-copyright-agreement');
   removeClickEventOnCheckbox('upload-final-paper');
+  removeClickEventOnCheckbox('upload-slides');
+  removeClickEventOnCheckbox('upload-video');
 }
 
