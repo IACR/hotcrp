@@ -155,8 +155,13 @@ class Options_SettingRenderer {
         echo '<div class="', join(" ", $this->option_classes),
             '"><a href="" class="q ui settings-field-folder"><span class="expander"><span class="in0 fx2">▼</span></span></a>';
 
+        // For IACR options, we make the name readonly.
+        $extras = ["placeholder" => "Field name", "size" => 50, "id" => "optn_$xpos", "style" => "font-weight:bold", "class" => "need-tooltip", "data-tooltip-info" => "settings-option", "data-tooltip-type" => "focus", "aria-label" => "Field name"];
+        if (iacr_paper_option($o)) {
+          $extras['readonly'] = true;
+        }
         echo '<div class="', $sv->control_class("optn_$xpos", "f-i"), '">',
-            Ht::entry("optn_$xpos", $o->name, $sv->sjs("optn_$xpos", ["placeholder" => "Field name", "size" => 50, "id" => "optn_$xpos", "style" => "font-weight:bold", "class" => "need-tooltip", "data-tooltip-info" => "settings-option", "data-tooltip-type" => "focus", "aria-label" => "Field name"])),
+            Ht::entry("optn_$xpos", $o->name, $sv->sjs("optn_$xpos", $extras)),
             $sv->render_messages_at("optn_$xpos"),
             Ht::hidden("optid_$xpos", $o->id ? : "new", ["class" => "settings-opt-id"]),
             Ht::hidden("optfp_$xpos", $xpos, ["class" => "settings-opt-fp", "data-default-value" => $xpos]),
@@ -183,9 +188,13 @@ class Options_SettingRenderer {
             '<span class="btnbox">',
             Ht::button(Icons::ui_movearrow(0), ["class" => "btn-licon ui js-settings-option-move moveup need-tooltip", "aria-label" => "Move up in display order"]),
             Ht::button(Icons::ui_movearrow(2), ["class" => "btn-licon ui js-settings-option-move movedown need-tooltip", "aria-label" => "Move down in display order"]),
-            '</span>',
-            Ht::button(Icons::ui_trash(), ["class" => "btn-licon ui js-settings-option-move delete need-tooltip", "aria-label" => "Delete", "data-option-exists" => get($this->have_options, $o->id)]),
-            "</div></div>\n";
+            '</span>';
+        if (!isset($sv->conf->opt['iacrType']) ||
+            !iacr_required_paper_option($o->id)) {
+              // We only show the delete button for non-required options.
+              echo Ht::button(Icons::ui_trash(), ["class" => "btn-licon ui js-settings-option-move delete need-tooltip", "aria-label" => "Delete", "data-option-exists" => get($this->have_options, $o->id)]);
+            }
+            echo "</div></div>\n";
 
         echo '</div>';
     }

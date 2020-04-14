@@ -5,7 +5,7 @@
 ///////////// Added for IACR functionality ////////////
 global $ConfSitePATH, $Opt;
 if (isset($Opt["iacrType"])) {
-  include "$ConfSitePATH/iacr/includes/papertable.php";
+  require_once("$ConfSitePATH/iacr/includes/papertable.php");
 }
 ///////////////////////////////////////////////////////
 
@@ -668,10 +668,9 @@ class PaperTable {
                 || ($dtype == DTYPE_FINAL) !== $this->canUploadFinal)
                 return;
         }
-        if (isset($docx->conf->opt["iacrType"]) && $dtype === DTYPE_FINAL) {
-          global $Me;
-          echo_iacr_final_upload($docx, $this->prow, $Me->email);
-          echo "</div>";
+        if (isset($docx->conf->opt['iacrType']) && $dtype == DTYPE_FINAL) {
+          // We don't show the final upload button.
+          // We may need a closing </div> (I can't tell).
           return;
         }
         $inputid = $dtype > 0 ? "opt" . $dtype : "paperUpload";
@@ -1548,9 +1547,6 @@ class PaperTable {
         global $Opt;
         if (!$heading) {
             $heading = $this->edit_title_html($o);
-        }
-        if ($o !== null && $o->readable_formid() === "iacr-copyright-agreement") {
-            echo_iacrcopyright_button($this->prow->paperId, $Opt["shortName"]);
         }
         $this->echo_editable_papt($o->formid, $heading, $rest, $o);
         $this->echo_field_hint($o);
