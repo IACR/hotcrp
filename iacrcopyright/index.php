@@ -74,13 +74,13 @@ $substitutions = array('[$action]' => $action,
 // We use one of two different copyright forms.
 switch($Opt["iacrType"]) {
   case "tosc":
-    $substitutions["longName"] = "IACR Transactions on Symmetric Cryptology";
-    $substitutions["shortName"] = "ToSC";
+    $substitutions['[$longName]'] = "IACR Transactions on Symmetric Cryptology";
+    $substitutions['[$shortName]'] = "ToSC";
     $file = "$ConfSitePATH/iacrcopyright/templates/journal_copyright.html";
     break;
   case "tches":
-    $substitutions["longName"] = "IACR Transactions on Cryptographic Hardware and Embedded Systems";
-    $substitutions["shortName"] = "TCHES";
+    $substitutions['[$longName]'] = "IACR Transactions on Cryptographic Hardware and Embedded Systems";
+    $substitutions['[$shortName]'] = "TCHES";
     $file = "$ConfSitePATH/iacrcopyright/templates/journal_copyright.html";
     break;
   case "crypto": // otherwise it's a conference
