@@ -6,10 +6,10 @@ include "includes/header.inc";
 
 <div class="container-fluid float-left">
   <div class="row">
-    <div class="col-3">
+    <div class="col-4 col-lg-3 col-xl-2">
       <?php include "includes/leftnav.inc";?>
     </div>
-    <div class="col-9">
+    <div class="col-8">
       <h3>Import program committee</h3>
       <p>
         The standard HotCRP user interface provides several
