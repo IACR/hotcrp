@@ -8,7 +8,7 @@ include "includes/header.inc";
     <div class="col-4 col-lg-3 col-xl-2">
       <?php include "includes/leftnav.inc";?>
     </div>
-    <div class="col-8 col-lg-8 col-xl-9">
+    <div class="col-8">
       <h3>IACR extensions to HotCRP</h3>
       <p>
         This section provides extra functionality that is specific to IACR

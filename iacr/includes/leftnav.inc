@@ -4,14 +4,14 @@
   <div><a id="menucomm" class="navitem" href="comm.php">Program committee</a></div>
   <div><a id="menucoll" class="navitem" href="coll.php">PC Collaborators</a></div>
   <div class="navheader font-weight-bold">Final versions</div>
+  <div><a id="menuaccepted" class="navitem" href="accepted.php">Accepted papers</a></div>
   <div><a id="menucopyright" class="navitem" href="copyright.php">Copyright forms</a></div>
 <?php
 global $Opt;
   if ($Opt['iacrType'] !== 'tosc' and $Opt['iacrType'] !== 'tches') {
-  echo '<div><a id="menufinal" class="navitem" href="submit.php">Final papers</a></div>';
+  echo '<div><a id="menufinal" class="navitem" href="final.php">Final papers</a></div>';
   }
 ?>
-  <div><a id="menuaccepted" class="navitem" href="accepted.php">Accepted papers</a></div>
 <?php
 global $Opt;
   if ($Opt['iacrType'] !== 'tosc' and $Opt['iacrType'] !== 'tches') {
