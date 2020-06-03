@@ -7,17 +7,23 @@ require 'lib.php';
 global $Opt, $Conf;
 
 header('Content-Type: application/json');
-if (!isset($_POST['auth'])) {
-  showError('Unauthenticated request');
+if (empty($_POST['paperId'])) {
+  showError('Missing paperId');
   exit;
 }
+if (empty($_POST['email'])) {
+  showError('Missing email');
+  exit;
+}     
+
 $msg = get_paper_message($Opt['iacrType'],
                          $Opt['year'],
                          $_POST['paperId'],
                          $_POST['email'],
+                         'hc',
                          $Opt['shortName']);
 
-if (!validate_hmac($_POST['auth'], $msg)) {
+if (!hash_equals(get_hmac($msg), $_POST['auth'])) {
   showError('Bad auth token');
   exit;
 }
