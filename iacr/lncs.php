@@ -60,31 +60,18 @@ try {
 ?>
     <p>
       <a class="button button-primary" target="_blank" href="getFrontMatter.php" download="frontmatter.tex">Download LaTeX frontmatter</a>
+      <a class="button button-primary" target="_blank" href="<?php 
+  require "/var/www/util/hotcrp/hmac.php";
+$url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['shortName'] . "&year=" . $Opt['year'];
+$url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
+echo $url . '" download=' . $Opt['shortName'] . '.zip">'
+?>Download Zip archive</a>
     </p>
     </div>
   </div>
 </div>
 <script>
  setActiveMenu('menulncs');
- $(document).ready(function() {
-   console.log('calling ready');
- <?php
-   echo 'let venue = "' . $Opt['iacrType'] . "\";\n";
-   echo 'let year = ' . $Opt['year'] . ";\n";
- ?>
-   $.ajax({
-     url: 'https://iacr.org/submit/api/',
-     data: {year: year,
-            venue: venue,
-            action: 'view'},
-     success: function(data, textStatus, jqXHR) {
-       console.dir(data);
-     },
-     error: function(jqXHR, textStatus, errorThrown) {
-       console.dir(textStatus);
-     }
-   });
-});
 </script>
 </body>
 </html>
