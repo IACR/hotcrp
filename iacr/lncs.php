@@ -60,7 +60,7 @@ try {
 ?>
     <p>
       <a class="button button-primary" target="_blank" href="getFrontMatter.php" download="frontmatter.tex">Download LaTeX frontmatter</a>
-      <a class="button button-primary" target="_blank" href="<?php 
+      <a class="ml-3 button button-primary" target="_blank" href="<?php 
   require "/var/www/util/hotcrp/hmac.php";
 $url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['shortName'] . "&year=" . $Opt['year'];
 $url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
