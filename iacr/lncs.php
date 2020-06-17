@@ -28,7 +28,7 @@ $dbname = $Opt['dbName'];
         forms, so you should ignore the LNCS instructions for Copyright.
       </p>
       <p>
-        The instructions for preparation of the frontmatter of an LNCS volume requires
+        The instructions for preparation of the LNCS volume(s) requires
         two items:
       </p>
       <ol>
@@ -41,6 +41,8 @@ $dbname = $Opt['dbName'];
 <?php
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
+  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId=6 is from create_conf.py when
+  // the conference is first set up. It indicates that a final version was uploaded.
   $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId=6)";
   $stmt = $db->query($sql);
   $papers = $stmt->fetchAll(PDO::FETCH_ASSOC);

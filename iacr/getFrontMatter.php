@@ -10,6 +10,7 @@
 
   try {
     $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
+    // roles=7 means program chair.
     $sql = "select firstName,lastName,affiliation from ContactInfo where roles=7 order by lastName";
     $stmt = $db->query($sql);
     $chairs = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -25,6 +26,7 @@ INSERT NAME & INSERT AFFILIATION\\\\
 \\section*{Program Committee}
 \\begin{longtable}{p{0.35\\textwidth}p{0.65\\textwidth}}
 EOT;
+    // roles=1 means program committee
     $sql = "select firstName,lastName,affiliation from ContactInfo where roles=1 order by lastName";
     $stmt = $db->query($sql);
     $committee = $stmt->fetchAll(PDO::FETCH_ASSOC);
