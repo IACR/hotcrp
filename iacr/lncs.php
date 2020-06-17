@@ -3,6 +3,8 @@ include "../conf/options.php";
 include "../src/initweb.php";
 include "includes/header.inc";
 global $Opt;
+$dbname = $Opt['dbName'];
+
 ?>
 <div class="container-fluid float-left">
   <div class="row">
@@ -27,22 +29,38 @@ global $Opt;
       </p>
       <p>
         The instructions for preparation of the frontmatter of an LNCS volume requires
-        three items:
+        two items:
       </p>
       <ol>
-        <li>the program committee with affiliations,</li>
-        <li>the list of additional reviewers,</li>
-        <li>the table of contents</li>
+        <li>the bundle of all final versions of papers</li>
+        <li>the front matter for the LNCS volume (in a LaTeX file). This contains the program committee, external reviewers, and table of contents.</li>
       </ol>
       <p>
-        These items may be downloaded using the button below.
+        These items may be downloaded below.
       </p>
-      <p class="alert alert-danger">
-        This still needs to be completed.
-      </p>
-      <!-- <p>
-        <a class="button button-primary" target="_blank" href="downlncs.php" download="lncs.zip">Download LaTeX frontmatter</a>
-      </p> --->
+<?php
+try {
+  $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
+  $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId=6)";
+  $stmt = $db->query($sql);
+  $papers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  if ($papers && count($papers) > 0) {
+    echo "<div class='alert alert-warning'><p>Warning: the following accepted papers appear to have not uploaded their final versions yet:</p><ul>";
+    foreach($papers as $paper) {
+      echo "<li><a href=\"../paper/" . $paper['paperId'] . "\">" . $paper['title'] . "</a></li>";
+    }
+    echo "</ul></div>";
+  } else {
+    echo "<div class='alert alert-success'>All final versions have been uploaded.</div>";
+  }
+  $db = null;
+} catch (PDOException $e) {
+  echo $e->message();
+}
+?>
+    <p>
+      <a class="button button-primary" target="_blank" href="getFrontMatter.php" download="frontmatter.tex">Download LaTeX frontmatter</a>
+    </p>
     </div>
   </div>
 </div>
