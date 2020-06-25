@@ -68,6 +68,7 @@ $url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] 
 $url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
 echo $url . '" download=' . $Opt['shortName'] . '.zip">'
 ?>Download Zip archive</a>
+      <a class="ml-3 button button-primary" target="_blank" href="getSpreadsheet.php" download="author_emails.tsv">TSV spreadsheet of author emails</a>
     </p>
     </div>
   </div>
