@@ -5,6 +5,11 @@ include "includes/header.inc";
 global $Opt;
 $dbname = $Opt['dbName'];
 
+require "/var/www/util/hotcrp/hmac.php";
+// The download URL for the zip archive of final papers.
+$url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['shortName'] . "&year=" . $Opt['year'];
+$url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
+$shortName = $Opt['shortName'];
 ?>
 <div class="container-fluid float-left">
   <div class="row">
@@ -13,31 +18,6 @@ $dbname = $Opt['dbName'];
     </div>
     <div class="col-8">
       <h3>LNCS Preparation</h3>
-      <p>
-        Once you have all of the final versions uploaded, you can proceed to create
-        the material required by Springer for the LNCS volumes of the proceedings.
-        You can view which authors have uploaded their final versions the same
-        way you can view who has signed the copyright forms, namely by
-        <a href="../search?q=&t=acc#view">searching for accepted papers</a>
-        and selecting "View options" to see how many have uploaded their final versions.
-      </p>
-      <p>
-        Preparation of the Springer LNCS volumes should follow the instructions
-        provided by Springer, which have in the past been located at
-        <a href="https://www.springer.com/gp/computer-science/lncs/editor-guidelines-for-springer-proceedings">this URL</a>. Note that IACR uses their own copyright
-        forms, so you should ignore the LNCS instructions for Copyright.
-      </p>
-      <p>
-        The instructions for preparation of the LNCS volume(s) requires
-        two items:
-      </p>
-      <ol>
-        <li>the bundle of all final versions of papers</li>
-        <li>the front matter for the LNCS volume (in a LaTeX file). This contains the program committee, external reviewers, and table of contents.</li>
-      </ol>
-      <p>
-        These items may be downloaded below.
-      </p>
 <?php
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
@@ -53,25 +33,43 @@ try {
     }
     echo "</ul></div>";
   } else {
-    echo "<div class='alert alert-success'>All final versions have been uploaded.</div>";
+    echo <<<EOI
+    <div class='alert alert-success'>All final versions have been uploaded.</div>
+      <p>
+        Once you have all of the final versions uploaded, you can proceed to create
+        the material required by Springer for the LNCS volumes of the proceedings.
+        Preparation of the Springer LNCS volumes should follow the instructions
+        provided by Springer, which have in the past been located at
+        <a href="https://www.springer.com/gp/computer-science/lncs/editor-guidelines-for-springer-proceedings">this URL</a>. Note that IACR uses their own copyright
+        forms, so you should ignore the LNCS instructions for Copyright.
+      </p>
+      <p>
+        The instructions for preparation of the LNCS volume(s) requires
+        several items:
+      </p>
+      <ol>
+        <li><a style="font-weight: 600;" target="_blank" href="$url" download="$shortName.zip">Download Zip archive</a>  with a bundle of all final versions of papers.</li>
+        <li><a style="font-weight: 600" target="_blank" href="getSpreadsheet.php" download="author_emails.tsv">TSV spreadsheet of author emails</a> and disambiguated names of authors (in a spreadsheet TSV)
+             
+        </li>
+        <li><a style="font-weight:600" href="lncsEditor.php">Create the front matter</a> for the LNCS volume(s) (in a LaTeX file).
+          This contains the program committee, external reviewers, and table of contents. This requires
+         you to group papers into topics and volumes to obey the 900 page limit. For
+          this purpose we have created a <a style="font-weight:600" href="lncsEditor.php">drag-and-drop tool</a>
+          to simplify the task. If you prefer, you can perform this step manually starting from a
+        <a target="_blank" href="getFrontMatter.php" download="frontmatter.tex">single LaTeX file</a>.
+        You can also download a <a target="_blank" href="getFinalPaperJson.php" download="final_papers.json">JSON file metadata for the final papers.</a>
+        </li>
+      </ol>
+EOI;
   }
   $db = null;
 } catch (PDOException $e) {
   echo $e->message();
 }
 ?>
-    <p>
-      <a class="button button-primary" target="_blank" href="getFrontMatter.php" download="frontmatter.tex">Download LaTeX frontmatter</a>
-      <a class="ml-3 button button-primary" target="_blank" href="<?php 
-  require "/var/www/util/hotcrp/hmac.php";
-$url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['shortName'] . "&year=" . $Opt['year'];
-$url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
-echo $url . '" download=' . $Opt['shortName'] . '.zip">'
-?>Download Zip archive</a>
-      <a class="ml-3 button button-primary" target="_blank" href="getSpreadsheet.php" download="author_emails.tsv">TSV spreadsheet of author emails</a>
-    </p>
-    </div>
-  </div>
+</div>
+</div>
 </div>
 <script>
  setActiveMenu('menulncs');
