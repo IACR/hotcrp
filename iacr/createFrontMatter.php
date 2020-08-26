@@ -4,6 +4,7 @@ require_once "../conf/options.php";
 require_once "../src/initweb.php";
 include "ellipsize.php";
 
+// This echos the LaTeX for front matter of an LNCS proceedings.
 function echoPaper($paper) {
   $authors = $paper['authorlist'][0]['name'];
   $institute = $paper['authorlist'][0]['affiliation'];
@@ -42,7 +43,7 @@ function echoPaper($paper) {
 global $Opt;
 $dbname = $Opt['dbName'];
 
-// First retrieve all data from database, and parse the editor file.
+// First retrieve all data from database, and parse the lncseditor file.
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
   // roles=7 means program chair.
@@ -53,6 +54,7 @@ try {
   $sql = "select firstName,lastName,affiliation from ContactInfo where roles=1 order by lastName";
   $stmt = $db->query($sql);
   $committee = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  // Now fetch people who did external reviews.
   $sql = "select DISTINCT firstName,lastName,affiliation from ContactInfo where roles=0 and contactId in (select contactId from PaperReview where reviewType=1) order by lastName";
   $stmt = $db->query($sql);
   $externalReviewers = $stmt->fetchAll(PDO::FETCH_ASSOC);

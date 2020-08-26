@@ -2,13 +2,13 @@
 
 The lncseditor.php is designed to fulfill the need of organizing papers into
 topics for instances that use LNCS (namely Crypto, eurocrypt, asiacrypt, tcc,
-and pkc).  The organization into volumes is currently done by Springer, so I
+and pkc). The organization into volumes is currently done by Springer, so I
 have disabled that feature and only show a single volume.
 
 Papers initially start out in the uncategorized section. The editor allows the
 chair to create topics and drop the papers into topics. At present all topics
 reside within a single volume, but Springer will split any volumes that are over
-900 pages. Papers and Topics may be reordered by dragging them.
+900 pages. Papers and topics may be reordered by dragging them.
 
 The structure of a proceedings is kept as a JSON object in
 `filestore/lncs_userid.json`, and that is updated each time the object is
