@@ -31,6 +31,9 @@ function progEdPath() {
         <input type="hidden" name="name" value="<?php echo $Opt['longName']; ?>" />
         <textarea id="accepted" class="d-none" name="accepted" rows="8" cols="80" readonly></textarea>
       </form>
+      <div id="loading" class="d-flex justify-content-center" role="status">
+        <div class="spinner-border m-4"></div><span id="loadMessage" class="align-self-center">Loading data...</span>
+      </div>
     </div>
   </div>
 </div>
@@ -44,8 +47,10 @@ function progEdPath() {
     if (submitButton) {
       submitButton.removeAttribute('disabled');
     }
+    document.getElementById('loading').remove();
   })
   .fail(function(jqxhr, textStatus, error) {
+    $('#loadMessage').text(textStatus);
     console.dir(jqxhr);
   });
 </script>

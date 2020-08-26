@@ -5,20 +5,23 @@
   <div><a id="menucoll" class="navitem" href="coll.php">PC Collaborators</a></div>
   <div class="navheader font-weight-bold">Final versions</div>
   <div><a id="menuaccepted" class="navitem" href="accepted.php">Accepted papers</a></div>
-  <div><a id="menucopyright" class="navitem" href="copyright.php">Copyright forms</a></div>
 <?php
-global $Opt;
-  if ($Opt['iacrType'] !== 'tosc' and $Opt['iacrType'] !== 'tches') {
-  echo '<div><a id="menufinal" class="navitem" href="final.php">Final papers</a></div>';
+  global $Opt;
+  $withLNCS = array('pkc', 'tcc', 'crypto', 'eurocrypt', 'asiacrypt');
+  if (in_array($Opt['iacrType'], $withLNCS)) {
+    echo '<div><a id="menucopyright" class="navitem" href="copyright.php">Copyright forms</a></div>';
+    echo '<div><a id="menufinal" class="navitem" href="final.php">Final papers</a></div>';
+  } elseif ($Opt['iacrType'] === 'tches' or $Opt['iacrType'] === 'tosc') {
+    echo '<div><a id="menucopyright" class="navitem" href="copyright.php">Copyright forms</a></div>';
   }
 ?>
 <?php
-global $Opt;
-  if ($Opt['iacrType'] !== 'tosc' and $Opt['iacrType'] !== 'tches') {
+  global $Opt;
+  if (in_array($Opt['iacrType'], $withLNCS)) {
     echo '<div><a id="menulncs" class="navitem" href="lncs.php">LNCS table of contents</a></div>';
-    echo '<div><a id="menuprogram" class="navitem" href="program.php">Program</a></div>';
   }
 ?>
+  <div><a id="menuprogram" class="navitem" href="program.php">Program</a></div>
   <div class="navheader font-weight-bold">IACR Documents</div>
   <div><a class="navitem" href="https://www.iacr.org/docs/progchair.pdf" target="_blank">Program chair guidelines</a></div>
   <div><a class="navitem" href="https://www.iacr.org/docs/genchair.pdf" target="_blank">General chair guidelines</a></div>

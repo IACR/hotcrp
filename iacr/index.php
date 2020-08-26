@@ -33,7 +33,6 @@ include "includes/header.inc";
         HotCRP to collect final versions of papers.
       </p>
       <p>
-        You will also see a link to <a href="https://iacr.org/submit"><code>(insert link for submit server)</code></a>.
         Once decisions are final, you should perform the following additional tasks
         on the submission server:
       </p>
