@@ -6,7 +6,7 @@ if (!$Me->is_signed_in() || !$Me->privChair) {
   echo json_encode(array('error' => 'unable to authenticate'));
   exit();
 }
-$filename = '../filestore/lncs_' . $Me->contactId . '.json';
+$filename = getLNCSFilename();
 if (empty($_POST['json'])) {
   if (isset($_POST['delete'])) {
     if (file_exists($filename)) {
