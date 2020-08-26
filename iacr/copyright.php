@@ -29,17 +29,18 @@ try {
       <h3>Submitted copyright forms</h3>
       <p>
         Once you open the papers for final submission, the authors will see an
-        IACR copyright form to be filled out. You can see how many of them have
-        filled out the form by
+        IACR copyright form to be filled out. The papers listed below have had
+        copyright submitted, but you should check which ones do <strong>not</strong>
+        have copyright by
         <a href="../search?q=&t=acc#view">searching for accepted papers</a>
         and checking "IACR Copyright Agreement" in the options.
       </p>
-      <ul>
+      <ol>
       <?php foreach($copyrights as $paper) {
         echo '<li>' . $paper['title'] . '</li>';
       }
       ?>
-      </ul>
+      </ol>
     </div>
   </div>
 </div>
