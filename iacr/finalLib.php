@@ -5,8 +5,7 @@ require "/var/www/util/hotcrp/hmac.php";
 
 function getLNCSFilename() {
   global $Me;
-//  return '../filestore/lncs_' . $Me->contactId . '.json';
-return '../filestore/lncs_1201.json';
+  return '../filestore/lncs_' . $Me->contactId . '.json';
 }
 
 // Fetches the final paper data from www.iacr.org using the API.

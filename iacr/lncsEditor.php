@@ -134,9 +134,6 @@ echo <<<EOH
 <body><div id="top"><div id="header-site"><a class="qq" href="/$shortName/"><span class="header-site-name">$shortName</span></a></div>
 <div class="mt-4 float-right align-items-center d-flex">
 <span id="save_status"></span>
-<!--<button class="button button-primary mx-4" onclick="save()">Save</button>-->
-<!--<button class="button button-primary ml-4" id="downloadButton" disabled href="createFrontMatter.php" download="frontmatter.tex" title="Download LaTex file when papers are assigned on the right">Download LaTeX frontmatter</button>-->
-<!--<button class="button button-primary ml-4" onclick="$('#helpModal').modal()">Help</button>-->
 <div class="ml-4 dropdown">
   <button class="button button-primary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
     Actions

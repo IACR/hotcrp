@@ -58,7 +58,7 @@ try {
           this purpose we have created a <a style="font-weight:600" href="lncsEditor.php">drag-and-drop tool</a>
           to simplify the task. If you prefer, you can perform this step manually starting from a
         <a target="_blank" href="getFrontMatter.php" download="frontmatter.tex">single LaTeX file</a>.
-        You can also download a <a target="_blank" href="getFinalPaperJson.php" download="final_papers.json">JSON file metadata for the final papers.</a>
+        You can also download a <a target="_blank" href="getFinalPaperJson.php" download="final_papers.json">JSON file of metadata for the final papers.</a>
         </li>
       </ol>
 EOI;
