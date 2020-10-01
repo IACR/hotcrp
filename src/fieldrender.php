@@ -3,11 +3,16 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class FieldRender {
+    /** @var ?PaperTable */
     public $table;
+    /** @var int */
     public $context;
     public $title;
+    /** @var ?string */
     public $value;
+    /** @var ?int */
     public $value_format;
+    /** @var ?bool */
     public $value_long;
 
     const CFHTML = 1;
@@ -20,9 +25,11 @@ class FieldRender {
     const CTEXT = 0;
     const CPAGE = 3;
 
+    /** @param int $context */
     function __construct($context) {
         $this->context = $context;
     }
+    /** @param ?int $context */
     function clear($context = null) {
         if ($context !== null) {
             $this->context = $context;
@@ -55,14 +62,17 @@ class FieldRender {
     function verbose() {
         return ($this->context & self::CFVERBOSE) !== 0;
     }
+    /** @param string $t */
     function set_text($t) {
         $this->value = $t;
         $this->value_format = 0;
     }
+    /** @param string $t */
     function set_html($t) {
         $this->value = $t;
         $this->value_format = 5;
     }
+    /** @param bool $b */
     function set_bool($b) {
         $v = $this->verbose();
         if ($this->context & self::CFHTML) {
@@ -73,9 +83,10 @@ class FieldRender {
             $this->set_text($b ? "Yes" : ($v ? "No" : ""));
         }
     }
+    /** @return string */
     function value_html($divclass = null) {
         $rest = "";
-        if ((string) $this->value === "") {
+        if ($this->value === null || $this->value === "") {
             return "";
         } else if ($this->value_format === 5) {
             if ($divclass === null) {

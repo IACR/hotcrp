@@ -5,11 +5,15 @@
 class CleanHTML {
     const BADTAGS_IGNORE = 1;
 
+    /** @var int */
     private $flags;
+    /** @var array<string,mixed> */
     private $goodtags;
+    /** @var array<string,mixed> */
     private $emptytags;
 
-    static private $g;
+    /** @var CleanHTML */
+    static private $main;
 
     function __construct($flags = 0, $goodtags = null, $emptytags = null) {
         if ($goodtags === null)
@@ -26,6 +30,8 @@ class CleanHTML {
         return false;
     }
 
+    /** @param string $t
+     * @return string|false */
     function clean($t, &$err = null) {
         $tagstack = array();
 
@@ -130,6 +136,8 @@ class CleanHTML {
         return preg_replace('/\r\n?/', "\n", $x);
     }
 
+    /** @param string|list<string> $t
+     * @return list<string>|false */
     function clean_all($t, &$err = null) {
         $x = [];
         foreach (is_array($t) ? $t : [$t] as $s) {
@@ -143,16 +151,20 @@ class CleanHTML {
         return $x;
     }
 
+    /** @return CleanHTML */
     static function basic() {
-        if (!self::$g)
-            self::$g = new CleanHTML;
-        return self::$g;
+        if (!self::$main) {
+            self::$main = new CleanHTML;
+        }
+        return self::$main;
     }
 
+    /** @return string|false */
     static function basic_clean($t, &$err = null) {
         return self::basic()->clean($t, $err);
     }
 
+    /** @return list<string>|false */
     static function basic_clean_all($t, &$err = null) {
         return self::basic()->clean_all($t, $err);
     }

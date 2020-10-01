@@ -31,9 +31,10 @@ class FormulaGraph_PaperColumn extends ScoreGraph_PaperColumn {
         $indexes = $indexesf ? $indexesf($row, $pl->user) : [null];
         $formulaf = $this->formula_function;
         $vs = [];
-        foreach ($indexes as $i)
+        foreach ($indexes as $i) {
             if (($v = $formulaf($row, $i, $pl->user)) !== null)
                 $vs[$i] = $v;
+        }
         return $vs;
     }
     function header(PaperList $pl, $is_text) {
@@ -41,13 +42,13 @@ class FormulaGraph_PaperColumn extends ScoreGraph_PaperColumn {
         return $is_text ? $x : htmlspecialchars($x);
     }
 
-    static function expand($name, $user, $xfj, $m) {
+    static function expand($name, Contact $user, $xfj, $m) {
         $formula = new Formula($m[1], Formula::ALLOW_INDEXED);
         if (!$formula->check($user)) {
-            $user->conf->xt_factory_error("Formula error: " . $formula->error_html());
+            PaperColumn::column_error($user, "Formula error: " . $formula->error_html());
             return null;
         } else if (!($formula->result_format() instanceof ReviewField)) {
-            $user->conf->xt_factory_error("Graphed formulas must return review fields.");
+            PaperColumn::column_error($user, "Graphed formulas must return review fields.");
             return null;
         } else {
             $cj = (array) $xfj;

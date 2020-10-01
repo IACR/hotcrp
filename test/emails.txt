@@ -444,6 +444,32 @@ Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
 
 - Testconf I Submissions
+******** create-vera@bombay.com
+To: Véra Djükuba <vera@bombay.com>
+Subject: [Testconf I] Welcome to the program committee
+
+Greetings,
+
+You have been added to the program committee at the Test Conference I
+(Testconf I) submission site.
+
+        Site: http://hotcrp.lcdf.org/test/
+       Email: vera@bombay.com
+
+You will need a password to sign in. Use this link to set one up:
+
+http://hotcrp.lcdf.org/test/resetpassword/{{}}
+
+Should the link expire, obtain a new link using "Forgot my password".
+
+If you already have an account under a different email address, you may
+merge this new account into that one. Go to your profile page and select
+"Merge with another account".
+
+Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
+concerns.
+
+- Testconf I Submissions
 ******** create-micke@cdt.luth.se
 To: Mikael Degermark <micke@cdt.luth.se>
 Subject: [Testconf I] Account information
@@ -1088,8 +1114,8 @@ submitted. The review is available at the submission site.
        Title: Scalable Timers for Soft State Protocols
    Review by: Mark Handley <mjh@isi.edu>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1099,7 +1125,6 @@ concerns.
 Review #1B
 ===========================================================================
 * Reviewer: Mark Handley <mjh@isi.edu>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1114,8 +1139,8 @@ To: Jane Chair <chair@_.com>
 Subject: [Testconf I] Comment for #2 "Small Forwarding Tables for Fast
  Routing..."
 
-A comment for Test Conference I (Testconf I) submission #2 has been posted.
-For the most up-to-date comments, or to unsubscribe from email
+A comment for Test Conference I (Testconf I) submission #2 has been
+posted. For the most up-to-date comments, or to unsubscribe from email
 notification, see the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/2
@@ -1143,8 +1168,8 @@ submitted. The review is available at the submission site.
        Title: Small Forwarding Tables for Fast Routing Lookups
    Review by: Jon Crowcroft <jon@cs.ucl.ac.uk>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1154,7 +1179,6 @@ concerns.
 Review #2A
 ===========================================================================
 * Reviewer: Jon Crowcroft <jon@cs.ucl.ac.uk>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1178,8 +1202,8 @@ submitted. The review is available at the submission site.
        Title: Small Forwarding Tables for Fast Routing Lookups
    Review by: Peter Druschel <pdruschel@cs.rice.edu>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1189,7 +1213,6 @@ concerns.
 Review #2B
 ===========================================================================
 * Reviewer: Peter Druschel <pdruschel@cs.rice.edu>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1214,8 +1237,8 @@ submitted. The review is available at the submission site.
        Title: Small Forwarding Tables for Fast Routing Lookups
    Review by: External Reviewer <external@_.com>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1225,7 +1248,6 @@ concerns.
 Review #2C
 ===========================================================================
 * Reviewer: External Reviewer <external@_.com>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1248,12 +1270,12 @@ Review #17A for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: Mary Baker <mgbaker@cs.stanford.edu>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1263,7 +1285,6 @@ concerns.
 Review #17A [R2]
 ===========================================================================
 * Reviewer: Mary Baker <mgbaker@cs.stanford.edu>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1293,12 +1314,12 @@ Review #17B for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: External Reviewer <external@_.com>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1308,7 +1329,6 @@ concerns.
 Review #17B [R2]
 ===========================================================================
 * Reviewer: External Reviewer <external@_.com>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1338,12 +1358,12 @@ Review #17C for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: Lixia Zhang <lixia@cs.ucla.edu>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1353,7 +1373,6 @@ concerns.
 Review #17C [R1]
 ===========================================================================
 * Reviewer: Lixia Zhang <lixia@cs.ucla.edu>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1382,15 +1401,15 @@ On behalf of the Test Conference I (Testconf I) program committee, Lixia
 Zhang <lixia@cs.ucla.edu> has asked you to review Test Conference I
 (Testconf I) submission #17.
 
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
         Site: http://hotcrp.lcdf.org/test/paper/17
 
-If you are willing to review this submission, you may enter your review on
-the conference site or complete a review form offline and upload it.
+If you are willing to review this submission, you may enter your review
+on the conference site or complete a review form offline and upload it.
 
-Once you've decided, please accept or decline this review request using one
-of these links. You may also contact Lixia Zhang directly.
+Once you've decided, please accept or decline this review request using
+one of these links. You may also contact Lixia Zhang directly.
 
       Accept: http://hotcrp.lcdf.org/test/review/17?cap={{}}&accept=1
      Decline: http://hotcrp.lcdf.org/test/review/17?cap={{}}&decline=1
@@ -1420,8 +1439,8 @@ Jo March <external2@_.com>'s review for Test Conference I (Testconf I)
 submission #17 has been submitted for approval.
 
  Review site: http://hotcrp.lcdf.org/test/review/17?r={{}}
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: Jo March <external2@_.com>
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
@@ -1454,11 +1473,11 @@ Review #17E for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1467,7 +1486,6 @@ concerns.
 
 Review #17E
 ===========================================================================
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1489,12 +1507,12 @@ Review #17E for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: Jo March <external2@_.com>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1504,7 +1522,6 @@ concerns.
 Review #17E
 ===========================================================================
 * Reviewer: Jo March <external2@_.com>
-* Updated: {{}}
 
 Overall merit
 -------------
@@ -1526,12 +1543,12 @@ Review #17E for Test Conference I (Testconf I) submission #17 has been
 submitted. The review is available at the submission site.
 
         Site: http://hotcrp.lcdf.org/test/paper/17
-       Title: Network Text Editor (NTE): A Scalable Shared Text Editor for
-              the MBone
+       Title: Network Text Editor (NTE): A Scalable Shared Text Editor
+              for the MBone
    Review by: Jo March <external2@_.com>
 
-For the most up-to-date reviews and comments, or to unsubscribe from email
-notification, see the submission site.
+For the most up-to-date reviews and comments, or to unsubscribe from
+email notification, see the submission site.
 
 Contact Eddie Kohler <ekohler@hotcrp.lcdf.org> with any questions or
 concerns.
@@ -1541,7 +1558,6 @@ concerns.
 Review #17E
 ===========================================================================
 * Reviewer: Jo March <external2@_.com>
-* Updated: {{}}
 
 Overall merit
 -------------

@@ -38,7 +38,7 @@ class AllTags_API {
         if (!$user->privChair) {
             if (!$user->conf->tag_seeall) {
                 $q .= " left join PaperConflict on (PaperConflict.paperId=Paper.paperId and PaperConflict.contactId={$user->contactId})";
-                $qwhere[] = "coalesce(conflictType,0)<=0";
+                $qwhere[] = "coalesce(conflictType,0)<=" . CONFLICT_MAXUNCONFLICTED;
             }
             $hidden = $dt->has_hidden;
         }
@@ -51,14 +51,14 @@ class AllTags_API {
             }
         }
         Dbl::free($result);
-        return ["ok" => true, "tags" => $dt->sort($tags)];
+        return self::finish_alltags_api($tags, $dt, $user);
     }
 
     static private function hard_alltags_api(Contact $user) {
         $tags = [];
         foreach ($user->paper_set(["minimal" => true, "finalized" => true, "tags" => "require"]) as $prow) {
             if ($user->can_view_paper($prow)) {
-                foreach (TagInfo::split_unpack($prow->all_tags_text()) as $ti) {
+                foreach (Tagger::split_unpack($prow->all_tags_text()) as $ti) {
                     $lt = strtolower($ti[0]);
                     if (!isset($tags[$lt])
                         && ($tag = self::strip($ti[0], $user, $prow))
@@ -68,6 +68,35 @@ class AllTags_API {
                 }
             }
         }
-        return ["ok" => true, "tags" => $user->conf->tags()->sort(array_values($tags))];
+        return self::finish_alltags_api(array_values($tags), $user->conf->tags(), $user);
+    }
+
+    static private function finish_alltags_api($tags, TagMap $dt, Contact $user) {
+        $tags = $dt->sort_array($tags);
+        $j = ["ok" => true, "tags" => $tags];
+        if ($dt->has_automatic
+            || ($dt->has_sitewide && $user->privChair)
+            || ($dt->has_readonly && !$user->privChair)) {
+            $readonly = $sitewide = [];
+            foreach ($tags as $tag) {
+                if (($tag[0] !== "~" || $tag[1] === "~")
+                    && ($ti = $dt->check($tag))) {
+                    if ($ti->automatic
+                        || ($ti->readonly && !$user->privChair)) {
+                        $readonly[strtolower($tag)] = true;
+                    }
+                    if ($ti->sitewide && $user->privChair) {
+                        $sitewide[strtolower($tag)] = true;
+                    }
+                }
+            }
+            if (!empty($readonly)) {
+                $j["readonly_tagmap"] = $readonly;
+            }
+            if (!empty($sitewide)) {
+                $j["sitewide_tagmap"] = $sitewide;
+            }
+        }
+        return $j;
     }
 }

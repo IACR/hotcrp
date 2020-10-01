@@ -10,47 +10,54 @@ $Me->add_overrides(Contact::OVERRIDE_CHECK_TIME);
 
 
 // header
-function confHeader() {
+function review_header() {
     global $paperTable, $Qreq;
     PaperTable::do_header($paperTable, "review", $Qreq->mode, $Qreq);
 }
 
-function errorMsgExit($msg) {
+function review_error($msg) {
     global $Conf;
-    confHeader();
+    review_header();
     Ht::stash_script("shortcut().add()");
     $msg && Conf::msg_error($msg);
-    Conf::$g->footer();
+    Conf::$main->footer();
     exit;
 }
 
 
 // collect paper ID
-function loadRows() {
+function review_load() {
     global $Conf, $Me, $Qreq, $prow, $paperTable;
     if (!($prow = PaperTable::fetch_paper_request($Qreq, $Me))) {
-        errorMsgExit(whyNotText($Qreq->annex("paper_whynot") + ["listViewable" => true]));
+        $whyNot = $Qreq->checked_annex("paper_whynot", "PermissionProblem");
+        review_error(whyNotText($whyNot->set("listViewable", true)));
     }
     $paperTable = new PaperTable($prow, $Qreq);
     $paperTable->resolveReview(true);
 }
-
-loadRows();
+review_load();
 
 
 // general error messages
 if ($Qreq->post && $Qreq->post_empty()) {
     $Conf->post_missing_msg();
 } else if ($Qreq->post && $Qreq->default) {
-    if ($Qreq->has_file("uploadedFile"))
+    if ($Qreq->has_file("uploadedFile")) {
         $Qreq->uploadForm = 1;
-    else
+    } else {
         $Qreq->update = 1;
-} else if (isset($Qreq->submitreview)) {
+    }
+} else if ($Qreq->submitreview) {
     $Qreq->update = $Qreq->ready = 1;
-} else if (isset($Qreq->savedraft)) {
+} else if ($Qreq->savedraft) {
     $Qreq->update = 1;
     unset($Qreq->ready);
+}
+
+
+// cancel action
+if ($Qreq->cancel && $Qreq->post_ok()) {
+    $Conf->redirect_self($Qreq);
 }
 
 
@@ -61,12 +68,14 @@ if (isset($Qreq->uploadForm)
     // parse form, store reviews
     $tf = ReviewValues::make_text($rf, $Qreq->file_contents("uploadedFile"),
             $Qreq->file_filename("uploadedFile"));
-    if ($tf->parse_text($Qreq->override))
+    if ($tf->parse_text($Qreq->override)) {
         $tf->check_and_save($Me, $prow, $paperTable->editrrow);
-    if (!$tf->has_error() && $tf->parse_text($Qreq->override))
-        $tf->msg(null, 'Only the first review form in the file was parsed. <a href="' . hoturl("offline") . '">Upload multiple-review files here.</a>', MessageSet::WARNING);
+    }
+    if (!$tf->has_error() && $tf->parse_text($Qreq->override)) {
+        $tf->msg_at(null, 'Only the first review form in the file was parsed. <a href="' . hoturl("offline") . '">Upload multiple-review files here.</a>', MessageSet::WARNING);
+    }
     $tf->report();
-    loadRows();
+    review_load();
 } else if (isset($Qreq->uploadForm)) {
     Conf::msg_error("Select a review form to upload.");
 }
@@ -75,19 +84,19 @@ if (isset($Qreq->uploadForm)
 // check review submit requirements
 if (isset($Qreq->unsubmitreview)
     && $paperTable->editrrow
-    && ($paperTable->editrrow->reviewSubmitted || $paperTable->editrrow->timeApprovalRequested != 0)
+    && $paperTable->editrrow->reviewStatus >= ReviewInfo::RS_DELIVERED
     && $Me->can_administer($prow)
     && $Qreq->post_ok()) {
     $result = $Me->unsubmit_review_row($paperTable->editrrow);
-    if ($result) {
+    if (!Dbl::is_error($result) && $result->affected_rows) {
         $Me->log_activity_for($paperTable->editrrow->contactId, "Review {$paperTable->editrrow->reviewId} unsubmitted", $prow);
         $Conf->confirmMsg("Unsubmitted review.");
     }
-    $Conf->self_redirect($Qreq);             // normally does not return
-    loadRows();
+    $Conf->redirect_self($Qreq);             // normally does not return
+    review_load();
 } else if (isset($Qreq->update)
            && $paperTable->editrrow
-           && $paperTable->editrrow->reviewSubmitted) {
+           && $paperTable->editrrow->reviewStatus >= ReviewInfo::RS_COMPLETED) {
     $Qreq->ready = 1;
 }
 
@@ -96,15 +105,21 @@ if (isset($Qreq->unsubmitreview)
 if (isset($Qreq->update) && $Qreq->post_ok()) {
     $tf = new ReviewValues($rf);
     $tf->paperId = $prow->paperId;
-    if (($whyNot = $Me->perm_submit_review($prow, $paperTable->editrrow)))
-        $tf->msg(null, whyNotText($whyNot), MessageSet::ERROR);
-    else if ($tf->parse_web($Qreq, $Qreq->override)
-             && $tf->check_and_save($Me, $prow, $paperTable->editrrow)
-             && !$tf->has_problem_at("ready")) {
-        $tf->report();
-        $Conf->self_redirect($Qreq); // normally does not return
+    if (($whyNot = $Me->perm_submit_review($prow, $paperTable->editrrow))) {
+        $tf->msg_at(null, whyNotText($whyNot), MessageSet::ERROR);
+    } else if ($tf->parse_web($Qreq, $Qreq->override)) {
+        if (isset($Qreq->approvesubreview)
+            && $paperTable->editrrow
+            && $Me->can_approve_review($prow, $paperTable->editrrow)) {
+            $tf->set_adopt();
+        }
+        if ($tf->check_and_save($Me, $prow, $paperTable->editrrow)
+            && !$tf->has_problem_at("ready")) {
+            $tf->report();
+            $Conf->redirect_self($Qreq); // normally does not return
+        }
     }
-    loadRows();
+    review_load();
     $tf->report();
     $paperTable->set_review_values($tf);
 } else if ($Qreq->has_annex("after_login")) {
@@ -115,12 +130,15 @@ if (isset($Qreq->update) && $Qreq->post_ok()) {
 
 
 // adopt review action
-if (isset($Qreq->adoptreview) && $Qreq->post_ok()) {
+if (isset($Qreq->adoptreview)
+    && $Qreq->post_ok()
+    && $paperTable->editrrow
+    && $Me->can_approve_review($prow, $paperTable->editrrow)) {
     $tf = new ReviewValues($rf);
     $tf->paperId = $prow->paperId;
     $my_rrow = $prow->review_of_user($Me);
     if (($whyNot = $Me->perm_submit_review($prow, $my_rrow))) {
-        $tf->msg(null, whyNotText($whyNot), MessageSet::ERROR);
+        $tf->msg_at(null, whyNotText($whyNot), MessageSet::ERROR);
     } else if ($tf->parse_web($Qreq, $Qreq->override)) {
         $tf->set_ready($Qreq->adoptsubmit);
         if ($tf->check_and_save($Me, $prow, $my_rrow)
@@ -133,9 +151,10 @@ if (isset($Qreq->adoptreview) && $Qreq->post_ok()) {
             $tfx->check_and_save($Me, $prow, $paperTable->editrrow);
         }
     }
-    if (($my_rrow = $prow->fresh_review_of_user($Me)))
+    if (($my_rrow = $prow->fresh_review_of_user($Me))) {
         $Qreq->r = $my_rrow->reviewId;
-    $Conf->self_redirect($Qreq); // normally does not return
+    }
+    $Conf->redirect_self($Qreq); // normally does not return
 }
 
 
@@ -143,29 +162,33 @@ if (isset($Qreq->adoptreview) && $Qreq->post_ok()) {
 if (isset($Qreq->deletereview)
     && $Qreq->post_ok()
     && $Me->can_administer($prow)) {
-    if (!$paperTable->editrrow)
+    if (!$paperTable->editrrow) {
         Conf::msg_error("No review to delete.");
-    else {
+    } else {
         $result = $Conf->qe("delete from PaperReview where paperId=? and reviewId=?", $prow->paperId, $paperTable->editrrow->reviewId);
-        if ($result) {
+        if (!Dbl::is_error($result) && $result->affected_rows) {
             $Me->log_activity_for($paperTable->editrrow->contactId, "Review {$paperTable->editrrow->reviewId} deleted", $prow);
             $Conf->confirmMsg("Deleted review.");
             $Conf->qe("delete from ReviewRating where paperId=? and reviewId=?", $prow->paperId, $paperTable->editrrow->reviewId);
-            if ($paperTable->editrrow->reviewToken != 0)
+            if ($paperTable->editrrow->reviewToken !== 0) {
                 $Conf->update_rev_tokens_setting(-1);
-            if ($paperTable->editrrow->reviewType == REVIEW_META)
+            }
+            if ($paperTable->editrrow->reviewType == REVIEW_META) {
                 $Conf->update_metareviews_setting(-1);
+            }
 
             // perhaps a delegatee needs to redelegate
-            if ($paperTable->editrrow->reviewType < REVIEW_SECONDARY && $paperTable->editrrow->requestedBy > 0)
+            if ($paperTable->editrrow->reviewType < REVIEW_SECONDARY
+                && $paperTable->editrrow->requestedBy > 0) {
                 $Me->update_review_delegation($paperTable->editrrow->paperId, $paperTable->editrrow->requestedBy, -1);
+            }
 
             unset($Qreq->r, $Qreq->reviewId);
             $Qreq->paperId = $Qreq->p = $paperTable->editrrow->paperId;
-            go(hoturl("paper", ["p" => $Qreq->paperId]));
+            $Conf->redirect_hoturl("paper", ["p" => $Qreq->paperId]);
         }
-        $Conf->self_redirect($Qreq);         // normally does not return
-        loadRows();
+        $Conf->redirect_self($Qreq);         // normally does not return
+        review_load();
     }
 }
 
@@ -176,15 +199,20 @@ function downloadForm($qreq) {
     $rrow = $paperTable->rrow;
     $use_request = (!$rrow || $rrow->contactId == $Me->contactId)
         && $prow->review_type($Me) > 0;
-    $text = $rf->textFormHeader(false) . $rf->textForm($prow, $rrow, $Me, $use_request ? $qreq : null);
     $filename = "review-{$prow->paperId}";
-    if ($rrow && $rrow->reviewOrdinal)
+    if ($rrow && $rrow->reviewOrdinal) {
         $filename .= unparseReviewOrdinal($rrow->reviewOrdinal);
-    downloadText($text, $filename, false);
+    }
+    $Conf->make_csvg($filename, CsvGenerator::TYPE_STRING)
+        ->set_inline(false)
+        ->add_string($rf->textFormHeader(false) . $rf->textForm($prow, $rrow, $Me, $use_request ? $qreq : null))
+        ->download();
+    exit;
 }
 
-if (isset($Qreq->downloadForm))
+if (isset($Qreq->downloadForm)) {
     downloadForm($Qreq);
+}
 
 
 function download_all_text_reviews() {
@@ -193,36 +221,44 @@ function download_all_text_reviews() {
     $text = "";
     foreach ($prow->viewable_submitted_reviews_and_comments($Me) as $rc) {
         $text .= PaperInfo::review_or_comment_text_separator($lastrc, $rc);
-        if (isset($rc->reviewId))
-            $text .= $rf->pretty_text($prow, $rc, $Me, false, true);
-        else
-            $text .= $rc->unparse_text($Me, true);
+        if (isset($rc->reviewId)) {
+            $text .= $rf->unparse_text($prow, $rc, $Me, ReviewForm::UNPARSE_NO_TITLE);
+        } else {
+            $text .= $rc->unparse_text($Me, ReviewForm::UNPARSE_NO_TITLE);
+        }
         $lastrc = $rc;
     }
     if ($text === "") {
         $whyNot = $Me->perm_view_review($prow, null) ? : $prow->make_whynot();
         return Conf::msg_error(whyNotText($whyNot));
     }
-    $text = $Conf->short_name . " Paper #{$prow->paperId} Reviews and Comments\n"
-        . str_repeat("=", 75) . "\n"
-        . prefix_word_wrap("", "Paper #{$prow->paperId} {$prow->title}", 0, 75)
-        . "\n\n" . $text;
-    downloadText($text, "reviews-{$prow->paperId}", true);
+    $Conf->make_csvg("reviews-{$prow->paperId}", CsvGenerator::TYPE_STRING)
+        ->add_string($Conf->short_name . " Paper #{$prow->paperId} Reviews and Comments\n"
+            . str_repeat("=", 75) . "\n"
+            . prefix_word_wrap("", "Paper #{$prow->paperId} {$prow->title}", 0, 75)
+            . "\n\n" . $text)
+        ->download();
+    exit;
 }
 
 function download_one_text_review(ReviewInfo $rrow) {
     global $rf, $Conf, $Me, $prow, $paperTable;
     $filename = "review-{$prow->paperId}";
-    if ($rrow->reviewOrdinal)
+    if ($rrow->reviewOrdinal) {
         $filename .= unparseReviewOrdinal($rrow->reviewOrdinal);
-    downloadText($rf->pretty_text($prow, $rrow, $Me), $filename, true);
+    }
+    $Conf->make_csvg($filename, CsvGenerator::TYPE_STRING)
+        ->add_string($rf->unparse_text($prow, $rrow, $Me))
+        ->download();
+    exit;
 }
 
 if (isset($Qreq->text)) {
-    if ($paperTable->rrow)
+    if ($paperTable->rrow) {
         download_one_text_review($paperTable->rrow);
-    else
+    } else {
         download_all_text_reviews();
+    }
 }
 
 
@@ -243,7 +279,7 @@ if ((isset($Qreq->refuse) || isset($Qreq->decline))
             && $decline_email
             && !isset($Qreq->reason)) {
             $Conf->confirmMsg("<p>Thank you for telling us that you cannot complete your review. If you’d like, you may enter a brief explanation here.</p>"
-                . Ht::form(hoturl_post("api/declinereview", ["p" => $prow->paperId, "email" => $decline_email, "redirect" => $Conf->hoturl_site_relative_raw("index")]))
+                . Ht::form($Conf->hoturl_post("api/declinereview", ["p" => $prow->paperId, "email" => $decline_email, "redirect" => $Conf->hoturl_site_relative_raw("index")]))
                 . Ht::textarea("reason", $result->content["reason"], ["rows" => 3, "cols" => 40, "spellcheck" => true])
                 . '<hr class="c">'
                 . Ht::submit("Update explanation", ["class" => "btn-primary"])
@@ -251,11 +287,11 @@ if ((isset($Qreq->refuse) || isset($Qreq->decline))
         } else {
             $Conf->confirmMsg("Review declined. Thank you for telling us that you cannot complete your review.");
             unset($Qreq->email, $Qreq->firstName, $Qreq->lastName, $Qreq->affiliation, $Qreq->round, $Qreq->reason, $Qreq->override, $Qreq->retract);
-            $Conf->self_redirect($Qreq);
+            $Conf->redirect_self($Qreq);
         }
     } else {
         $result->export_errors();
-        loadRows();
+        review_load();
     }
 }
 
@@ -266,17 +302,18 @@ if (isset($Qreq->accept)
         || (!$Me->is_my_review($rrow) && !$Me->can_administer($prow))) {
         Conf::msg_error("This review was not assigned to you, so you cannot confirm your intention to write it.");
     } else {
-        if ($rrow->reviewModified <= 0) {
+        if ($rrow->reviewStatus < ReviewInfo::RS_ACCEPTED) {
             Dbl::qe("update PaperReview set reviewModified=1, timeRequestNotified=greatest(?,timeRequestNotified)
-                where paperId=? and reviewId=? and coalesce(reviewModified,0)<=0",
-                $Now, $prow->paperId, $rrow->reviewId);
-            if ($Me->is_signed_in())
+                where paperId=? and reviewId=? and reviewModified<=0",
+                Conf::$now, $prow->paperId, $rrow->reviewId);
+            if ($Me->is_signed_in()) {
                 $rrow->delete_acceptor();
+            }
             $Me->log_activity_for($rrow->contactId, "Review {$rrow->reviewId} accepted", $prow);
         }
         $Conf->confirmMsg("Thank you for confirming your intention to finish this review. You can download the paper and review form below.");
-        $Conf->self_redirect($Qreq);
-        loadRows();
+        $Conf->redirect_self($Qreq);
+        review_load();
     }
 }
 
@@ -288,24 +325,26 @@ $editAny = $Me->can_review($prow, null);
 
 // can we see any reviews?
 if (!$viewAny && !$editAny) {
-    if (($whyNotPaper = $Me->perm_view_paper($prow)))
-        errorMsgExit(whyNotText($whyNotPaper + ["listViewable" => true]));
+    if (($whyNotPaper = $Me->perm_view_paper($prow))) {
+        review_error(whyNotText($whyNotPaper->set("listViewable", true)));
+    }
     if (isset($Qreq->reviewId)) {
         Conf::msg_error("You can’t see the reviews for this paper. "
                         . whyNotText($Me->perm_view_review($prow, null)));
-        go(hoturl("paper", "p=$prow->paperId"));
+        $Conf->redirect_hoturl("paper", "p=$prow->paperId");
     }
 }
 
 
 // mode
 $paperTable->fixReviewMode();
-if ($paperTable->mode == "edit")
-    go(hoturl("paper", ["p" => $prow->paperId]));
+if ($paperTable->mode == "edit") {
+    $Conf->redirect_hoturl("paper", ["p" => $prow->paperId]);
+}
 
 
 // paper table
-confHeader();
+review_header();
 
 $paperTable->initialize(false, false);
 $paperTable->paptabBegin();
@@ -325,5 +364,5 @@ if (!$viewAny
     }
 }
 
-echo "</div>\n";
+echo "</article>\n";
 $Conf->footer();

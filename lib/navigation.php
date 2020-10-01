@@ -91,6 +91,7 @@ class NavigationState {
         // (This is generally already done for us but just to be safe.)
         $uri_suffix = preg_replace_callback('/%[2-7][0-9a-f]/i', function ($m) {
             $x = urldecode($m[0]);
+            /** @phan-suppress-next-line PhanParamSuspiciousOrder */
             if (ctype_alnum($x) || strpos("._,-=@~", $x) !== false) {
                 return $x;
             } else {
@@ -347,11 +348,15 @@ class Navigation {
         return self::$s->make_absolute($url);
     }
 
+    /** @param ?string $url */
     static function redirect($url = null) {
         $url = self::make_absolute($url);
         // Might have an HTML-encoded URL; decode at least &amp;.
         $url = str_replace("&amp;", "&", $url);
 
+        if (Conf::$main) {
+            Conf::$main->transfer_messages_to_session();
+        }
         if (preg_match('/\A[a-z]+:\/\//', $url)) {
             header("Location: $url");
         }
@@ -367,10 +372,12 @@ class Navigation {
         exit();
     }
 
+    /** @param string $site_url */
     static function redirect_site($site_url) {
         self::redirect(self::site_absolute() . $site_url);
     }
 
+    /** @param string $base_url */
     static function redirect_base($base_url) {
         self::redirect(self::base_absolute() . $base_url);
     }

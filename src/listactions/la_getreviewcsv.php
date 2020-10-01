@@ -4,13 +4,14 @@
 
 class GetReviewCSV_ListAction extends ListAction {
     private $include_paper;
+    private $author_view;
     function __construct($conf, $fj) {
         $this->author_view = !!get($fj, "author_view");
     }
     function allow(Contact $user, Qrequest $qreq) {
         return $user->can_view_some_review();
     }
-    function run(Contact $user, $qreq, $ssel) {
+    function run(Contact $user, Qrequest $qreq, SearchSelection $ssel) {
         $rf = $user->conf->review_form();
         $overrides = $user->add_overrides(Contact::OVERRIDE_CONFLICT);
         if ($this->author_view && $user->privChair) {
@@ -19,7 +20,7 @@ class GetReviewCSV_ListAction extends ListAction {
         }
         $errors = $items = $fields = $pids = [];
         $has_id = $has_ordinal = false;
-        foreach ($user->paper_set($ssel) as $prow) {
+        foreach ($ssel->paper_set($user) as $prow) {
             if (($whyNot = $user->perm_view_paper($prow))) {
                 $errors["#$prow->paperId: " . whyNotText($whyNot, true)] = true;
                 continue;
@@ -38,7 +39,7 @@ class GetReviewCSV_ListAction extends ListAction {
                     if ($viewer->can_view_review_identity($prow, $rrow)) {
                         $has_id = true;
                         $text["email"] = $rrow->email;
-                        $text["reviewername"] = Text::name_text($rrow);
+                        $text["reviewername"] = Text::nameo($rrow, 0);
                     }
                     foreach ($rf->paper_visible_fields($viewer, $prow, $rrow) as $f) {
                         $fields[$f->id] = true;
@@ -64,6 +65,6 @@ class GetReviewCSV_ListAction extends ListAction {
             $user->log_activity("Download reviews CSV", array_keys($pids));
         }
         return $user->conf->make_csvg($this->author_view ? "aureviews" : "reviews")
-            ->select($selection)->add($items);
+            ->select($selection)->append($items);
     }
 }

@@ -71,15 +71,15 @@
         "render_callback": "Decisions_SettingParser::render"
     },
     {
-        "name": "decisions/final-versions-title", "position": 100,
+        "name": "decisions/final-versions", "position": 100,
         "title": "Final versions"
     },
     {
-        "name": "decisions/final-versions", "position": 105,
+        "name": "decisions/final-versions-body", "position": 105,
         "render_callback": "FinalVersions_SettingParser::render"
     },
     {
-        "name": "__crosscheck/final-versions", "position": 810,
+        "name": "__crosscheck/final-versions-body", "position": 810,
         "crosscheck_callback": "FinalVersions_SettingParser::crosscheck"
     },
 
@@ -118,9 +118,9 @@
         "title": "External reviews",
         "render_callback": "Reviews_SettingRenderer::render_external"
     },
-    [   "reviews/external/view", 10, "Reviews_SettingRenderer::render_extrev_view"   ],
-    [   "reviews/external/editdelegate", 20, "Reviews_SettingRenderer::render_extrev_editdelegate"   ],
-    [   "reviews/external/requestmail", 30, "Reviews_SettingRenderer::render_extrev_requestmail"   ],
+    [   "reviews/external/editdelegate", 10, "Reviews_SettingRenderer::render_extrev_editdelegate"   ],
+    [   "reviews/external/requestmail", 15, "Reviews_SettingRenderer::render_extrev_requestmail"   ],
+    [   "reviews/external/view", 20, "Reviews_SettingRenderer::render_extrev_view"   ],
     {
         "name": "reviews/ratings", "position": 40,
         "title": "Review ratings",
@@ -202,6 +202,10 @@
         "name": "tags", "position": 700,
         "title": "Tags &amp; tracks",
         "render_callback": "Tags_SettingRenderer::render"
+    },
+    {
+        "name": "__crosscheck/tags", "position": 700,
+        "crosscheck_callback": "Tags_SettingParser::crosscheck"
     },
     [   "tags/main/chair", 10, "Tags_SettingRenderer::render_tag_chair"   ],
     [   "tags/main/sitewide", 20, "Tags_SettingRenderer::render_tag_sitewide"   ],

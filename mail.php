@@ -17,7 +17,7 @@ if (isset($Qreq->fromlog)
     && ctype_digit($Qreq->fromlog)
     && $Me->privChair) {
     $result = $Conf->qe_raw("select * from MailLog where mailId=" . $Qreq->fromlog);
-    if (($row = edb_orow($result))) {
+    if (($row = $result->fetch_object())) {
         foreach (["recipients", "q", "t", "cc", "replyto", "subject", "emailBody"] as $field) {
             if (isset($row->$field) && !isset($Qreq[$field]))
                 $Qreq[$field] = $row->$field;
@@ -56,7 +56,7 @@ if (isset($Qreq->cc) && $Me->is_manager()) {
 } else if ($Conf->opt("emailCc")) {
     $Qreq->cc = $Conf->opt("emailCc");
 } else {
-    $Qreq->cc = Text::user_email_to($Conf->site_contact());
+    $Qreq->cc = Text::nameo($Conf->site_contact(), NAME_MAILQUOTE|NAME_E);
 }
 
 if (isset($Qreq->replyto) && $Me->is_manager()) {
@@ -111,7 +111,7 @@ if (isset($Qreq->p) && is_array($Qreq->p)
     $Qreq->q = join(" ", $papersel);
     $Qreq->plimit = 1;
 } else if (isset($Qreq->plimit)) {
-    $search = new PaperSearch($Me, array("t" => $Qreq->t, "q" => $Qreq->q));
+    $search = new PaperSearch($Me, ["t" => $Qreq->t, "q" => $Qreq->q]);
     $papersel = $search->paper_ids();
     sort($papersel);
 } else {
@@ -124,12 +124,15 @@ if (isset($Qreq->loadtmpl)) {
     $template = (array) $Conf->mail_template($t);
     if (((!isset($template["title"]) || $template["title"] === false)
          && !isset($template["allow_template"]))
-        || (isset($template["allow_template"]) && $template["allow_template"] === false))
+        || (isset($template["allow_template"]) && $template["allow_template"] === false)) {
         $template = (array) $Conf->mail_template("generic");
-    if (!isset($Qreq->to) || $Qreq->loadtmpl != -1)
+    }
+    if (!isset($Qreq->to) || $Qreq->loadtmpl != -1) {
         $Qreq->to = get($template, "default_recipients", "s");
-    if (isset($template["default_search_type"]))
+    }
+    if (isset($template["default_search_type"])) {
         $Qreq->t = $template["default_search_type"];
+    }
     $Qreq->subject = $null_mailer->expand($template["subject"]);
     $Qreq->emailBody = $null_mailer->expand($template["body"]);
 }
@@ -339,7 +342,11 @@ class MailSender {
             $prep->body = "Dear " . $m[1] . (count($prep->to) == 1 ? "" : "s") . $m[2];
     }
 
-    private function process_prep($prep, &$last_prep, $row) {
+    /** @param HotCRPMailPreparation $prep
+     * @param HotCRPMailPreparation &$last_prep
+     * @param ?Contact $recipient
+     * @return bool */
+    private function process_prep($prep, &$last_prep, $recipient) {
         // Don't combine senders if anything differs. Also, don't combine
         // mails from different papers, unless those mails are to the same
         // person.
@@ -359,7 +366,9 @@ class MailSender {
         }
 
         if (!$prep->fake
-            && ($must_include || !in_array($row->contactId, $last_prep->contactIds))) {
+            && ($must_include
+                || !$recipient
+                || !in_array($recipient->contactId, $last_prep->contactIds))) {
             if ($last_prep !== $prep) {
                 $last_prep->merge($prep);
             }
@@ -454,7 +463,7 @@ class MailSender {
 
         // test whether this mail is paper-sensitive
         $mailer = new HotCRPMailer($this->conf, $this->user, $rest);
-        $prep = $mailer->make_preparation($template, $rest);
+        $prep = $mailer->prepare($template, $rest);
         $paper_sensitive = preg_match('/%[A-Z0-9]+[(%]/', $prep->subject . $prep->body);
 
         $q = $this->recip->query($paper_sensitive);
@@ -462,7 +471,7 @@ class MailSender {
             return Conf::msg_error("Bad recipients value");
         }
         $result = $this->conf->qe_raw($q);
-        if (!$result) {
+        if (Dbl::is_error($result)) {
             return;
         }
 
@@ -478,23 +487,23 @@ class MailSender {
 
         $mailer = new HotCRPMailer($this->conf);
         $mailer->combination_type = $this->recip->combination_type($paper_sensitive);
-        $fake_prep = new HotCRPMailPreparation($this->conf);
+        $fake_prep = new HotCRPMailPreparation($this->conf, null);
         $fake_prep->fake = true;
         $last_prep = $fake_prep;
         $nrows_done = 0;
-        $nrows_total = edb_nrows($result);
+        $nrows_total = $result->num_rows;
         $nwarnings = 0;
         $preperrors = array();
         $revinform = ($this->recipients == "newpcrev" ? array() : null);
-        while (($row = PaperInfo::fetch($result, $this->user))) {
+        while (($rowdata = $result->fetch_assoc())) {
+            $row = new PaperInfo($rowdata, $this->user, $this->conf);
+            $contact = new Contact($rowdata, $this->conf);
             ++$nrows_done;
-            $row->contactId = (int) $row->contactId;
 
-            $contact = new Contact($row, $this->conf);
             $rest["prow"] = $prow = $row->paperId > 0 ? $row : null;
             $rest["newrev_since"] = $this->recip->newrev_since;
             $mailer->reset($contact, $rest);
-            $prep = $mailer->make_preparation($template, $rest);
+            $prep = $mailer->prepare($template, $rest);
 
             if ($prep->errors) {
                 foreach ($prep->errors as $lcfield => $hline) {
@@ -506,24 +515,24 @@ class MailSender {
                     }
                     $preperrors[$emsg] = true;
                 }
-            } else if ($this->process_prep($prep, $last_prep, $row)) {
+            } else if ($this->process_prep($prep, $last_prep, $contact)) {
                 if ((!$this->user->privChair || $this->conf->opt("chairHidePasswords"))
                     && !$last_prep->censored_preparation
                     && $rest["censor"] === Mailer::CENSOR_NONE) {
                     $rest["censor"] = Mailer::CENSOR_DISPLAY;
                     $mailer->reset($contact, $rest);
-                    $last_prep->censored_preparation = $mailer->make_preparation($template, $rest);
+                    $last_prep->censored_preparation = $mailer->prepare($template, $rest);
                     $rest["censor"] = Mailer::CENSOR_NONE;
                 }
             }
 
-            if ($nwarnings !== $mailer->nwarnings() || $nrows_done % 5 == 0) {
+            if ($nwarnings !== $mailer->warning_count() || $nrows_done % 5 == 0) {
                 $this->echo_mailinfo($nrows_done, $nrows_total);
             }
-            if ($nwarnings !== $mailer->nwarnings()) {
+            if ($nwarnings !== $mailer->warning_count()) {
                 $this->echo_prologue();
-                $nwarnings = $mailer->nwarnings();
-                echo "<div id=\"foldmailwarn$nwarnings\" class=\"hidden\"><div class=\"warning\">", join("<br>", $mailer->warnings()), "</div></div>";
+                $nwarnings = $mailer->warning_count();
+                echo "<div id=\"foldmailwarn$nwarnings\" class=\"hidden\"><div class=\"warning\">", join("<br>", $mailer->warning_htmls()), "</div></div>";
                 echo Ht::unstash_script("\$\$('mailwarnings').innerHTML = \$\$('foldmailwarn$nwarnings').innerHTML;");
             }
 
@@ -532,7 +541,7 @@ class MailSender {
             }
         }
 
-        $this->process_prep($fake_prep, $last_prep, (object) ["paperId" => -1]);
+        $this->process_prep($fake_prep, $last_prep, null);
         $this->echo_mailinfo($nrows_done, $nrows_total);
 
         if ($this->mcount === 0) {
@@ -584,9 +593,9 @@ if (!$Qreq->loadtmpl
 
 
 if (isset($Qreq->monreq)) {
-    $plist = new PaperList(new PaperSearch($Me, ["t" => "req", "q" => ""]), ["foldable" => true]);
+    $plist = new PaperList("reqrevs", new PaperSearch($Me, ["t" => "req", "q" => ""]));
     $plist->set_table_id_class("foldpl", "pltable-fullw");
-    $ptext = $plist->table_html("reqrevs", ["header_links" => true, "list" => true]);
+    $ptext = $plist->table_html(["list" => true]);
     if ($plist->count == 0)
         $Conf->infoMsg('You have not requested any external reviews.  <a href="' . hoturl("index") . '">Return home</a>');
     else {
@@ -618,10 +627,12 @@ foreach (array_keys($Conf->mail_template_map()) as $tname) {
         $tmpl[] = $template;
 }
 usort($tmpl, "Conf::xt_position_compare");
-foreach ($tmpl as $t)
+foreach ($tmpl as $t) {
     $tmploptions[$t->name] = $t->title;
-if (!isset($Qreq->template) || !isset($tmploptions[$Qreq->template]))
+}
+if (!isset($Qreq->template) || !isset($tmploptions[$Qreq->template])) {
     $Qreq->template = "generic";
+}
 echo Ht::select("template", $tmploptions, $Qreq->template),
     " &nbsp;",
     Ht::submit("loadtmpl", "Load", ["id" => "loadtmpl"]),
@@ -659,8 +670,8 @@ echo "</span>";
 if (isset($Qreq->plimit)
     && !isset($Qreq->monreq)
     && (isset($Qreq->loadtmpl) || isset($Qreq->psearch))) {
-    $plist = new PaperList(new PaperSearch($Me, ["t" => $Qreq->t, "q" => $Qreq->q]));
-    $ptext = $plist->table_html("reviewers", ["noheader" => true, "nofooter" => true]);
+    $plist = new PaperList("reviewers", new PaperSearch($Me, ["t" => $Qreq->t, "q" => $Qreq->q]));
+    $ptext = $plist->table_html(["noheader" => true, "nofooter" => true]);
     echo "<div class=\"fx8\">";
     if ($plist->count == 0)
         echo "No papers match that search.";
@@ -722,11 +733,11 @@ echo "  <tr><td class=\"mhnp nw\"><label for=\"subject\">Subject:</label></td><t
 
 if ($Me->privChair) {
     $result = $Conf->qe_raw("select mailId, subject, emailBody from MailLog where fromNonChair=0 and status>=0 order by mailId desc limit 200");
-    if (edb_nrows($result)) {
+    if ($result->num_rows) {
         echo '<div style="padding-top:12px;max-height:24em;overflow-y:auto">',
             "<strong>Recent mails:</strong>\n";
         $i = 1;
-        while (($row = edb_orow($result))) {
+        while (($row = $result->fetch_object())) {
             echo '<div class="mhdd"><div style="position:relative;overflow:hidden">',
                 '<div style="position:absolute;white-space:nowrap"><span style="min-width:2em;text-align:right;display:inline-block" class="dim">', $i, '.</span> <a class="q" href="', hoturl("mail", "fromlog=" . $row->mailId), '">', htmlspecialchars($row->subject), ' &ndash; <span class="dim">', htmlspecialchars(UnicodeHelper::utf8_prefix($row->emailBody, 100)), "</span></a></div>",
                 "<br></div></div>\n";

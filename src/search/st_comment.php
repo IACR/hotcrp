@@ -28,7 +28,7 @@ class Comment_SearchTerm extends SearchTerm {
         $this->only_author = get($kwdef, "only_author");
         $this->commentRound = get($kwdef, "round");
     }
-    static function comment_factory($keyword, $user, $kwfj, $m) {
+    static function comment_factory($keyword, Contact $user, $kwfj, $m) {
         $tword = str_replace("-", "", $m[1]);
         return (object) [
             "name" => $keyword, "parse_callback" => "Comment_SearchTerm::parse",
@@ -38,7 +38,7 @@ class Comment_SearchTerm extends SearchTerm {
             "has" => ">0"
         ];
     }
-    static function response_factory($keyword, $user, $kwfj, $m) {
+    static function response_factory($keyword, Contact $user, $kwfj, $m) {
         $round = $user->conf->resp_round_number($m[2]);
         if ($round === false
             && $m[1] === ""
@@ -67,7 +67,7 @@ class Comment_SearchTerm extends SearchTerm {
             && !$srch->conf->pc_tag_exists(substr($m[0], 1))) {
             $tags = new TagSearchMatcher($srch->user);
             $tags->add_check_tag(substr($m[0], 1), true);
-            foreach ($tags->errors() as $e) {
+            foreach ($tags->error_texts() as $e) {
                 $srch->warn($e);
             }
         } else if ($m[0] !== "") {
@@ -77,8 +77,9 @@ class Comment_SearchTerm extends SearchTerm {
         return new Comment_SearchTerm($csm, $tags, $sword->kwdef);
     }
     function sqlexpr(SearchQueryInfo $sqi) {
-        if (!isset($sqi->column["commentSkeletonInfo"]))
-            $sqi->add_column("commentSkeletonInfo", "(select group_concat(commentId, ';', contactId, ';', commentType, ';', commentRound, ';', coalesce(commentTags,'') separator '|') from PaperComment where paperId=Paper.paperId)");
+        if (!isset($sqi->columns["commentSkeletonInfo"])) {
+            $sqi->add_column("commentSkeletonInfo", "coalesce((select group_concat(commentId, ';', contactId, ';', commentType, ';', commentRound, ';', coalesce(commentTags,'') separator '|') from PaperComment where paperId=Paper.paperId), '')");
+        }
 
         $where = [];
         if ($this->type_mask) {

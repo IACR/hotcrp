@@ -6,52 +6,31 @@ define("UTF8_ALPHA_TRANS_2", "\xC2\xAD\xC3\x80\xC3\x81\xC3\x82\xC3\x83\xC3\x84\x
 
 define("UTF8_ALPHA_TRANS_2_OUT", "- A A A A A A AEC E E E E I I I I N O O O O O O U U U U Y ssa a a a a a aec e e e e i i i i n o o o o o o u u u u y y A a A a A a C c C c C c C c D d D d E e E e E e E e E e G g G g G g G g H h H h I i I i I i I i I i IJijJ j K k L l L l L l L l L l N n N n N n O o O o O o OEoeR r R r R r S s S s S s S s T t T t T t U u U u U u U u U u U u W w Y y Y Z z Z z Z z s b B O o U u DZDzdzLJLjljNJNjnjA a I i O o U u U u U u U u U u A a A a AEaeG g K k O o O o j DZDzdzG g N n A a AEaeO o A a A a E e E e I i I i O o O o R r R r U u U u S s T t H h A a E e O o O o O o O o Y y                                                                                                                                                                                                       ");
 
-define("UTF8_ALPHA_TRANS_3", "\xE1\xB8\x80\xE1\xB8\x81\xE1\xB8\x82\xE1\xB8\x83\xE1\xB8\x84\xE1\xB8\x85\xE1\xB8\x86\xE1\xB8\x87\xE1\xB8\x88\xE1\xB8\x89\xE1\xB8\x8A\xE1\xB8\x8B\xE1\xB8\x8C\xE1\xB8\x8D\xE1\xB8\x8E\xE1\xB8\x8F\xE1\xB8\x90\xE1\xB8\x91\xE1\xB8\x92\xE1\xB8\x93\xE1\xB8\x94\xE1\xB8\x95\xE1\xB8\x96\xE1\xB8\x97\xE1\xB8\x98\xE1\xB8\x99\xE1\xB8\x9A\xE1\xB8\x9B\xE1\xB8\x9C\xE1\xB8\x9D\xE1\xB8\x9E\xE1\xB8\x9F\xE1\xB8\xA0\xE1\xB8\xA1\xE1\xB8\xA2\xE1\xB8\xA3\xE1\xB8\xA4\xE1\xB8\xA5\xE1\xB8\xA6\xE1\xB8\xA7\xE1\xB8\xA8\xE1\xB8\xA9\xE1\xB8\xAA\xE1\xB8\xAB\xE1\xB8\xAC\xE1\xB8\xAD\xE1\xB8\xAE\xE1\xB8\xAF\xE1\xB8\xB0\xE1\xB8\xB1\xE1\xB8\xB2\xE1\xB8\xB3\xE1\xB8\xB4\xE1\xB8\xB5\xE1\xB8\xB6\xE1\xB8\xB7\xE1\xB8\xB8\xE1\xB8\xB9\xE1\xB8\xBA\xE1\xB8\xBB\xE1\xB8\xBC\xE1\xB8\xBD\xE1\xB8\xBE\xE1\xB8\xBF\xE1\xB9\x80\xE1\xB9\x81\xE1\xB9\x82\xE1\xB9\x83\xE1\xB9\x84\xE1\xB9\x85\xE1\xB9\x86\xE1\xB9\x87\xE1\xB9\x88\xE1\xB9\x89\xE1\xB9\x8A\xE1\xB9\x8B\xE1\xB9\x8C\xE1\xB9\x8D\xE1\xB9\x8E\xE1\xB9\x8F\xE1\xB9\x90\xE1\xB9\x91\xE1\xB9\x92\xE1\xB9\x93\xE1\xB9\x94\xE1\xB9\x95\xE1\xB9\x96\xE1\xB9\x97\xE1\xB9\x98\xE1\xB9\x99\xE1\xB9\x9A\xE1\xB9\x9B\xE1\xB9\x9C\xE1\xB9\x9D\xE1\xB9\x9E\xE1\xB9\x9F\xE1\xB9\xA0\xE1\xB9\xA1\xE1\xB9\xA2\xE1\xB9\xA3\xE1\xB9\xA4\xE1\xB9\xA5\xE1\xB9\xA6\xE1\xB9\xA7\xE1\xB9\xA8\xE1\xB9\xA9\xE1\xB9\xAA\xE1\xB9\xAB\xE1\xB9\xAC\xE1\xB9\xAD\xE1\xB9\xAE\xE1\xB9\xAF\xE1\xB9\xB0\xE1\xB9\xB1\xE1\xB9\xB2\xE1\xB9\xB3\xE1\xB9\xB4\xE1\xB9\xB5\xE1\xB9\xB6\xE1\xB9\xB7\xE1\xB9\xB8\xE1\xB9\xB9\xE1\xB9\xBA\xE1\xB9\xBB\xE1\xB9\xBC\xE1\xB9\xBD\xE1\xB9\xBE\xE1\xB9\xBF\xE1\xBA\x80\xE1\xBA\x81\xE1\xBA\x82\xE1\xBA\x83\xE1\xBA\x84\xE1\xBA\x85\xE1\xBA\x86\xE1\xBA\x87\xE1\xBA\x88\xE1\xBA\x89\xE1\xBA\x8A\xE1\xBA\x8B\xE1\xBA\x8C\xE1\xBA\x8D\xE1\xBA\x8E\xE1\xBA\x8F\xE1\xBA\x90\xE1\xBA\x91\xE1\xBA\x92\xE1\xBA\x93\xE1\xBA\x94\xE1\xBA\x95\xE1\xBA\x96\xE1\xBA\x97\xE1\xBA\x98\xE1\xBA\x99\xE1\xBA\x9B\xE1\xBA\xA0\xE1\xBA\xA1\xE1\xBA\xA2\xE1\xBA\xA3\xE1\xBA\xA4\xE1\xBA\xA5\xE1\xBA\xA6\xE1\xBA\xA7\xE1\xBA\xA8\xE1\xBA\xA9\xE1\xBA\xAA\xE1\xBA\xAB\xE1\xBA\xAC\xE1\xBA\xAD\xE1\xBA\xAE\xE1\xBA\xAF\xE1\xBA\xB0\xE1\xBA\xB1\xE1\xBA\xB2\xE1\xBA\xB3\xE1\xBA\xB4\xE1\xBA\xB5\xE1\xBA\xB6\xE1\xBA\xB7\xE1\xBA\xB8\xE1\xBA\xB9\xE1\xBA\xBA\xE1\xBA\xBB\xE1\xBA\xBC\xE1\xBA\xBD\xE1\xBA\xBE\xE1\xBA\xBF\xE1\xBB\x80\xE1\xBB\x81\xE1\xBB\x82\xE1\xBB\x83\xE1\xBB\x84\xE1\xBB\x85\xE1\xBB\x86\xE1\xBB\x87\xE1\xBB\x88\xE1\xBB\x89\xE1\xBB\x8A\xE1\xBB\x8B\xE1\xBB\x8C\xE1\xBB\x8D\xE1\xBB\x8E\xE1\xBB\x8F\xE1\xBB\x90\xE1\xBB\x91\xE1\xBB\x92\xE1\xBB\x93\xE1\xBB\x94\xE1\xBB\x95\xE1\xBB\x96\xE1\xBB\x97\xE1\xBB\x98\xE1\xBB\x99\xE1\xBB\x9A\xE1\xBB\x9B\xE1\xBB\x9C\xE1\xBB\x9D\xE1\xBB\x9E\xE1\xBB\x9F\xE1\xBB\xA0\xE1\xBB\xA1\xE1\xBB\xA2\xE1\xBB\xA3\xE1\xBB\xA4\xE1\xBB\xA5\xE1\xBB\xA6\xE1\xBB\xA7\xE1\xBB\xA8\xE1\xBB\xA9\xE1\xBB\xAA\xE1\xBB\xAB\xE1\xBB\xAC\xE1\xBB\xAD\xE1\xBB\xAE\xE1\xBB\xAF\xE1\xBB\xB0\xE1\xBB\xB1\xE1\xBB\xB2\xE1\xBB\xB3\xE1\xBB\xB4\xE1\xBB\xB5\xE1\xBB\xB6\xE1\xBB\xB7\xE1\xBB\xB8\xE1\xBB\xB9\xE2\x80\x90\xE2\x80\x91\xE2\x80\x92\xE2\x80\x93\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2\x80\x9D\xE2\x84\xAA\xEF\xAC\x80\xEF\xAC\x81\xEF\xAC\x82\xEF\xAC\x83\xEF\xAC\x84\xEF\xAC\x85\xEF\xAC\x86\xEF\xBC\xA1\xEF\xBC\xA2\xEF\xBC\xA3\xEF\xBC\xA4\xEF\xBC\xA5\xEF\xBC\xA6\xEF\xBC\xA7\xEF\xBC\xA8\xEF\xBC\xA9\xEF\xBC\xAA\xEF\xBC\xAB\xEF\xBC\xAC\xEF\xBC\xAD\xEF\xBC\xAE\xEF\xBC\xAF\xEF\xBC\xB0\xEF\xBC\xB1\xEF\xBC\xB2\xEF\xBC\xB3\xEF\xBC\xB4\xEF\xBC\xB5\xEF\xBC\xB6\xEF\xBC\xB7\xEF\xBC\xB8\xEF\xBC\xB9\xEF\xBC\xBA\xEF\xBD\x81\xEF\xBD\x82\xEF\xBD\x83\xEF\xBD\x84\xEF\xBD\x85\xEF\xBD\x86\xEF\xBD\x87\xEF\xBD\x88\xEF\xBD\x89\xEF\xBD\x8A\xEF\xBD\x8B\xEF\xBD\x8C\xEF\xBD\x8D\xEF\xBD\x8E\xEF\xBD\x8F\xEF\xBD\x90\xEF\xBD\x91\xEF\xBD\x92\xEF\xBD\x93\xEF\xBD\x94\xEF\xBD\x95\xEF\xBD\x96\xEF\xBD\x97\xEF\xBD\x98\xEF\xBD\x99\xEF\xBD\x9A");
+define("UTF8_ALPHA_TRANS_3", "\xE1\xB8\x80\xE1\xB8\x81\xE1\xB8\x82\xE1\xB8\x83\xE1\xB8\x84\xE1\xB8\x85\xE1\xB8\x86\xE1\xB8\x87\xE1\xB8\x88\xE1\xB8\x89\xE1\xB8\x8A\xE1\xB8\x8B\xE1\xB8\x8C\xE1\xB8\x8D\xE1\xB8\x8E\xE1\xB8\x8F\xE1\xB8\x90\xE1\xB8\x91\xE1\xB8\x92\xE1\xB8\x93\xE1\xB8\x94\xE1\xB8\x95\xE1\xB8\x96\xE1\xB8\x97\xE1\xB8\x98\xE1\xB8\x99\xE1\xB8\x9A\xE1\xB8\x9B\xE1\xB8\x9C\xE1\xB8\x9D\xE1\xB8\x9E\xE1\xB8\x9F\xE1\xB8\xA0\xE1\xB8\xA1\xE1\xB8\xA2\xE1\xB8\xA3\xE1\xB8\xA4\xE1\xB8\xA5\xE1\xB8\xA6\xE1\xB8\xA7\xE1\xB8\xA8\xE1\xB8\xA9\xE1\xB8\xAA\xE1\xB8\xAB\xE1\xB8\xAC\xE1\xB8\xAD\xE1\xB8\xAE\xE1\xB8\xAF\xE1\xB8\xB0\xE1\xB8\xB1\xE1\xB8\xB2\xE1\xB8\xB3\xE1\xB8\xB4\xE1\xB8\xB5\xE1\xB8\xB6\xE1\xB8\xB7\xE1\xB8\xB8\xE1\xB8\xB9\xE1\xB8\xBA\xE1\xB8\xBB\xE1\xB8\xBC\xE1\xB8\xBD\xE1\xB8\xBE\xE1\xB8\xBF\xE1\xB9\x80\xE1\xB9\x81\xE1\xB9\x82\xE1\xB9\x83\xE1\xB9\x84\xE1\xB9\x85\xE1\xB9\x86\xE1\xB9\x87\xE1\xB9\x88\xE1\xB9\x89\xE1\xB9\x8A\xE1\xB9\x8B\xE1\xB9\x8C\xE1\xB9\x8D\xE1\xB9\x8E\xE1\xB9\x8F\xE1\xB9\x90\xE1\xB9\x91\xE1\xB9\x92\xE1\xB9\x93\xE1\xB9\x94\xE1\xB9\x95\xE1\xB9\x96\xE1\xB9\x97\xE1\xB9\x98\xE1\xB9\x99\xE1\xB9\x9A\xE1\xB9\x9B\xE1\xB9\x9C\xE1\xB9\x9D\xE1\xB9\x9E\xE1\xB9\x9F\xE1\xB9\xA0\xE1\xB9\xA1\xE1\xB9\xA2\xE1\xB9\xA3\xE1\xB9\xA4\xE1\xB9\xA5\xE1\xB9\xA6\xE1\xB9\xA7\xE1\xB9\xA8\xE1\xB9\xA9\xE1\xB9\xAA\xE1\xB9\xAB\xE1\xB9\xAC\xE1\xB9\xAD\xE1\xB9\xAE\xE1\xB9\xAF\xE1\xB9\xB0\xE1\xB9\xB1\xE1\xB9\xB2\xE1\xB9\xB3\xE1\xB9\xB4\xE1\xB9\xB5\xE1\xB9\xB6\xE1\xB9\xB7\xE1\xB9\xB8\xE1\xB9\xB9\xE1\xB9\xBA\xE1\xB9\xBB\xE1\xB9\xBC\xE1\xB9\xBD\xE1\xB9\xBE\xE1\xB9\xBF\xE1\xBA\x80\xE1\xBA\x81\xE1\xBA\x82\xE1\xBA\x83\xE1\xBA\x84\xE1\xBA\x85\xE1\xBA\x86\xE1\xBA\x87\xE1\xBA\x88\xE1\xBA\x89\xE1\xBA\x8A\xE1\xBA\x8B\xE1\xBA\x8C\xE1\xBA\x8D\xE1\xBA\x8E\xE1\xBA\x8F\xE1\xBA\x90\xE1\xBA\x91\xE1\xBA\x92\xE1\xBA\x93\xE1\xBA\x94\xE1\xBA\x95\xE1\xBA\x96\xE1\xBA\x97\xE1\xBA\x98\xE1\xBA\x99\xE1\xBA\x9B\xE1\xBA\xA0\xE1\xBA\xA1\xE1\xBA\xA2\xE1\xBA\xA3\xE1\xBA\xA4\xE1\xBA\xA5\xE1\xBA\xA6\xE1\xBA\xA7\xE1\xBA\xA8\xE1\xBA\xA9\xE1\xBA\xAA\xE1\xBA\xAB\xE1\xBA\xAC\xE1\xBA\xAD\xE1\xBA\xAE\xE1\xBA\xAF\xE1\xBA\xB0\xE1\xBA\xB1\xE1\xBA\xB2\xE1\xBA\xB3\xE1\xBA\xB4\xE1\xBA\xB5\xE1\xBA\xB6\xE1\xBA\xB7\xE1\xBA\xB8\xE1\xBA\xB9\xE1\xBA\xBA\xE1\xBA\xBB\xE1\xBA\xBC\xE1\xBA\xBD\xE1\xBA\xBE\xE1\xBA\xBF\xE1\xBB\x80\xE1\xBB\x81\xE1\xBB\x82\xE1\xBB\x83\xE1\xBB\x84\xE1\xBB\x85\xE1\xBB\x86\xE1\xBB\x87\xE1\xBB\x88\xE1\xBB\x89\xE1\xBB\x8A\xE1\xBB\x8B\xE1\xBB\x8C\xE1\xBB\x8D\xE1\xBB\x8E\xE1\xBB\x8F\xE1\xBB\x90\xE1\xBB\x91\xE1\xBB\x92\xE1\xBB\x93\xE1\xBB\x94\xE1\xBB\x95\xE1\xBB\x96\xE1\xBB\x97\xE1\xBB\x98\xE1\xBB\x99\xE1\xBB\x9A\xE1\xBB\x9B\xE1\xBB\x9C\xE1\xBB\x9D\xE1\xBB\x9E\xE1\xBB\x9F\xE1\xBB\xA0\xE1\xBB\xA1\xE1\xBB\xA2\xE1\xBB\xA3\xE1\xBB\xA4\xE1\xBB\xA5\xE1\xBB\xA6\xE1\xBB\xA7\xE1\xBB\xA8\xE1\xBB\xA9\xE1\xBB\xAA\xE1\xBB\xAB\xE1\xBB\xAC\xE1\xBB\xAD\xE1\xBB\xAE\xE1\xBB\xAF\xE1\xBB\xB0\xE1\xBB\xB1\xE1\xBB\xB2\xE1\xBB\xB3\xE1\xBB\xB4\xE1\xBB\xB5\xE1\xBB\xB6\xE1\xBB\xB7\xE1\xBB\xB8\xE1\xBB\xB9\xE2\x80\x90\xE2\x80\x91\xE2\x80\x92\xE2\x80\x93\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2\x80\x9D\xE2\x84\xAA\xEF\xAC\x80\xEF\xAC\x81\xEF\xAC\x82\xEF\xAC\x83\xEF\xAC\x84\xEF\xAC\x85\xEF\xAC\x86\xEF\xBC\x88\xEF\xBC\x89\xEF\xBC\xA1\xEF\xBC\xA2\xEF\xBC\xA3\xEF\xBC\xA4\xEF\xBC\xA5\xEF\xBC\xA6\xEF\xBC\xA7\xEF\xBC\xA8\xEF\xBC\xA9\xEF\xBC\xAA\xEF\xBC\xAB\xEF\xBC\xAC\xEF\xBC\xAD\xEF\xBC\xAE\xEF\xBC\xAF\xEF\xBC\xB0\xEF\xBC\xB1\xEF\xBC\xB2\xEF\xBC\xB3\xEF\xBC\xB4\xEF\xBC\xB5\xEF\xBC\xB6\xEF\xBC\xB7\xEF\xBC\xB8\xEF\xBC\xB9\xEF\xBC\xBA\xEF\xBC\xBB\xEF\xBC\xBD\xEF\xBD\x81\xEF\xBD\x82\xEF\xBD\x83\xEF\xBD\x84\xEF\xBD\x85\xEF\xBD\x86\xEF\xBD\x87\xEF\xBD\x88\xEF\xBD\x89\xEF\xBD\x8A\xEF\xBD\x8B\xEF\xBD\x8C\xEF\xBD\x8D\xEF\xBD\x8E\xEF\xBD\x8F\xEF\xBD\x90\xEF\xBD\x91\xEF\xBD\x92\xEF\xBD\x93\xEF\xBD\x94\xEF\xBD\x95\xEF\xBD\x96\xEF\xBD\x97\xEF\xBD\x98\xEF\xBD\x99\xEF\xBD\x9A\xEF\xBD\x9B\xEF\xBD\x9D");
 
-define("UTF8_ALPHA_TRANS_3_OUT", "A  a  B  b  B  b  B  b  C  c  D  d  D  d  D  d  D  d  D  d  E  e  E  e  E  e  E  e  E  e  F  f  G  g  H  h  H  h  H  h  H  h  H  h  I  i  I  i  K  k  K  k  K  k  L  l  L  l  L  l  L  l  M  m  M  m  M  m  N  n  N  n  N  n  N  n  O  o  O  o  O  o  O  o  P  p  P  p  R  r  R  r  R  r  R  r  S  s  S  s  S  s  S  s  S  s  T  t  T  t  T  t  T  t  U  u  U  u  U  u  U  u  U  u  V  v  V  v  W  w  W  w  W  w  W  w  W  w  X  x  X  x  Y  y  Z  z  Z  z  Z  z  h  t  w  y  s  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  E  e  E  e  E  e  E  e  E  e  E  e  E  e  E  e  I  i  I  i  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  U  u  U  u  U  u  U  u  U  u  U  u  U  u  Y  y  Y  y  Y  y  Y  y  -  -  -  -  '  '  \"  \"  K  ff fi fl ffifflst st A  B  C  D  E  F  G  H  I  J  K  L  M  N  O  P  Q  R  S  T  U  V  W  X  Y  Z  a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p  q  r  s  t  u  v  w  x  y  z  ");
+define("UTF8_ALPHA_TRANS_3_OUT", "A  a  B  b  B  b  B  b  C  c  D  d  D  d  D  d  D  d  D  d  E  e  E  e  E  e  E  e  E  e  F  f  G  g  H  h  H  h  H  h  H  h  H  h  I  i  I  i  K  k  K  k  K  k  L  l  L  l  L  l  L  l  M  m  M  m  M  m  N  n  N  n  N  n  N  n  O  o  O  o  O  o  O  o  P  p  P  p  R  r  R  r  R  r  R  r  S  s  S  s  S  s  S  s  S  s  T  t  T  t  T  t  T  t  U  u  U  u  U  u  U  u  U  u  V  v  V  v  W  w  W  w  W  w  W  w  W  w  X  x  X  x  Y  y  Z  z  Z  z  Z  z  h  t  w  y  s  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  A  a  E  e  E  e  E  e  E  e  E  e  E  e  E  e  E  e  I  i  I  i  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  O  o  U  u  U  u  U  u  U  u  U  u  U  u  U  u  Y  y  Y  y  Y  y  Y  y  -  -  -  -  '  '  \"  \"  K  ff fi fl ffifflst st (  )  A  B  C  D  E  F  G  H  I  J  K  L  M  N  O  P  Q  R  S  T  U  V  W  X  Y  Z  [  ]  a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p  q  r  s  t  u  v  w  x  y  z  {  }  ");
 
 define("UTF8_FROM_MAC_OS_ROMAN", "\xC3\x84\x20\xC3\x85\x20\xC3\x87\x20\xC3\x89\x20\xC3\x91\x20\xC3\x96\x20\xC3\x9C\x20\xC3\xA1\x20\xC3\xA0\x20\xC3\xA2\x20\xC3\xA4\x20\xC3\xA3\x20\xC3\xA5\x20\xC3\xA7\x20\xC3\xA9\x20\xC3\xA8\x20\xC3\xAA\x20\xC3\xAB\x20\xC3\xAD\x20\xC3\xAC\x20\xC3\xAE\x20\xC3\xAF\x20\xC3\xB1\x20\xC3\xB3\x20\xC3\xB2\x20\xC3\xB4\x20\xC3\xB6\x20\xC3\xB5\x20\xC3\xBA\x20\xC3\xB9\x20\xC3\xBB\x20\xC3\xBC\x20\xE2\x80\xA0\xC2\xB0\x20\xC2\xA2\x20\xC2\xA3\x20\xC2\xA7\x20\xE2\x80\xA2\xC2\xB6\x20\xC3\x9F\x20\xC2\xAE\x20\xC2\xA9\x20\xE2\x84\xA2\xC2\xB4\x20\xC2\xA8\x20\xE2\x89\xA0\xC3\x86\x20\xC3\x98\x20\xE2\x88\x9E\xC2\xB1\x20\xE2\x89\xA4\xE2\x89\xA5\xC2\xA5\x20\xC2\xB5\x20\xE2\x88\x82\xE2\x88\x91\xE2\x88\x8F\xCF\x80\x20\xE2\x88\xAB\xC2\xAA\x20\xC2\xBA\x20\xCE\xA9\x20\xC3\xA6\x20\xC3\xB8\x20\xC2\xBF\x20\xC2\xA1\x20\xC2\xAC\x20\xE2\x88\x9A\xC6\x92\x20\xE2\x89\x88\xE2\x88\x86\xC2\xAB\x20\xC2\xBB\x20\xE2\x80\xA6\xC2\xA0\x20\xC3\x80\x20\xC3\x83\x20\xC3\x95\x20\xC5\x92\x20\xC5\x93\x20\xE2\x80\x93\xE2\x80\x94\xE2\x80\x9C\xE2\x80\x9D\xE2\x80\x98\xE2\x80\x99\xC3\xB7\x20\xE2\x97\x8A\xC3\xBF\x20\xC5\xB8\x20\xE2\x81\x84\xE2\x82\xAC\xE2\x80\xB9\xE2\x80\xBA\xEF\xAC\x81\xEF\xAC\x82\xE2\x80\xA1\xC2\xB7\x20\xE2\x80\x9A\xE2\x80\x9E\xE2\x80\xB0\xC3\x82\x20\xC3\x8A\x20\xC3\x81\x20\xC3\x8B\x20\xC3\x88\x20\xC3\x8D\x20\xC3\x8E\x20\xC3\x8F\x20\xC3\x8C\x20\xC3\x93\x20\xC3\x94\x20\xEF\xA3\xBF\xC3\x92\x20\xC3\x9A\x20\xC3\x9B\x20\xC3\x99\x20\xC4\xB1\x20\xCB\x86\x20\xCB\x9C\x20\xC2\xAF\x20\xCB\x98\x20\xCB\x99\x20\xCB\x9A\x20\xC2\xB8\x20\xCB\x9D\x20\xCB\x9B\x20\xCB\x87\x20");
 define("UTF8_FROM_WINDOWS_1252", "\xE2\x82\xAC\x20\x20\x20\xE2\x80\x9A\xC6\x92\x20\xE2\x80\x9E\xE2\x80\xA6\xE2\x80\xA0\xE2\x80\xA1\xCB\x86\x20\xE2\x80\xB0\xC5\xA0\x20\xE2\x80\xB9\xC5\x92\x20\x20\x20\x20\xC5\xBD\x20\x20\x20\x20\x20\x20\x20\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2\x80\x9D\xE2\x80\xA2\xE2\x80\x93\xE2\x80\x94\xCB\x9C\x20\xE2\x84\xA2\xC5\xA1\x20\xE2\x80\xBA\xC5\x93\x20\x20\x20\x20\xC5\xBE\x20\xC5\xB8\x20\xC2\xA0\x20\xC2\xA1\x20\xC2\xA2\x20\xC2\xA3\x20\xC2\xA4\x20\xC2\xA5\x20\xC2\xA6\x20\xC2\xA7\x20\xC2\xA8\x20\xC2\xA9\x20\xC2\xAA\x20\xC2\xAB\x20\xC2\xAC\x20\xC2\xAD\x20\xC2\xAE\x20\xC2\xAF\x20\xC2\xB0\x20\xC2\xB1\x20\xC2\xB2\x20\xC2\xB3\x20\xC2\xB4\x20\xC2\xB5\x20\xC2\xB6\x20\xC2\xB7\x20\xC2\xB8\x20\xC2\xB9\x20\xC2\xBA\x20\xC2\xBB\x20\xC2\xBC\x20\xC2\xBD\x20\xC2\xBE\x20\xC2\xBF\x20\xC3\x80\x20\xC3\x81\x20\xC3\x82\x20\xC3\x83\x20\xC3\x84\x20\xC3\x85\x20\xC3\x86\x20\xC3\x87\x20\xC3\x88\x20\xC3\x89\x20\xC3\x8A\x20\xC3\x8B\x20\xC3\x8C\x20\xC3\x8D\x20\xC3\x8E\x20\xC3\x8F\x20\xC3\x90\x20\xC3\x91\x20\xC3\x92\x20\xC3\x93\x20\xC3\x94\x20\xC3\x95\x20\xC3\x96\x20\xC3\x97\x20\xC3\x98\x20\xC3\x99\x20\xC3\x9A\x20\xC3\x9B\x20\xC3\x9C\x20\xC3\x9D\x20\xC3\x9E\x20\xC3\x9F\x20\xC3\xA0\x20\xC3\xA1\x20\xC3\xA2\x20\xC3\xA3\x20\xC3\xA4\x20\xC3\xA5\x20\xC3\xA6\x20\xC3\xA7\x20\xC3\xA8\x20\xC3\xA9\x20\xC3\xAA\x20\xC3\xAB\x20\xC3\xAC\x20\xC3\xAD\x20\xC3\xAE\x20\xC3\xAF\x20\xC3\xB0\x20\xC3\xB1\x20\xC3\xB2\x20\xC3\xB3\x20\xC3\xB4\x20\xC3\xB5\x20\xC3\xB6\x20\xC3\xB7\x20\xC3\xB8\x20\xC3\xB9\x20\xC3\xBA\x20\xC3\xBB\x20\xC3\xBC\x20\xC3\xBD\x20\xC3\xBE\x20\xC3\xBF\x20");
 
-if (!function_exists("normalizer_normalize")) {
-    function normalizer_normalize($text) {
-        return $text; /* XXX */
-    }
-}
-
 class UnicodeHelper {
+    /** @readonly */
     public static $f_ligature_map = [
         "ﬀ" => "ff", "ﬁ" => "fi", "ﬂ" => "fl", "ﬃ" => "ffi", "ﬄ" => "ffl"
     ];
 
+    /** @var array<string,int> */
     private static $deaccent_map;
     private static $deaccent_result;
-
-    private static function _utf8FindTransPos($trans, $look) {
-        $len = strlen($look);
-        $l = 0;
-        $r = (strlen($trans) / $len) - 1;
-        while ($l <= $r) {
-            $m = (int) (($l + $r) / 2);
-            $c = strcmp(substr($trans, $m * $len, $len), $look);
-            if ($c == 0)
-                return $m;
-            else if ($c < 0)
-                $l = $m + 1;
-            else
-                $r = $m - 1;
-        }
-        return false;
-    }
 
     private static function add_deaccent_map($ins, $outs, $step) {
         $l = strlen($ins);
         for ($i = 0; $i < $l; $i += $step) {
             $in = substr($ins, $i, $step);
             $out = rtrim(substr($outs, $i, $step));
-            if ($out === "")
+            if ($out === "") {
                 self::$deaccent_map[$in] = 0;
-            else {
+            } else {
                 self::$deaccent_map[$in] = (strlen(self::$deaccent_result) << 2) | strlen($out);
                 self::$deaccent_result .= $out;
             }
@@ -67,8 +46,9 @@ class UnicodeHelper {
     }
 
     static function deaccent($x) {
-        if (self::$deaccent_map === null)
+        if (self::$deaccent_map === null) {
             self::make_deaccent_map();
+        }
         if (preg_match_all("/[\xC0-\xFF]/", $x, $m, PREG_OFFSET_CAPTURE)) {
             $first = 0;
             $len = strlen($x);
@@ -80,8 +60,9 @@ class UnicodeHelper {
                 if (isset(self::$deaccent_map[$ch])) {
                     $out .= substr($x, $first, $i - $first);
                     $m = self::$deaccent_map[$ch];
-                    if ($m)
+                    if ($m) {
                         $out .= substr(self::$deaccent_result, $m >> 2, $m & 3);
+                    }
                     $first = $i + $l;
                 }
             }
@@ -91,8 +72,9 @@ class UnicodeHelper {
     }
 
     static function deaccent_offsets($x) {
-        if (self::$deaccent_map === null)
+        if (self::$deaccent_map === null) {
             self::make_deaccent_map();
+        }
         $offsetmap = [[0, 0]];
         if (preg_match_all("/[\xC0-\xFF]/", $x, $m, PREG_OFFSET_CAPTURE)) {
             $first = 0;
@@ -105,8 +87,9 @@ class UnicodeHelper {
                 if (isset(self::$deaccent_map[$ch])) {
                     $out .= substr($x, $first, $i - $first);
                     $m = self::$deaccent_map[$ch];
-                    if ($m)
+                    if ($m) {
                         $out .= substr(self::$deaccent_result, $m >> 2, $m & 3);
+                    }
                     $first = $i + $l;
                     $offsetmap[] = [strlen($out), $first];
                 }
@@ -117,34 +100,39 @@ class UnicodeHelper {
     }
 
     static function deaccent_translate_offset($offsetmap, $offset) {
-        for ($i = 1; $i < count($offsetmap) && $offsetmap[$i][0] <= $offset; ++$i)
+        for ($i = 1; $i < count($offsetmap) && $offsetmap[$i][0] <= $offset; ++$i) {
             /* do nothing */;
+        }
         return $offsetmap[$i - 1][1] + ($offset - $offsetmap[$i - 1][0]);
     }
 
-    static function normalize($text) {
-        return normalizer_normalize($text);
+    /** @param string $str */
+    static function normalize($str) {
+        return normalizer_normalize($str);
     }
 
+    /** @param string $str */
     static function windows_1252_to_utf8($str) {
         return preg_replace_callback('/[\200-\377]/', function ($m) {
             return rtrim(substr(UTF8_FROM_WINDOWS_1252, 3 * (ord($m[0]) - 128), 3));
         }, $str);
     }
 
+    /** @param string $str */
     static function mac_os_roman_to_utf8($str) {
         return preg_replace_callback('/[\200-\377]/', function ($m) {
             return rtrim(substr(UTF8_FROM_MAC_OS_ROMAN, 3 * (ord($m[0]) - 128), 3));
         }, $str);
     }
 
+    /** @param string $str */
     static function utf8_ord($str) {
         $n = ord($str[0]);
-        if ($n < 0x80)
+        if ($n < 0x80) {
             return $n;
-        else if ($n < 0xC0)
+        } else if ($n < 0xC0) {
             return false;
-        else if ($n < 0xE0) {
+        } else if ($n < 0xE0) {
             $n &= 0x1F;
             $need = 1;
         } else if ($n < 0xF0) {
@@ -154,149 +142,227 @@ class UnicodeHelper {
             $n &= 0x07;
             $need = 3;
         }
-        if (strlen($str) <= $need)
+        if (strlen($str) <= $need) {
             return false;
+        }
         for ($i = 1; $i <= $need; ++$i) {
             $c = ord($str[$i]);
-            if ($c < 0x80 || $c >= 0xC0)
+            if ($c < 0x80 || $c >= 0xC0) {
                 return false;
+            }
             $n = ($n << 6) | ($c & 0x3F);
         }
         return $n;
     }
 
+    /** @param string $str */
     static function utf16_ord($str) {
         $n = self::utf8_ord($str);
-        if ($n <= 0xFFFF)
+        if ($n <= 0xFFFF) {
             return [$n];
-        else {
+        } else {
             $n -= 0x10000;
             return [0xD800 | ($n >> 10), 0xDC00 | ($n & 0x3FF)];
         }
     }
 
+    /** @param int $n */
     static function utf8_chr($n) {
-        if ($n < 0x80)
+        if ($n < 0x80) {
             return chr($n);
-        else if ($n < 0x800)
+        } else if ($n < 0x800) {
             return chr(0xC0 | ($n >> 6)) . chr(0x80 | ($n & 0x3F));
-        else if ($n < 0x10000)
+        } else if ($n < 0x10000) {
             return chr(0xE0 | ($n >> 12)) . chr(0x80 | (($n >> 6) & 0x3F)) . chr(0x80 | ($n & 0x3F));
-        else
+        } else {
             return chr(0xF0 | ($n >> 18)) . chr(0x80 | (($n >> 12) & 0x3F)) . chr(0x80 | (($n >> 6) & 0x3F)) . chr(0x80 | ($n & 0x3F));
+        }
     }
 
+    /** @param string $str */
     static function utf8_to_html_entities($str, $flag = ENT_NOQUOTES) {
-        if ($flag & ENT_IGNORE)
+        if ($flag & ENT_IGNORE) {
             $start = "";
-        else if (($flag & ENT_QUOTES) == ENT_QUOTES)
+        } else if (($flag & ENT_QUOTES) == ENT_QUOTES) {
             $start = "&<>\"'";
-        else if (($flag & ENT_COMPAT) == ENT_COMPAT)
+        } else if (($flag & ENT_COMPAT) == ENT_COMPAT) {
             $start = "&<>\"";
-        else
+        } else {
             $start = "&<>";
+        }
         $flag = ($flag & (ENT_HTML401 | ENT_XML1 | ENT_XHTML | ENT_HTML5)) | ENT_QUOTES;
         return preg_replace_callback('/[' . $start . '\200-\377][\200-\277]*/',
                                      function ($m) use ($flag) {
-            if (($f = get(UnicodeHelper::$f_ligature_map, $m[0])))
+            if (($f = UnicodeHelper::$f_ligature_map[$m[0]] ?? null)) {
                 return $f;
+            }
             $e = htmlentities($m[0], $flag, "UTF-8");
             if (substr($e, 0, 1) !== "&") {
                 $n = ord($m[0][0]);
-                if ($n < 0xE0)
+                if ($n < 0xE0) {
                     $n &= 0x1F;
-                else if ($n < 0xF0)
+                } else if ($n < 0xF0) {
                     $n &= 0x0F;
-                else
+                } else {
                     $n &= 0x07;
-                for ($i = 1; $i < strlen($m[0]); ++$i)
+                }
+                for ($i = 1; $i < strlen($m[0]); ++$i) {
                     $n = ($n << 6) | (ord($m[0][$i]) & 0x3F);
+                }
                 $e = "&#" . $n . ";";
             }
             return $e;
         }, $str);
     }
 
+    /** @param string $str */
+    static function utf8_to_xml_numeric_entities($str, $flag = ENT_NOQUOTES) {
+        if ($flag & ENT_IGNORE) {
+            $start = "";
+        } else if (($flag & ENT_QUOTES) == ENT_QUOTES) {
+            $start = "&<>\"'";
+        } else if (($flag & ENT_COMPAT) == ENT_COMPAT) {
+            $start = "&<>\"";
+        } else {
+            $start = "&<>";
+        }
+        return preg_replace_callback('/[' . $start . '\200-\377][\200-\277]*/',
+                                     function ($m) {
+            if (($f = UnicodeHelper::$f_ligature_map[$m[0]] ?? null)) {
+                return $f;
+            } else {
+                $n = ord($m[0][0]);
+                if ($n < 0x80) {
+                    // do nothing
+                } else if ($n < 0xE0) {
+                    $n &= 0x1F;
+                } else if ($n < 0xF0) {
+                    $n &= 0x0F;
+                } else {
+                    $n &= 0x07;
+                }
+                for ($i = 1; $i < strlen($m[0]); ++$i) {
+                    $n = ($n << 6) | (ord($m[0][$i]) & 0x3F);
+                }
+                return "&#" . $n . ";";
+            }
+        }, $str);
+    }
+
+    /** @param string $str */
     static function utf8_glyphlen($str) {
         return preg_match_all('/\X/u', $str);
     }
 
+    /** @param string $str */
     static function utf16_strlen($str) {
         return strlen($str) - preg_match_all('/[\xC0-\xDF]|[\xE0-\xEF][\x80-\xBF]|[\xF0-\xF7][\x80-\xBF]/', $str);
     }
 
+    /** @param string $str
+     * @param int $len */
     static function utf8_prefix($str, $len) {
         preg_match('/\A\pM*\X{0,' . $len . '}/u', $str, $m);
         return isset($m[0]) ? $m[0] : false;
     }
 
-    static function utf8_word_prefix($str, $len, &$rest = null) {
+    /** @param string $str
+     * @param int $len
+     * @return string */
+    static function utf8_word_prefix($str, $len) {
         if (strlen($str) > $len
             && $len > 0
-            && (preg_match('/\A(\pM*\X{0,' . ($len - 1) . '}(?!\pZ|\s)\X)((?:\pZ|\s)+[\s\S]*)\z/u', $str, $m)
-                || preg_match('/\A(\pM*\X{1,' . $len . '}(?:(?!\pZ|\s)\X)*)([\s\S]*)\z/u', $str, $m))) {
-            $rest = $m[2];
-            return $m[1];
+            && (preg_match('/\A\pM*\X{0,' . ($len - 1) . '}(?!\pZ|\s)\X(?=\pZ|\s)/u', $str, $m)
+                || preg_match('/\A\pM*\X{1,' . $len . '}(?:(?!\pZ|\s)\X)*/u', $str, $m))) {
+            return $m[0];
         } else {
-            $rest = "";
             return $str;
         }
     }
 
-    static function utf8_line_break(&$str, $len) {
-        if ($str === "")
+    /** @param string &$str
+     * @param int $len
+     * @param bool $preserve_space
+     * @return string|false */
+    static function utf8_line_break(&$str, $len, $preserve_space = false) {
+        if ($str === "") {
             return false;
-        $line = self::utf8_word_prefix($str, $len, $str);
+        }
+        $line = self::utf8_word_prefix($str, $len);
         if (($nl = strpos($line, "\n")) !== false) {
-            $str = substr($line, $nl) . $str;
             $line = substr($line, 0, $nl);
         }
-        $str = preg_replace('/\A(?:\pZ|[\t\f\r])*\n?/u', '', $str);
+        $pos = strlen($line);
+        if (preg_match('/\G(?:\pZ|[\t\f\r])*\n?/u', $str, $m, 0, $pos)) {
+            $pos += strlen($m[0]);
+        }
+        if ($preserve_space && $pos !== strlen($line)) {
+            $ends_nl = $str[$pos - 1] === "\n" ? 1 : 0;
+            $line .= substr($str, strlen($line), $pos - strlen($line) - $ends_nl);
+        }
+        $str = substr($str, $pos);
         return $line;
     }
 
-    static function utf8_abbreviate($str, $len) {
-        $pfx = self::utf8_word_prefix($str, $len);
-        if (strlen($pfx) < strlen($str))
-            return "$pfx...";
-        else
-            return $pfx;
+    /** @param string $str
+     * @param int $len
+     * @param bool $preserve_space
+     * @return array{string|false,string} */
+    static function utf8_line_break_parts($str, $len, $preserve_space = false) {
+        $line = self::utf8_line_break($str, $len, $preserve_space);
+        return [$line, $str];
     }
 
+    /** @param string $str
+     * @param int $len */
+    static function utf8_abbreviate($str, $len) {
+        $pfx = self::utf8_word_prefix($str, $len);
+        if (strlen($pfx) < strlen($str)) {
+            return "$pfx...";
+        } else {
+            return $pfx;
+        }
+    }
+
+    /** @param string $str */
     static function demojibake($str) {
         return preg_replace_callback('/\xC3[\x80-\x8F]\xC2[\x80-\xBF]/', function ($m) {
             return chr(ord(substr($m[0], 1, 1)) + 0x40) . substr($m[0], 3, 1);
         }, $str);
     }
 
+    /** @param string $str */
     static function remove_f_ligatures($str) {
         return preg_replace_callback("/\xEF\xAC[\x80-\x84]/", function ($m) {
             return UnicodeHelper::$f_ligature_map[$m[0]];
         }, $str);
     }
 
+    /** @param string $str */
     static function utf8_truncate_invalid($str) {
         $len = strlen($str);
         $c = $len ? ord($str[$len - 1]) : 0;
-        if ($c < 0x80)
+        if ($c < 0x80) {
             return $str;
-        else if ($c >= 0xC0 || $len == 1
-                 || ($d = ord($str[$len - 2])) < 0x80)
+        } else if ($c >= 0xC0 || $len == 1
+                   || ($d = ord($str[$len - 2])) < 0x80) {
             return substr($str, 0, $len - 1);
-        else if ($d >= 0xC0 && $d < 0xE0)
+        } else if ($d >= 0xC0 && $d < 0xE0) {
             return $str;
-        else if ($d >= 0xC0 || $len == 2
-                 || ($e = ord($str[$len - 3])) < 0x80)
+        } else if ($d >= 0xC0 || $len == 2
+                   || ($e = ord($str[$len - 3])) < 0x80) {
             return substr($str, 0, $len - 2);
-        else if ($e >= 0xE0 && $e < 0xF0)
+        } else if ($e >= 0xE0 && $e < 0xF0) {
             return $str;
-        else if ($e >= 0xC0 || $len == 3
-                 || ($f = ord($str[$len - 4])) < 0xF0)
+        } else if ($e >= 0xC0 || $len == 3
+                   || ($f = ord($str[$len - 4])) < 0xF0) {
             return substr($str, 0, $len - 3);
-        else
+        } else {
             return $str;
+        }
     }
 
+    /** @param string $str */
     static function utf8_replace_invalid($str) {
         $t = "";
         while ($str !== "" && $str !== false) {
@@ -305,8 +371,9 @@ class UnicodeHelper {
                 $t .= $m[0];
                 $str = substr($str, strlen($m[0]));
             } else {
-                if (substr($str, 0, 1) !== "\x00")
+                if (substr($str, 0, 1) !== "\x00") {
                     $t .= chr(0x7f);
+                }
                 $str = substr($str, 1);
             }
         }

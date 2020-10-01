@@ -1,8 +1,7 @@
 <?php
-$ConfSitePATH = preg_replace(',/batch/[^/]+,', '', __FILE__);
-require_once("$ConfSitePATH/lib/getopt.php");
+require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
-$arg = getopt_rest($argv, "hn:d", ["help", "name:", "dry-run"]);
+$arg = Getopt::rest($argv, "hn:d", ["help", "name:", "dry-run"]);
 if (isset($arg["h"]) || isset($arg["help"]) || count($arg["_"]) > 1) {
     fwrite(STDOUT, "Usage: php batch/assign.php [-n CONFID] [-d|--dry-run] [FILE]
 Perform a CSV bulk assignment.
@@ -12,7 +11,7 @@ Options include:
     exit(0);
 }
 
-require_once("$ConfSitePATH/src/init.php");
+require_once(SiteLoader::find("src/init.php"));
 
 if (empty($arg["_"])) {
     $filename = "<stdin>";
@@ -28,18 +27,16 @@ if (empty($arg["_"])) {
 }
 
 $text = convert_to_utf8($text);
-$user = $Conf->site_contact();
-$assignset = new AssignmentSet($user, true);
+$assignset = new AssignmentSet($Conf->root_user(), true);
 $assignset->parse($text, $filename);
 if ($assignset->has_error()) {
-    foreach ($assignset->errors_text(true) as $e) {
+    foreach ($assignset->message_texts(true) as $e) {
         fwrite(STDERR, "$e\n");
     }
 } else if ($assignset->is_empty()) {
     fwrite(STDERR, "$filename: Assignment makes no changes.\n");
 } else if (isset($arg["d"]) || isset($arg["dry-run"])) {
-    $acsv = $assignset->unparse_csv();
-    fwrite(STDOUT, $acsv->unparse());
+    fwrite(STDOUT, $assignset->make_acsv()->unparse());
 } else {
     $assignset->execute();
     $pids = $assignset->assigned_pids();

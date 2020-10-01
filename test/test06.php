@@ -1,18 +1,17 @@
 <?php
 // test06.php -- HotCRP review and some setting tests
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+/** @phan-file-suppress PhanUndeclaredProperty */
 
-global $ConfSitePATH;
-$ConfSitePATH = preg_replace(",/[^/]+/[^/]+$,", "", __FILE__);
-
-require_once("$ConfSitePATH/test/setup.php");
-require_once("$ConfSitePATH/src/settingvalues.php");
+declare(strict_types=1);
+require_once(preg_replace('/\/test\/[^\/]+/', '/test/setup.php', __FILE__));
 
 // load users
-$user_chair = $Conf->user_by_email("chair@_.com");
-$user_mgbaker = $Conf->user_by_email("mgbaker@cs.stanford.edu"); // pc
-$user_diot = $Conf->user_by_email("christophe.diot@sophia.inria.fr"); // pc, red
-$user_pdruschel = $Conf->user_by_email("pdruschel@cs.rice.edu"); // pc
+$user_chair = $Conf->checked_user_by_email("chair@_.com");
+$user_mgbaker = $Conf->checked_user_by_email("mgbaker@cs.stanford.edu"); // pc
+$user_diot = $Conf->checked_user_by_email("christophe.diot@sophia.inria.fr"); // pc, red
+$user_pdruschel = $Conf->checked_user_by_email("pdruschel@cs.rice.edu"); // pc
+$user_mjh = $Conf->checked_user_by_email("mjh@isi.edu"); // pc
 $Conf->save_setting("rev_open", 1);
 
 // 1-18 have 3 assignments, reset have 0
@@ -108,9 +107,9 @@ assert_search_papers($user_chair, "ovemer:5", "1");
 // Test offline review parsing
 
 // Change a score
-$paper1 = fetch_paper(1, $user_chair);
+$paper1 = $Conf->checked_paper_by_id(1, $user_chair);
 $rrow = fetch_review($paper1, $user_mgbaker);
-$review1A = file_get_contents("$ConfSitePATH/test/review1A.txt");
+$review1A = file_get_contents(SiteLoader::find("test/review1A.txt"));
 $tf = ReviewValues::make_text($Conf->review_form(), $review1A, "review1A.txt");
 xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker));
@@ -137,8 +136,8 @@ xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker));
 xassert_eqq(join(" ", $tf->unchanged), "#1A");
 xassert($tf->has_problem_at("overAllMerit"));
-xassert(strpos(join("\n", $tf->messages_at("overAllMerit")), "must provide") !== false);
-//error_log(var_export($tf->messages(true), true));
+xassert(strpos(join("\n", $tf->message_texts_at("overAllMerit")), "Entry required") !== false);
+//error_log(var_export($tf->message_list(), true));
 
 // Different reviewer
 $tf = ReviewValues::make_text($Conf->review_form(), preg_replace('/Reviewer: .*/m', 'Reviewer: butt@butt.com', $review1A), "review1A-4.txt");
@@ -153,11 +152,12 @@ xassert(!$tf->check_and_save($user_mgbaker, $paper1, fetch_review($paper1, $user
 xassert($tf->has_problem_at("reviewerEmail"));
 
 // Different reviewer with same name (OK)
-$tf = ReviewValues::make_text($Conf->review_form(), preg_replace('/Reviewer: .*/m', 'Reviewer: Mary Baker <mgbaker193r8219@butt.com>', preg_replace('/^4/m', "5", $review1A)), "review1A-5.txt");
+// Also add a description of the field
+$tf = ReviewValues::make_text($Conf->review_form(), preg_replace('/Reviewer: .*/m', 'Reviewer: Mary Baker <mgbaker193r8219@butt.com>', preg_replace('/^4/m', "5. Strong accept", $review1A)), "review1A-5.txt");
 xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker, $paper1, fetch_review($paper1, $user_mgbaker)));
 xassert(!$tf->has_problem_at("reviewerEmail"));
-//error_log(var_export($tf->messages(true), true));
+//error_log(var_export($tf->message_list(), true));
 
 
 // Settings changes
@@ -169,7 +169,7 @@ $sv = SettingValues::make_request($user_chair, [
     "options_s01" => "1. Reject\n2. Weak reject\n3. Weak accept\n4. Accept\n5. Strong accept\nNo entry\n"
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 // Now it's OK to save “no entry”
 $tf = ReviewValues::make_text($Conf->review_form(), preg_replace('/^4/m', 'No entry', $review1A), "review1A-6.txt");
@@ -177,7 +177,7 @@ xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker));
 xassert_eqq(join(" ", $tf->updated), "#1A");
 xassert(!$tf->has_problem_at("overAllMerit"));
-//error_log(var_export($tf->messages(true), true));
+//error_log(var_export($tf->message_list(), true));
 
 assert_search_papers($user_chair, "has:ovemer", "");
 
@@ -187,7 +187,7 @@ xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker));
 xassert_eqq(join(" ", $tf->updated), "#1A");
 xassert(!$tf->has_problem_at("overAllMerit"));
-//error_log(var_export($tf->messages(true), true));
+//error_log(var_export($tf->message_list(), true));
 
 assert_search_papers($user_chair, "ovemer:4", "1");
 
@@ -198,7 +198,7 @@ $sv = SettingValues::make_request($user_chair, [
     "options_s01" => "1. Reject\n2. Weak reject\n3. Weak accept\nNo entry\n"
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 // So the 4 score has been removed
 assert_search_papers($user_chair, "ovemer:4", "");
@@ -214,7 +214,7 @@ $sv = SettingValues::make_request($user_chair, [
     "order_s02" => 0
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 // Add reviewer expertise back
 $sv = SettingValues::make_request($user_chair, [
@@ -224,7 +224,7 @@ $sv = SettingValues::make_request($user_chair, [
     "order_s02" => 1.5
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 // It has been removed from the review
 assert_search_papers($user_chair, "has:revexp", "");
@@ -283,7 +283,7 @@ $sv = SettingValues::make_request($user_chair, [
     "shortName_t11" => "Text 11", "order_t11" => 5.11
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 save_review(1, $user_mgbaker, [
     "ovemer" => 2, "revexp" => 1, "papsum" => "This is the summary",
@@ -332,7 +332,7 @@ $sv = SettingValues::make_request($user_chair, [
     "shortName_t10" => "Text 10", "order_t10" => 0
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
@@ -340,7 +340,7 @@ $sv = SettingValues::make_request($user_chair, [
     "shortName_t10" => "Text 10", "order_t10" => 101
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 $rrow = fetch_review($paper1, $user_mgbaker);
 xassert(!isset($rrow->s16) || (string) $rrow->s16 === "0");
@@ -527,16 +527,17 @@ assert_search_papers($user_chair, "tex9:tremolo", "1");
 assert_search_papers($user_chair, "tex11:butt", "1");
 
 // simplify review form
-$sv = ["has_review_form" => 1];
-for ($i = 2; $i <= 16; ++$i)
-    $sv[sprintf("order_s%02d", $i)] = $sv[sprintf("order_t%02d", $i)] = -1;
-$sv = SettingValues::make_request($user_chair, $sv);
+$sx = ["has_review_form" => 1];
+for ($i = 2; $i <= 16; ++$i) {
+    $sx[sprintf("order_s%02d", $i)] = $sx[sprintf("order_t%02d", $i)] = -1;
+}
+$sv = SettingValues::make_request($user_chair, $sx);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "review_form");
+xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 // saving a JSON review defaults to ready
 xassert_assign($user_chair, "paper,lead\n17,pdruschel\n");
-$paper17 = fetch_paper(17, $user_mgbaker);
+$paper17 = $user_mgbaker->checked_paper_by_id(17);
 
 xassert_eqq($paper17->review_type($user_mgbaker), REVIEW_PRIMARY);
 xassert_eqq($paper17->review_type($user_diot), 0);
@@ -592,7 +593,7 @@ xassert(!$user_diot->can_view_authors($paper17));
 $Conf->save_setting("sub_blind", Conf::BLIND_ALWAYS);
 
 // Check review diffs
-$paper18 = fetch_paper(18, $user_diot);
+$paper18 = $user_diot->checked_paper_by_id(18);
 $tf = new ReviewValues($Conf->review_form());
 xassert($tf->parse_json(["ovemer" => 2, "revexp" => 1, "papsum" => "No summary", "comaut" => "No comments"]));
 xassert($tf->check_and_save($user_diot, $paper18));
@@ -644,10 +645,12 @@ xassert_eqq($rrow18d2->t01, $gettysburg);
 
 // check some review visibility policies
 $user_external = Contact::create($Conf, null, ["email" => "external@_.com", "name" => "External Reviewer"]);
+assert(!!$user_external);
 $user_mgbaker->assign_review(17, $user_external->contactId, REVIEW_EXTERNAL,
     ["round_number" => $Conf->round_number("R2", false)]);
 xassert(!$user_external->can_view_review($paper17, $rrow17m));
 xassert(!$user_external->can_view_review_identity($paper17, $rrow17m));
+xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
 $Conf->save_setting("extrev_view", 0);
 save_review(17, $user_external, [
     "ovemer" => 2, "revexp" => 1, "papsum" => "Hi", "comaut" => "Bye", "ready" => true
@@ -663,7 +666,7 @@ xassert($user_external->can_view_review($paper17, $rrow17m));
 xassert($user_external->can_view_review_identity($paper17, $rrow17m));
 
 // per-round review visibility
-$user_lixia = $Conf->user_by_email("lixia@cs.ucla.edu");
+$user_lixia = $Conf->checked_user_by_email("lixia@cs.ucla.edu");
 $tf = new ReviewValues($Conf->review_form());
 xassert($tf->parse_json(["ovemer" => 2, "revexp" => 1, "papsum" => "Radical", "comaut" => "Nonradical"]));
 xassert($tf->check_and_save($user_lixia, $paper17));
@@ -812,7 +815,7 @@ $result = JsonResult::make($result);
 MailChecker::check_db("test06-external2-request17");
 xassert($result->content["ok"]);
 
-$user_external2 = $Conf->user_by_email("external2@_.com");
+$user_external2 = $Conf->checked_user_by_email("external2@_.com");
 save_review(17, $user_external2, [
     "ready" => true, "ovemer" => 3, "revexp" => 3
 ]);
@@ -837,6 +840,23 @@ assert_search_papers($user_mgbaker, ["t" => "r", "q" => "internet OR datagram"],
 assert_search_papers($user_mgbaker, ["t" => "rout", "q" => "internet OR datagram"], "13 19");
 assert_search_papers($user_mgbaker, "(internet OR datagram) 13 19", "13 19");
 
+// author review visibility
+xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
+$Conf->save_setting("au_seerev", 2);
+xassert($user_mjh->can_view_review($paper17, $rrow17m));
+xassert_assign_fail($user_mgbaker, "paper,tag\n17,perm:author-read-review\n");
+xassert_assign_fail($user_mjh, "paper,tag\n17,perm:author-read-review\n");
+xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#-1\n");
+$paper17->invalidate_tags();
+xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
+$Conf->save_setting("au_seerev", null);
+xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#1\n");
+$paper17->invalidate_tags();
+xassert($user_mjh->can_view_review($paper17, $rrow17m));
+xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#clear\n");
+$paper17->invalidate_tags();
+xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
+
 // paper options
 assert_search_papers($user_mgbaker, "has:calories", "1 2 3 4 5");
 $sv = SettingValues::make_request($user_chair, [
@@ -847,7 +867,7 @@ $sv = SettingValues::make_request($user_chair, [
     "optvt_1" => "numeric"
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "options");
+xassert_eqq(join(" ", $sv->updated_fields()), "options");
 assert_search_papers($user_mgbaker, "has:fudge", "1 2 3 4 5");
 
 $sv = SettingValues::make_request($user_chair, [
@@ -858,7 +878,7 @@ $sv = SettingValues::make_request($user_chair, [
     "optvt_1" => "checkbox"
 ]);
 xassert($sv->execute());
-xassert_eqq(join(" ", $sv->changes()), "options");
+xassert_eqq(join(" ", $sv->updated_fields()), "options");
 assert_search_papers($user_mgbaker, "has:fudge", "");
 
 xassert_exit();

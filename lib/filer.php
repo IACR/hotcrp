@@ -103,27 +103,26 @@ class Filer {
     static public $no_touch;
 
     // download
-    static function download_file($filename, $no_accel = false) {
-        global $Conf, $zlib_output_compression;
+    /** @param string $filename
+     * @param ?string $mimetype
+     * @param array $opts */
+    static function download_file($filename, $mimetype, $opts = []) {
         // if docstoreAccelRedirect, output X-Accel-Redirect header
-        if (($dar = $Conf->opt("docstoreAccelRedirect"))
-            && ($ds = $Conf->opt("docstore"))
-            && !$no_accel) {
-            if (!str_ends_with($ds, "/")) {
-                $ds .= "/";
-            }
-            if (str_starts_with($filename, $ds)
-                && ($tail = substr($filename, strlen($ds)))
-                && preg_match('/\A[^\/]+/', $tail)) {
-                if (!str_ends_with($dar, "/")) {
-                    $dar .= "/";
-                }
-                header("X-Accel-Redirect: $dar$tail");
+        // XXX Chromium issue 961617: beware of X-Accel-Redirect if you are
+        // using SameSite cookies!
+        if (($dar = Conf::$main->opt("docstoreAccelRedirect"))
+            && ($dsp = self::docstore_fixed_prefix(Conf::$main->docstore()))
+            && !($opts["no_accel"] ?? false)) {
+            assert(str_ends_with($dsp, "/"));
+            if (str_starts_with($filename, $dsp)
+                && strlen($filename) > strlen($dsp)
+                && $filename[strlen($dsp)] !== "/") {
+                header("X-Accel-Redirect: $dar" . substr($filename, strlen($dsp)));
                 return;
             }
         }
         // write length header, flush output buffers
-        if (!$zlib_output_compression) {
+        if (zlib_get_coding_type() === false) {
             header("Content-Length: " . filesize($filename));
         }
         flush();
@@ -132,63 +131,6 @@ class Filer {
         }
         // read file directly to output
         readfile($filename);
-    }
-    static function multidownload($doc, $downloadname = null, $opts = null) {
-        global $Now, $zlib_output_compression;
-        if (is_array($doc) && count($doc) == 1) {
-            $doc = $doc[0];
-            $downloadname = null;
-        } else if (is_array($doc)) {
-            $z = new ZipDocument($downloadname);
-            foreach ($doc as $d) {
-                $z->add($d);
-            }
-            return $z->download();
-        }
-
-        if (!$doc->ensure_content()) {
-            $error_html = "Don’t know how to download.";
-            if ($doc->error && isset($doc->error_html)) {
-                $error_html = $doc->error_html;
-            }
-            return (object) ["error" => true, "error_html" => $error_html];
-        }
-        if ($doc->size == 0 && !$doc->ensure_size()) {
-            return (object) ["error" => true, "error_html" => "Empty file."];
-        }
-
-        // Print paper
-        header("Content-Type: " . Mimetype::type_with_charset($doc->mimetype));
-        if (is_bool($opts)) {
-            $attachment = $opts;
-        } else if (is_array($opts) && isset($opts["attachment"])) {
-            $attachment = $opts["attachment"];
-        } else {
-            $attachment = !Mimetype::disposition_inline($doc->mimetype);
-        }
-        if (!$downloadname) {
-            $downloadname = $doc->filename;
-            if (($slash = strrpos($downloadname, "/")) !== false)
-                $downloadname = substr($downloadname, $slash + 1);
-        }
-        header("Content-Disposition: " . ($attachment ? "attachment" : "inline") . "; filename=" . mime_quote_string($downloadname));
-        if (is_array($opts) && get($opts, "cacheable")) {
-            header("Cache-Control: max-age=315576000, private");
-            header("Expires: " . gmdate("D, d M Y H:i:s", $Now + 315576000) . " GMT");
-        }
-        // reduce likelihood of XSS attacks in IE
-        header("X-Content-Type-Options: nosniff");
-        if ($doc->has_hash()) {
-            header("ETag: \"" . $doc->text_hash() . "\"");
-        }
-        if (($path = $doc->available_content_file())) {
-            self::download_file($path, get($doc, "no_cache") || get($doc, "no_accel"));
-        } else {
-            if (!$zlib_output_compression)
-                header("Content-Length: " . strlen($doc->content));
-            echo $doc->content;
-        }
-        return (object) ["error" => false];
     }
 
     // hash helpers
@@ -211,7 +153,6 @@ class Filer {
     const FPATH_EXISTS = 1;
     const FPATH_MKDIR = 2;
     static function docstore_path(DocumentInfo $doc, $flags = 0) {
-        global $Now;
         if ($doc->error || !($pattern = $doc->conf->docstore())) {
             return null;
         }
@@ -230,8 +171,8 @@ class Filer {
                     return null;
                 }
             }
-            if (filemtime($path) < $Now - 172800 && !self::$no_touch) {
-                @touch($path, $Now);
+            if (filemtime($path) < Conf::$now - 172800 && !self::$no_touch) {
+                @touch($path, Conf::$now);
             }
         }
         if (($flags & self::FPATH_MKDIR)
@@ -242,9 +183,11 @@ class Filer {
         }
     }
 
+    /** @param ?string $pattern
+     * @return ?string */
     static function docstore_fixed_prefix($pattern) {
-        if ($pattern == "") {
-            return $pattern;
+        if ($pattern === null || $pattern === "") {
+            return null;
         }
         $prefix = "";
         while (($pos = strpos($pattern, "%")) !== false) {
@@ -258,7 +201,7 @@ class Filer {
                 if (($rslash = strrpos($prefix, "/")) !== false) {
                     return substr($prefix, 0, $rslash + 1);
                 } else {
-                    return "";
+                    return null;
                 }
             }
         }
@@ -269,9 +212,12 @@ class Filer {
         return $prefix;
     }
 
+    /** @param string $parent
+     * @param string $path */
     static private function prepare_docstore($parent, $path) {
-        if (!self::_make_fpath_parents($parent, $path))
+        if (!self::_make_fpath_parents($parent, $path)) {
             return false;
+        }
         // Ensure an .htaccess file exists, even if someone else made the
         // filestore directory
         $htaccess = "$parent/.htaccess";
@@ -283,18 +229,17 @@ class Filer {
         return true;
     }
 
-    static function docstore_tmpdir($pattern) {
-        if (is_object($pattern)) {
-            $pattern = $pattern->opt("docstore");
-        }
-        if ($pattern
-            && ($prefix = self::docstore_fixed_prefix($pattern))) {
+    /** @return ?non-empty-string */
+    static function docstore_tmpdir(Conf $conf = null) {
+        $conf = $conf ?? Conf::$main;
+        if (($prefix = self::docstore_fixed_prefix($conf->docstore()))) {
             $tmpdir = $prefix . "tmp/";
+            '@phan-var non-empty-string $tmpdir';
             if (self::prepare_docstore($tmpdir, $tmpdir)) {
                 return $tmpdir;
             }
         }
-        return false;
+        return null;
     }
 
     static private function _expand_docstore($pattern, DocumentInfo $doc, $extension) {

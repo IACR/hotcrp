@@ -1,8 +1,7 @@
 <?php
-$ConfSitePATH = preg_replace(',/batch/[^/]+,', '', __FILE__);
-require_once("$ConfSitePATH/lib/getopt.php");
+require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
-$arg = getopt_rest($argv, "hn:pu", ["help", "name:", "papers", "users", "collaborators"]);
+$arg = Getopt::rest($argv, "hn:pu", ["help", "name:", "papers", "users", "collaborators"]);
 if (isset($arg["h"]) || isset($arg["help"])
     || count($arg["_"]) > 1
     || (count($arg["_"]) && $arg["_"][0] !== "-" && $arg["_"][0][0] === "-")) {
@@ -14,10 +13,11 @@ if (isset($arg["h"]) || isset($arg["help"])
 $users = isset($arg["u"]) || isset($arg["users"]);
 $papers = isset($arg["p"]) || isset($arg["papers"]);
 $collaborators = isset($arg["collaborators"]);
-if (!$users && !$papers && !$collaborators)
+if (!$users && !$papers && !$collaborators) {
     $users = $papers = true;
+}
 
-require_once("$ConfSitePATH/src/init.php");
+require_once(SiteLoader::find("src/init.php"));
 if (!$Conf->opt("contactdb_dsn")) {
     fwrite(STDERR, "Conference has no contactdb_dsn\n");
     exit(1);
@@ -43,8 +43,9 @@ if ($users) {
         join ContactInfo using (contactDbId)
         where confid=?", $confid);
     $cdb_users = [];
-    while ($result && ($user = $result->fetch_object()))
+    while ($result && ($user = $result->fetch_object())) {
         $cdb_users[$user->email] = $user;
+    }
     Dbl::free($result);
 
     // read current db roles
@@ -93,7 +94,7 @@ if ($papers) {
     $max_submitted = 0;
     $pids = [];
     $qv = [];
-    while (($row = edb_row($result))) {
+    while (($row = $result->fetch_row())) {
         $qv[] = [$confid, $row[0], $row[1]];
         $pids[] = $row[0];
         $max_submitted = max($max_submitted, (int) $row[2]);
@@ -104,13 +105,14 @@ if ($papers) {
         Dbl::ql($cdb, "insert into ConferencePapers (confid,paperId,title) values ?v on duplicate key update title=values(title)", $qv);
     }
     Dbl::ql($cdb, "delete from ConferencePapers where confid=? and paperId?A", $confid, $pids);
-    if ($confrow->last_submission_at != $max_submitted)
+    if ($confrow->last_submission_at != $max_submitted) {
         Dbl::ql($cdb, "update Conferences set last_submission_at=greatest(coalesce(last_submission_at,0), ?) where confid=?", $max_submitted, $confid);
+    }
 }
 
 if ($collaborators) {
     $result = Dbl::ql($Conf->dblink, "select email, collaborators, updateTime, lastLogin from ContactInfo where collaborators is not null and collaborators!=''");
-    while (($row = edb_row($result))) {
+    while (($row = $result->fetch_row())) {
         $time = (int) $row[2] ? : (int) $row[3];
         if ($time > 0) {
             Dbl::ql($cdb, "update ContactInfo set collaborators=?, updateTime=? where email=? and (collaborators is null or collaborators='' or updateTime<?)", $row[1], $time, $row[0], $time);

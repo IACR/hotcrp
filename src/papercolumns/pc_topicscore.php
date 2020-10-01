@@ -3,15 +3,19 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class TopicScore_PaperColumn extends PaperColumn {
+    /** @var Contact */
     private $contact;
+    /** @var ScoreInfo */
+    private $statistics;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         if (isset($cj->user)) {
             $this->contact = $conf->pc_member_by_email($cj->user);
         }
+        $this->statistics = new ScoreInfo;
     }
     function prepare(PaperList $pl, $visible) {
-        $this->contact = $this->contact ? : $pl->reviewer_user();
+        $this->contact = $this->contact ?? $pl->reviewer_user();
         if (!$pl->conf->has_topics()
             || !$pl->user->isPC
             || ($this->contact->contactId !== $pl->user->contactId
@@ -23,25 +27,33 @@ class TopicScore_PaperColumn extends PaperColumn {
         }
         return true;
     }
-    function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
+    function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
         $at = $a->topic_interest_score($this->contact);
         $bt = $b->topic_interest_score($this->contact);
         return $at < $bt ? 1 : ($at == $bt ? 0 : -1);
     }
     function content(PaperList $pl, PaperInfo $row) {
-        return htmlspecialchars($row->topic_interest_score($this->contact));
+        $v = $row->topic_interest_score($this->contact);
+        $this->statistics->add($v);
+        return htmlspecialchars((string) $v);
     }
     function text(PaperList $pl, PaperInfo $row) {
-        return $row->topic_interest_score($this->contact);
+        return (string) $row->topic_interest_score($this->contact);
+    }
+    function has_statistics() {
+        return true;
+    }
+    function statistic_html(PaperList $pl, $stat) {
+        $v = $this->statistics->statistic($stat);
+        return is_int($v) ? (string) $v : sprintf("%.2f", $v);
     }
 
-    static function expand($name, $user, $xfj, $m) {
+    static function expand($name, Contact $user, $xfj, $m) {
         if (!($fj = (array) $user->conf->basic_paper_column("topicscore", $user))) {
             return null;
         }
         $rs = [];
-        foreach (ContactSearch::make_pc($m[1], $user)->ids as $cid) {
-            $u = $user->conf->cached_user_by_id($cid);
+        foreach (ContactSearch::make_pc($m[1], $user)->users() as $u) {
             $fj["name"] = "topicscore:" . $u->email;
             $fj["user"] = $u->email;
             $fj["title"] = $user->reviewer_text_for($u) . " topic score";
@@ -49,7 +61,7 @@ class TopicScore_PaperColumn extends PaperColumn {
             $rs[] = (object) $fj;
         }
         if (empty($rs)) {
-            $user->conf->xt_factory_error("No PC member matches “" . htmlspecialchars($m[1]) . "”.");
+            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[1]) . "”.");
         }
         return $rs;
     }

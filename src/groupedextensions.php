@@ -2,20 +2,25 @@
 // src/groupedextensions.php -- HotCRP extensible groups
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
-class GroupedExtensions {
+class GroupedExtensions implements XtContext {
     private $_jall = [];
     private $_potential_members = [];
+    /** @var Conf */
     private $conf;
+    /** @var Contact */
     private $viewer;
     public $root;
     private $_raw = [];
     private $_callables;
+    /** @var array{?list<mixed>,?string,?string,?string} */
     private $_render_state;
     private $_render_stack;
     private $_annexes = [];
+    /** @var list<callable(string,object,?Contact,Conf):(?bool)> */
+    private $_xt_checkers = [];
     static private $next_placeholder;
 
-    function _add_json($fj) {
+    function add($fj) {
         if (is_array($fj)) {
             $fja = $fj;
             if (count($fja) < 3 || !is_string($fja[0])) {
@@ -58,16 +63,19 @@ class GroupedExtensions {
         } else {
             $this->_potential_members[$fj->group][] = $fj->name;
         }
+        if (!empty($this->_raw)) {
+            $this->_raw = [];
+        }
         return true;
     }
 
-    function __construct(Contact $viewer, $args /* ... */) {
+    function __construct(Contact $viewer, ...$args) {
         $this->conf = $viewer->conf;
         $this->viewer = $viewer;
         self::$next_placeholder = 1;
-        foreach (func_get_args() as $i => $arg) {
-            if ($i > 0 && $arg)
-                expand_json_includes_callback($arg, [$this, "_add_json"]);
+        foreach ($args as $arg) {
+            if ($arg)
+                expand_json_includes_callback($arg, [$this, "add"]);
         }
         $this->reset_context();
     }
@@ -78,8 +86,42 @@ class GroupedExtensions {
         $this->_callables = ["Conf" => $this->conf];
         $this->_render_state = [null, null, "h3", null];
     }
+    /** @return Contact */
     function viewer() {
         return $this->viewer;
+    }
+    /** @return ?string */
+    function root() {
+        return $this->root;
+    }
+
+    /** @param callable(string,object,?Contact,Conf):(?bool) $checker */
+    function add_xt_checker($checker) {
+        $this->_xt_checkers[] = $checker;
+    }
+    function xt_check_element($str, $xt, $user, Conf $conf) {
+        foreach ($this->_xt_checkers as $cf) {
+            if (($x = $cf($str, $xt, $user, $conf)) !== null)
+                return $x;
+        }
+        return null;
+    }
+
+    /** @param string $key */
+    function filter_by($key) {
+        $old_context = $this->conf->xt_swap_context($this);
+        foreach ($this->_jall as &$jl) {
+            for ($i = 0; $i !== count($jl); ) {
+                if (isset($jl[$i]->$key)
+                    && !$this->conf->xt_check($jl[$i]->$key, $jl[$i], $this->viewer)) {
+                    array_splice($jl, $i, 1);
+                } else {
+                    ++$i;
+                }
+            }
+        }
+        $this->_raw = [];
+        $this->conf->xt_context = $old_context;
     }
 
     function get_raw($name) {
@@ -102,6 +144,7 @@ class GroupedExtensions {
         }
         return $gj;
     }
+    /** @return string|false */
     function canonical_group($name) {
         if (($gj = $this->get($name))) {
             $pos = strpos($gj->group, "/");
@@ -110,6 +153,7 @@ class GroupedExtensions {
             return false;
         }
     }
+    /** @return list<object> */
     function members($name, $require_key = false) {
         if (($gj = $this->get($name))) {
             $name = $gj->name;
@@ -138,6 +182,7 @@ class GroupedExtensions {
             return $r;
         }
     }
+    /** @return list<object> */
     function groups() {
         return $this->members("");
     }
@@ -155,6 +200,7 @@ class GroupedExtensions {
     function callable($name) {
         if (!isset($this->_callables[$name])
             && ($args = $this->_render_state[0]) !== null) {
+            /** @phan-suppress-next-line PhanTypeExpectedObjectOrClassName */
             $this->_callables[$name] = new $name(...$args);
         }
         return $this->_callables[$name] ?? null;
@@ -165,13 +211,11 @@ class GroupedExtensions {
     }
     function call_callback($cb, $gj) {
         Conf::xt_resolve_require($gj);
-        $args = $this->_render_state[0];
-        $args[] = $gj;
         if (is_string($cb) && $cb[0] === "*") {
             $colons = strpos($cb, ":");
             $cb = [$this->callable(substr($cb, 1, $colons - 1)), substr($cb, $colons + 2)];
         }
-        return call_user_func_array($cb, $args);
+        return $cb(...$this->_render_state[0], ...[$gj]);
     }
 
     function set_context($options) {

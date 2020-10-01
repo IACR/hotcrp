@@ -1,24 +1,24 @@
 <?php
-$ConfSitePATH = preg_replace(',/batch/[^/]+,', '', __FILE__);
-require_once("$ConfSitePATH/src/init.php");
-require_once("$ConfSitePATH/lib/getopt.php");
+require_once(preg_replace('/\/batch\/[^\/]+/', '/src/init.php', __FILE__));
 
-$arg = getopt_rest($argv, "hn:", array("help", "name:", "json-reviews", "fix-json-reviews", "fix-autosearch"));
+$arg = Getopt::rest($argv, "hn:", array("help", "name:", "json-reviews", "fix-json-reviews", "fix-autosearch"));
 if (isset($arg["h"]) || isset($arg["help"])
     || count($arg["_"]) > 0) {
     fwrite(STDOUT, "Usage: php batch/checkinvariants.php [-n CONFID] [--fix-autosearch]\n");
     exit(0);
 }
 
-$problems = $Conf->check_invariants();
+$ic = new ConfInvariants($Conf);
+$ic->exec_all();
 
-if (isset($problems["autosearch"]) && isset($arg["fix-autosearch"]))
+if (isset($ic->problems["autosearch"]) && isset($arg["fix-autosearch"])) {
     $Conf->update_autosearch_tags();
+}
 
 if ($Conf->sversion == 174 && (isset($arg["json-reviews"]) || isset($arg["fix-json-reviews"]))) {
     $result = $Conf->qe("select * from PaperReview");
     $q = $qv = [];
-    while (($rrow = ReviewInfo::fetch($result, $Conf))) {
+    while (($rrow = ReviewInfo::fetch($result, null, $Conf))) {
         $tfields = $rrow->tfields ? json_decode($rrow->tfields) : null;
         $need_fix = $unfixable = false;
         foreach (ReviewInfo::$text_field_map as $kin => $kout) {

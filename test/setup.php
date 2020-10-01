@@ -2,14 +2,14 @@
 // test/setup.php -- HotCRP helper file to initialize tests
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
-global $ConfSitePATH;
-$ConfSitePATH = preg_replace(",/[^/]+/[^/]+$,", "", __FILE__);
-define("HOTCRP_OPTIONS", "$ConfSitePATH/test/options.php");
+require_once(preg_replace('/\/test\/[^\/]+/', '/src/siteloader.php', __FILE__));
+define("HOTCRP_OPTIONS", SiteLoader::find("test/options.php"));
 define("HOTCRP_TESTHARNESS", true);
-ini_set("error_log", null);
+ini_set("error_log", "");
 ini_set("log_errors", "0");
 ini_set("display_errors", "stderr");
-require_once("$ConfSitePATH/src/init.php");
+ini_set("assert.exception", "1");
+require_once(SiteLoader::find("src/init.php"));
 $Conf->set_opt("disablePrintEmail", true);
 $Conf->set_opt("postfixEOL", "\n");
 
@@ -18,48 +18,18 @@ function die_hard($message) {
     exit(1);
 }
 
-// Initialize from an empty database.
-if (!$Conf->dblink->multi_query(file_get_contents("$ConfSitePATH/src/schema.sql"))) {
-    die_hard("* Can't reinitialize database.\n" . $Conf->dblink->error . "\n");
-}
-do {
-    if (($result = $Conf->dblink->store_result())) {
-        $result->free();
-    } else if ($Conf->dblink->errno) {
-        break;
-    }
-} while ($Conf->dblink->more_results() && $Conf->dblink->next_result());
-if ($Conf->dblink->errno) {
-    die_hard("* Error initializing database.\n" . $Conf->dblink->error . "\n");
-}
-
-// No setup phase.
-$Conf->qe_raw("delete from Settings where name='setupPhase'");
-$Conf->qe_raw("insert into Settings set name='options', value=1, data='[{\"id\":1,\"name\":\"Calories\",\"abbr\":\"calories\",\"type\":\"numeric\",\"position\":1,\"display\":\"default\"}]'");
-$Conf->load_settings();
-// Contactdb.
-if (($cdb = $Conf->contactdb())) {
-    if (!$cdb->multi_query(file_get_contents("$ConfSitePATH/test/cdb-schema.sql"))) {
-        die_hard("* Can't reinitialize contact database.\n" . $cdb->error);
-    }
-    while ($cdb->more_results()) {
-        Dbl::free($cdb->next_result());
-    }
-    $cdb->query("insert into Conferences set dbname='" . $cdb->real_escape_string($Conf->dbname) . "'");
-}
-
 // Record mail in MailChecker.
 class MailChecker {
     static public $print = false;
     static public $preps = [];
     static public $messagedb = [];
     static function send_hook($fh, $prep) {
-        global $ConfSitePATH;
         $prep->landmark = "";
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $trace) {
             if (isset($trace["file"]) && preg_match(',/test\d,', $trace["file"])) {
-                if (str_starts_with($trace["file"], $ConfSitePATH))
-                    $trace["file"] = substr($trace["file"], strlen($ConfSitePATH) + 1);
+                if (str_starts_with($trace["file"], SiteLoader::$root)) {
+                    $trace["file"] = substr($trace["file"], strlen(SiteLoader::$root) + 1);
+                }
                 $prep->landmark = $trace["file"] . ":" . $trace["line"];
                 break;
             }
@@ -76,18 +46,6 @@ class MailChecker {
     }
     static function check0() {
         xassert_eqq(count(self::$preps), 0);
-        self::$preps = [];
-    }
-    static function check1($recipient, $template, $rest = []) {
-        global $Conf;
-        xassert_eqq(count(self::$preps), 1);
-        if (count(self::$preps) === 1) {
-            $mailer = new HotCRPMailer($Conf, $recipient, $rest);
-            $prep = $mailer->make_preparation($template, $rest);
-            xassert_eqq(self::$preps[0]->subject, $prep->subject);
-            xassert_eqq(self::$preps[0]->body, $prep->body);
-            xassert_eq(self::$preps[0]->to, $prep->to);
-        }
         self::$preps = [];
     }
     static function check_db($name = null) {
@@ -179,45 +137,92 @@ class MailChecker {
         }
     }
 }
-MailChecker::add_messagedb(file_get_contents("$ConfSitePATH/test/emails.txt"));
+MailChecker::add_messagedb(file_get_contents(SiteLoader::find("test/emails.txt")));
 $Conf->add_hook((object) ["event" => "send_mail", "callback" => "MailChecker::send_hook", "priority" => 1000]);
-
-// Create initial administrator user.
-$Admin = Contact::create($Conf, null, ["email" => "chair@_.com", "name" => "Jane Chair"]);
-$Admin->save_roles(Contact::ROLE_ADMIN | Contact::ROLE_CHAIR | Contact::ROLE_PC, $Admin);
-
-// Load data.
-$json = json_decode(file_get_contents("$ConfSitePATH/test/db.json"));
-if (!$json) {
-    die_hard("* test/testdb.json error: " . json_last_error_msg() . "\n");
-}
-$us = new UserStatus($Conf->site_contact());
-foreach ($json->contacts as $c) {
-    $user = $us->save($c);
-    if ($user) {
-        MailChecker::check_db("create-{$c->email}");
-    } else {
-        die_hard("* failed to create user $c->email\n");
-    }
-}
-foreach ($json->papers as $p) {
-    $ps = new PaperStatus($Conf);
-    if (!$ps->save_paper_json($p)) {
-        die_hard("* failed to create paper $p->title:\n" . htmlspecialchars_decode(join("\n", $ps->messages())) . "\n");
-    }
-}
 
 function setup_assignments($assignments, Contact $user) {
     if (is_array($assignments)) {
         $assignments = join("\n", $assignments);
     }
     $assignset = new AssignmentSet($user, true);
-    $assignset->parse($assignments, null, null);
+    $assignset->parse($assignments, "", null);
     if (!$assignset->execute()) {
-        die_hard("* failed to run assignments:\n" . join("\n", $assignset->errors_text(true)) . "\n");
+        die_hard("* Failed to run assignments:\n" . join("\n", $assignset->message_texts(true)) . "\n");
     }
 }
-setup_assignments($json->assignments_1, $Admin);
+
+function setup_initialize_database() {
+    global $Conf, $Admin;
+    // Initialize from an empty database.
+    if (!$Conf->dblink->multi_query(file_get_contents(SiteLoader::find("src/schema.sql")))) {
+        die_hard("* Can't reinitialize database.\n" . $Conf->dblink->error . "\n");
+    }
+    do {
+        if (($result = $Conf->dblink->store_result())) {
+            $result->free();
+        } else if ($Conf->dblink->errno) {
+            break;
+        }
+    } while ($Conf->dblink->more_results() && $Conf->dblink->next_result());
+    if ($Conf->dblink->errno) {
+        die_hard("* Error initializing database.\n" . $Conf->dblink->error . "\n");
+    }
+
+    // No setup phase.
+    $Conf->qe_raw("delete from Settings where name='setupPhase'");
+    $Conf->qe_raw("insert into Settings set name='options', value=1, data='[{\"id\":1,\"name\":\"Calories\",\"abbr\":\"calories\",\"type\":\"numeric\",\"position\":1,\"display\":\"default\"}]'");
+    $Conf->load_settings();
+
+    // Contactdb.
+    if (($cdb = $Conf->contactdb())) {
+        if (!$cdb->multi_query(file_get_contents(SiteLoader::find("test/cdb-schema.sql")))) {
+            die_hard("* Can't reinitialize contact database.\n" . $cdb->error);
+        }
+        while ($cdb->more_results()) {
+            $cdb->next_result();
+        }
+        $cdb->query("insert into Conferences set dbname='" . $cdb->real_escape_string($Conf->dbname) . "'");
+    }
+
+    // Create initial administrator user.
+    $Admin = Contact::create($Conf, null, ["email" => "chair@_.com", "name" => "Jane Chair"]);
+    $Admin->save_roles(Contact::ROLE_ADMIN | Contact::ROLE_CHAIR | Contact::ROLE_PC, $Admin);
+
+    // Load data.
+    $json = json_decode(file_get_contents(SiteLoader::find("test/db.json")));
+    if (!$json) {
+        die_hard("* test/testdb.json error: " . json_last_error_msg() . "\n");
+    }
+    $us = new UserStatus($Conf->root_user());
+    $ok = true;
+    foreach ($json->contacts as $c) {
+        $user = $us->save($c);
+        if ($user) {
+            MailChecker::check_db("create-{$c->email}");
+        } else {
+            fwrite(STDERR, "* failed to create user $c->email\n");
+            $ok = false;
+        }
+    }
+    foreach ($json->papers as $p) {
+        $ps = new PaperStatus($Conf);
+        if (!$ps->save_paper_json($p)) {
+            $t = join("", array_map(function ($mx) {
+                return "    {$mx->field}: {$mx->message}\n";
+            }, $ps->message_list()));
+            $id = isset($p->_id_) ? "#{$p->_id_} " : "";
+            fwrite(STDERR, "* failed to create paper {$id}{$p->title}:\n" . htmlspecialchars_decode($t) . "\n");
+            $ok = false;
+        }
+    }
+    if (!$ok) {
+        exit(1);
+    }
+
+    setup_assignments($json->assignments_1, $Admin);
+}
+
+setup_initialize_database();
 
 class Xassert {
     static public $n = 0;
@@ -234,8 +239,8 @@ class Xassert {
 
 function xassert_error_handler($errno, $emsg, $file, $line) {
     if ((error_reporting() || $errno != E_NOTICE) && Xassert::$disabled <= 0) {
-        if (get(Xassert::$emap, $errno)) {
-            $emsg = Xassert::$emap[$errno] . ":  $emsg";
+        if (($e = Xassert::$emap[$errno] ?? null)) {
+            $emsg = "$e:  $emsg";
         } else {
             $emsg = "PHP Message $errno:  $emsg";
         }
@@ -250,6 +255,7 @@ function assert_location() {
     return caller_landmark("{^(?:x?assert|MailChecker::check)}");
 }
 
+/** @return bool */
 function xassert($x, $description = "") {
     ++Xassert::$n;
     if ($x) {
@@ -272,6 +278,7 @@ function xassert_exit() {
     exit($ok ? 0 : 1);
 }
 
+/** @return bool */
 function xassert_eqq($a, $b) {
     ++Xassert::$n;
     $ok = $a === $b;
@@ -284,6 +291,7 @@ function xassert_eqq($a, $b) {
     return $ok;
 }
 
+/** @return bool */
 function xassert_neqq($a, $b) {
     ++Xassert::$n;
     $ok = $a !== $b;
@@ -296,6 +304,7 @@ function xassert_neqq($a, $b) {
     return $ok;
 }
 
+/** @return bool */
 function xassert_eq($a, $b) {
     ++Xassert::$n;
     $ok = $a == $b;
@@ -308,6 +317,7 @@ function xassert_eq($a, $b) {
     return $ok;
 }
 
+/** @return bool */
 function xassert_neq($a, $b) {
     ++Xassert::$n;
     $ok = $a != $b;
@@ -320,24 +330,33 @@ function xassert_neq($a, $b) {
     return $ok;
 }
 
-function xassert_array_eqq($a, $b) {
+/** @param ?list<mixed> $a
+ * @param ?list<mixed> $b
+ * @param bool $sort
+ * @return bool */
+function xassert_array_eqq($a, $b, $sort = false) {
     ++Xassert::$n;
     $problem = "";
     if ($a === null && $b === null) {
         // ok
     } else if (is_array($a) && is_array($b)) {
-        if (count($a) !== count($b)) {
+        if (count($a) !== count($b) && !$sort) {
             $problem = "size " . count($a) . " !== " . count($b);
+        } else if (is_associative_array($a) || is_associative_array($b)) {
+            $problem = "associative arrays";
         } else {
-            $ka = array_keys($a);
-            $va = array_values($a);
-            $kb = array_keys($b);
-            $vb = array_values($b);
-            for ($i = 0; $i < count($ka) && !$problem; ++$i)
-                if ($ka[$i] !== $kb[$i])
-                    $problem = "key position $i differs, {$ka[$i]} !== {$kb[$i]}";
-                else if ($va[$i] !== $vb[$i])
-                    $problem = "value {$ka[$i]} differs, " . var_export($va[$i], true) . " !== " . var_export($vb[$i], true);
+            if ($sort) {
+                sort($a);
+                sort($b);
+            }
+            for ($i = 0; $i < count($a) && $i < count($b) && !$problem; ++$i) {
+                if ($a[$i] !== $b[$i]) {
+                    $problem = "value {$i} differs, " . var_export($a[$i], true) . " !== " . var_export($b[$i], true);
+                }
+            }
+            if (!$problem && count($a) !== count($b)) {
+                $problem = "size " . count($a) . " !== " . count($b);
+            }
         }
     } else {
         $problem = "different types";
@@ -346,6 +365,17 @@ function xassert_array_eqq($a, $b) {
         ++Xassert::$nsuccess;
     } else {
         trigger_error("Array assertion failed, $problem at " . assert_location() . "\n", E_USER_WARNING);
+        if ($sort) {
+            $aj = json_encode(array_slice($a, 0, 10));
+            if (count($a) > 10) {
+                $aj .= "...";
+            }
+            $bj = json_encode(array_slice($b, 0, 10));
+            if (count($b) > 10) {
+                $bj .= "...";
+            }
+            error_log("  " . $aj . " !== " . $bj);
+        }
     }
     return $problem === "";
 }
@@ -362,20 +392,27 @@ function xassert_match($a, $b) {
     return $ok;
 }
 
+/** @param Contact $user
+ * @return array<int,object> */
 function search_json($user, $text, $cols = "id") {
-    $pl = new PaperList(new PaperSearch($user, $text));
+    $pl = new PaperList("empty", new PaperSearch($user, $text));
     return $pl->text_json($cols);
 }
 
+/** @param Contact $user
+ * @param string $col
+ * @return string */
 function search_text_col($user, $text, $col = "id") {
-    $pl = new PaperList(new PaperSearch($user, $text));
-    $x = array();
+    $pl = new PaperList("empty", new PaperSearch($user, $text));
+    $x = [];
     foreach ($pl->text_json($col) as $pid => $p) {
         $x[] = $pid . " " . $p->$col . "\n";
     }
     return join("", $x);
 }
 
+/** @param Contact $user
+ * @return bool */
 function assert_search_papers($user, $text, $result) {
     if (is_array($result)) {
         $result = join(" ", $result);
@@ -386,9 +423,9 @@ function assert_search_papers($user, $text, $result) {
     return xassert_eqq(join(" ", array_keys(search_json($user, $text))), $result);
 }
 
+/** @return bool */
 function assert_query($q, $b) {
-    $result = Dbl::qe_raw($q);
-    return xassert_eqq(join("\n", edb_first_columns($result)), $b);
+    return xassert_eqq(join("\n", Dbl::fetch_first_columns($q)), $b);
 }
 
 function tag_normalize_compare($a, $b) {
@@ -406,6 +443,8 @@ function tag_normalize_compare($a, $b) {
     return $cmp;
 }
 
+/** @param PaperInfo $prow
+ * @return string */
 function paper_tag_normalize($prow) {
     $t = array();
     $pcm = $prow->conf->pc_members();
@@ -423,30 +462,37 @@ function paper_tag_normalize($prow) {
         }
     }
     usort($t, "tag_normalize_compare");
-    return $t;
+    return join(" ", $t);
 }
 
+/** @param Contact $who */
 function xassert_assign($who, $what, $override = false) {
     $assignset = new AssignmentSet($who, $override);
     $assignset->parse($what);
     $ok = $assignset->execute();
     xassert($ok);
     if (!$ok) {
-        foreach ($assignset->errors_text() as $line)
+        foreach ($assignset->message_texts() as $line) {
             fwrite(STDERR, "  $line\n");
+        }
     }
     return $ok;
 }
 
+/** @param Contact $who */
 function xassert_assign_fail($who, $what, $override = false) {
     $assignset = new AssignmentSet($who, $override);
     $assignset->parse($what);
     return xassert(!$assignset->execute());
 }
 
+/** @param Contact $user
+ * @param ?PaperInfo $prow
+ * @return object */
 function call_api($fn, $user, $qreq, $prow) {
-    if (!($qreq instanceof Qrequest))
+    if (!($qreq instanceof Qrequest)) {
         $qreq = new Qrequest("POST", $qreq);
+    }
     $uf = $user->conf->api($fn);
     xassert($uf);
     Conf::xt_resolve_require($uf);
@@ -461,32 +507,42 @@ function call_api($fn, $user, $qreq, $prow) {
     return $result;
 }
 
-function fetch_paper($pid, $contact = null) {
-    global $Conf;
-    return $Conf->fetch_paper($pid, $contact);
+/** @param int|PaperInfo $prow
+ * @param Contact $user */
+function fetch_review($prow, $user) {
+    if (is_int($prow)) {
+        $prow = $user->conf->checked_paper_by_id($prow, $user);
+    }
+    return $prow->fresh_review_of_user($user);
 }
 
-function fetch_review($prow, $contact) {
-    if (is_int($prow))
-        $prow = fetch_paper($prow, $contact);
-    return $prow->fresh_review_of_user($contact);
-}
-
-function save_review($paper, $contact, $revreq, $rrow = null) {
+/** @param Contact $user */
+function save_review($paper, $user, $revreq, $rrow = null) {
     global $Conf;
     $pid = is_object($paper) ? $paper->paperId : $paper;
-    $prow = fetch_paper($pid, $contact);
+    $prow = $user->conf->checked_paper_by_id($pid, $user);
     $rf = $Conf->review_form();
     $tf = new ReviewValues($rf);
     $tf->parse_web(new Qrequest("POST", $revreq), false);
-    $tf->check_and_save($contact, $prow, $rrow ? : fetch_review($prow, $contact));
-    return fetch_review($prow, $contact);
+    $tf->check_and_save($user, $prow, $rrow ? : fetch_review($prow, $user));
+    return fetch_review($prow, $user);
 }
 
+/** @return Contact */
 function user($email) {
-    global $Conf;
-    return $Conf->user_by_email($email);
+    return Conf::$main->checked_user_by_email($email);
+}
+
+/** @return ?Contact */
+function maybe_user($email) {
+    return Conf::$main->user_by_email($email);
+}
+
+function xassert_paper_status(PaperStatus $ps) {
+    xassert(!$ps->has_error());
+    foreach ($ps->error_list() as $mx) {
+        error_log("! " . $mx->field . ($mx->message ? ": " . $mx->message : ""));
+    }
 }
 
 MailChecker::clear();
-echo "* Tests initialized.\n";

@@ -60,7 +60,7 @@ class ReviewForm_SettingParser extends SettingParser {
     }
 
     private function populate_field($fj, ReviewField $f, SettingValues $sv, $fid) {
-        $sn = simplify_whitespace($sv->reqv("shortName_$fid", ""));
+        $sn = simplify_whitespace($sv->reqv("shortName_$fid") ?? "");
         if ($sn === "<None>" || $sn === "<New field>" || $sn === "Field name" || $sn === "") {
             $sn = "";
         } else {
@@ -183,8 +183,9 @@ class ReviewForm_SettingParser extends SettingParser {
         foreach (self::requested_fields($sv) as $fid => $x) {
             $finfo = ReviewInfo::field_info($fid, $sv->conf);
             if (!$finfo) {
-                if ($sv->has_reqv("order_$fid") && $sv->reqv("order_$fid") > 0)
+                if ($sv->has_reqv("order_$fid") && $sv->reqv("order_$fid") > 0) {
                     $sv->error_at("shortName_$fid", "Too many review fields. You must delete some other fields before adding this one.");
+                }
                 continue;
             }
             if (isset($rf->fmap[$finfo->id])) {
@@ -202,7 +203,7 @@ class ReviewForm_SettingParser extends SettingParser {
             $this->nrfj->{$finfo->id} = $fj;
         }
 
-        $sv->need_lock["PaperReview"] = true;
+        $sv->request_write_lock("PaperReview");
         return true;
     }
 
@@ -230,7 +231,7 @@ class ReviewForm_SettingParser extends SettingParser {
         // clear fields from json storage
         $clearf = Dbl::make_multi_qe_stager($conf->dblink);
         $result = $conf->qe("select * from PaperReview where sfields is not null or tfields is not null");
-        while (($rrow = ReviewInfo::fetch($result, $conf))) {
+        while (($rrow = ReviewInfo::fetch($result, null, $conf))) {
             $cleared = false;
             foreach ($clear_sfields as $f) {
                 if (isset($rrow->{$f->id})) {
@@ -275,7 +276,7 @@ class ReviewForm_SettingParser extends SettingParser {
             // clear options from json storage
             $clearf = Dbl::make_multi_qe_stager($conf->dblink);
             $result = $conf->qe("select * from PaperReview where sfields is not null");
-            while (($rrow = ReviewInfo::fetch($result, $conf))) {
+            while (($rrow = ReviewInfo::fetch($result, null, $conf))) {
                 $cleared = false;
                 foreach ($clear_sfields as $f) {
                     if (isset($rrow->{$f->id}) && $rrow->{$f->id} > count($f->options)) {
@@ -294,7 +295,6 @@ class ReviewForm_SettingParser extends SettingParser {
     }
 
     function save(SettingValues $sv, Si $si) {
-        global $Now;
         if (!$sv->update("review_form", json_encode_db($this->nrfj))) {
             return;
         }
@@ -349,7 +349,7 @@ class ReviewForm_SettingParser extends SettingParser {
         if ($assign_ordinal) {
             $rrows = [];
             $result = $sv->conf->qe("select * from PaperReview where reviewOrdinal=0 and reviewSubmitted>0");
-            while (($rrow = ReviewInfo::fetch($result, $sv->conf))) {
+            while (($rrow = ReviewInfo::fetch($result, null, $sv->conf))) {
                 $rrows[] = $rrow;
             }
             Dbl::free($result);
@@ -362,7 +362,7 @@ class ReviewForm_SettingParser extends SettingParser {
                     }
                     $max_ordinal = $sv->conf->fetch_ivalue("select coalesce(max(reviewOrdinal), 0) from PaperReview where paperId=? group by paperId", $rrow->paperId);
                     if ($max_ordinal !== null) {
-                        $sv->conf->qe("update PaperReview set reviewOrdinal=?, timeDisplayed=? where paperId=? and reviewId=?", $max_ordinal + 1, $Now, $rrow->paperId, $rrow->reviewId);
+                        $sv->conf->qe("update PaperReview set reviewOrdinal=?, timeDisplayed=? where paperId=? and reviewId=?", $max_ordinal + 1, Conf::$now, $rrow->paperId, $rrow->reviewId);
                     }
                 }
             }
@@ -387,9 +387,7 @@ class ReviewForm_SettingParser extends SettingParser {
 
 class ReviewForm_SettingRenderer {
 static function render(SettingValues $sv) {
-    global $ConfSitePATH;
-
-    $samples = json_decode(file_get_contents("$ConfSitePATH/etc/reviewformlibrary.json"));
+    $samples = json_decode(file_get_contents(SiteLoader::find("etc/reviewformlibrary.json")));
 
     $rf = $sv->conf->review_form();
     $req = [];
@@ -417,8 +415,9 @@ are better). For example:</p>
 submitted. Add a “<code>No entry</code>” line to make the score optional.</p></div>');
 
     $rfj = [];
-    foreach ($rf->fmap as $f)
+    foreach ($rf->fmap as $f) {
         $rfj[$f->short_id] = $f->unparse_json();
+    }
 
     // track whether fields have any nonempty values
     $where = ["false", "false"];
@@ -427,15 +426,17 @@ submitted. Add a “<code>No entry</code>” line to make the score optional.</p
         $fj->internal_id = $f->id;
         $fj->has_any_nonempty = false;
         if ($f->json_storage) {
-            if ($f->has_options)
+            if ($f->has_options) {
                 $where[0] = "sfields is not null";
-            else
+            } else {
                 $where[1] = "tfields is not null";
+            }
         } else {
-            if ($f->has_options)
+            if ($f->has_options) {
                 $where[] = "{$f->main_storage}!=0";
-            else
+            } else {
                 $where[] = "coalesce({$f->main_storage},'')!=''";
+            }
         }
     }
 
@@ -444,7 +445,7 @@ submitted. Add a “<code>No entry</code>” line to make the score optional.</p
     while (!empty($unknown_nonempty)) {
         $result = $sv->conf->qe("select * from PaperReview where " . join(" or ", $where) . " limit $limit,100");
         $expect_limit = $limit + 100;
-        while (($rrow = ReviewInfo::fetch($result, $sv->conf))) {
+        while (($rrow = ReviewInfo::fetch($result, null, $sv->conf))) {
             for ($i = 0; $i < count($unknown_nonempty); ++$i) {
                 $fj = $unknown_nonempty[$i];
                 $fid = $fj->internal_id;
@@ -452,14 +453,16 @@ submitted. Add a “<code>No entry</code>” line to make the score optional.</p
                     && (isset($fj->options) ? (int) $rrow->$fid !== 0 : $rrow->$fid !== "")) {
                     $fj->has_any_nonempty = true;
                     array_splice($unknown_nonempty, $i, 1);
-                } else
+                } else {
                     ++$i;
+                }
             }
             ++$limit;
         }
         Dbl::free($result);
-        if ($limit !== $expect_limit) // ran out of reviews
+        if ($limit !== $expect_limit) { // ran out of reviews
             break;
+        }
     }
 
     // output settings json
@@ -472,8 +475,11 @@ submitted. Add a “<code>No entry</code>” line to make the score optional.</p
         . ", ttemplate:" . json_encode_browser(ReviewField::make_template(false, $sv->conf))
         . "})");
 
-    echo Ht::hidden("has_review_form", 1),
-        "<div id=\"reviewform_container\"></div>",
+    echo Ht::hidden("has_review_form", 1);
+    if (!$sv->conf->can_some_author_view_review()) {
+        echo '<div class="feedback is-note mb-4">Authors cannot see reviews at the moment.</div>';
+    }
+    echo "<div id=\"reviewform_container\"></div>",
         "<div id=\"reviewform_removedcontainer\"></div>",
         Ht::button("Add score field", ["class" => "settings-add-review-field score"]),
         "<span class=\"sep\"></span>",

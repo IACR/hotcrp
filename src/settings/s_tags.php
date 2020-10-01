@@ -13,15 +13,17 @@ class Tags_SettingRenderer {
         // Remove `~~` tags from the set of defined chair-only tags. (They can
         // get on the list if they're defined in some other way.)
         $ts = array_filter($sv->conf->tags()->filter("chair"), function ($t) {
-            return !str_starts_with($t->tag, "~~");
+            return !str_starts_with($t->tag, "~~")
+                && $t->tag !== "perm:*";
         });
         $sv->set_oldv("tag_chair", self::render_tags($ts));
         $sv->echo_entry_group("tag_chair", null, ["class" => "need-suggest tags"], "PC members can see these tags, but only administrators can change them.");
     }
     static function render_tag_sitewide(SettingValues $sv) {
         $sv->set_oldv("tag_sitewide", self::render_tags($sv->conf->tags()->filter("sitewide")));
-        if ($sv->newv("tag_sitewide") || $sv->conf->has_any_manager())
+        if ($sv->newv("tag_sitewide") || $sv->conf->has_any_manager()) {
             $sv->echo_entry_group("tag_sitewide", null, ["class" => "need-suggest tags"], "Administrators can see and change these tags for every submission.");
+        }
     }
     static function render_tag_approval(SettingValues $sv) {
         $sv->set_oldv("tag_approval", self::render_tags($sv->conf->tags()->filter("approval")));
@@ -29,13 +31,14 @@ class Tags_SettingRenderer {
     }
     static function render_tag_vote(SettingValues $sv) {
         $x = [];
-        foreach ($sv->conf->tags()->filter("vote") as $t)
-            $x[] = "{$t->tag}#{$t->vote}";
+        foreach ($sv->conf->tags()->filter("allotment") as $t) {
+            $x[] = "{$t->tag}#{$t->allotment}";
+        }
         $sv->set_oldv("tag_vote", join(" ", $x));
         $sv->echo_entry_group("tag_vote", null, ["class" => "need-suggest tags"], "“vote#10” declares an allotment of 10 votes per PC member. (<a href=\"" . $sv->conf->hoturl("help", "t=votetags") . "\">Help</a>)");
     }
     static function render_tag_rank(SettingValues $sv) {
-        $sv->set_oldv("tag_rank", $sv->conf->setting_data("tag_rank", ""));
+        $sv->set_oldv("tag_rank", $sv->conf->setting_data("tag_rank") ?? "");
         $sv->echo_entry_group("tag_rank", null, null, 'The <a href="' . $sv->conf->hoturl("offline") . '">offline reviewing page</a> will expose support for uploading rankings by this tag. (<a href="' . $sv->conf->hoturl("help", "t=ranking") . '">Help</a>)');
     }
     static function render(SettingValues $sv) {
@@ -58,19 +61,23 @@ class Tags_SettingRenderer {
     }
     static function render_styles(SettingValues $sv) {
         $skip_colors = [];
-        if ($sv->conf->opt("tagNoSettingsColors"))
+        if ($sv->conf->opt("tagNoSettingsColors")) {
             $skip_colors = preg_split('/[\s|]+/', $sv->conf->opt("tagNoSettingsColors"));
-        $tag_color_data = $sv->conf->setting_data("tag_color", "");
+        }
+        $tag_color_data = $sv->conf->setting_data("tag_color") ?? "";
         $tag_colors_rows = array();
         foreach ($sv->conf->tags()->canonical_colors() as $k) {
-            if (in_array($k, $skip_colors))
+            if (in_array($k, $skip_colors)) {
                 continue;
+            }
             preg_match_all("{(?:\\A|\\s)(\\S+)=$k(?=\\s|\\z)}", $tag_color_data, $m);
-            $sv->set_oldv("tag_color_$k", join(" ", get($m, 1, [])));
+            $sv->set_oldv("tag_color_$k", join(" ", $m[1] ?? []));
             $tag_colors_rows[] = "<tr class=\"{$k}tag\"><td class=\"remargin-left\"></td>"
-                . "<td class=\"pad taghl\">$k</td>"
-                . "<td class=\"lentry\" style=\"font-size:1rem\">" . $sv->render_entry("tag_color_$k", ["class" => "need-suggest tags"]) . "</td>"
-                . "<td class=\"remargin-left\"></td></tr>";
+                . "<td class=\"pad taghl align-middle\">$k</td>"
+                . "<td class=\"lentry\">"
+                  . $sv->render_feedback_at("tag_color_$k", "mb-0")
+                  . $sv->render_entry("tag_color_$k", ["class" => "need-suggest tags"])
+                . "</td><td class=\"remargin-right\"></td></tr>";
         }
 
         echo Ht::hidden("has_tag_color", 1),
@@ -85,6 +92,8 @@ class Tags_SettingRenderer {
 class Tags_SettingParser extends SettingParser {
     private $sv;
     private $tagger;
+    private $diffs = [];
+
     function __construct(SettingValues $sv) {
         $this->sv = $sv;
         $this->tagger = new Tagger($sv->user);
@@ -93,8 +102,8 @@ class Tags_SettingParser extends SettingParser {
                                $checkf, $min_idx) {
         $ts = array();
         foreach (preg_split('/\s+/', $sv->reqv($si->name)) as $t) {
-            if ($t !== "" && ($tx = $tagger->check($t, $checkf))) {
-                list($tag, $idx) = TagInfo::unpack($tx);
+            if ($t !== "" && ($tx = $tagger->check($t, $checkf | Tagger::CHECKVERBOSE))) {
+                list($tag, $idx) = Tagger::unpack($tx);
                 if ($min_idx) {
                     $tx = $tag . "#" . max($min_idx, (float) $idx);
                 }
@@ -110,35 +119,39 @@ class Tags_SettingParser extends SettingParser {
     }
     function parse(SettingValues $sv, Si $si) {
         assert($this->sv === $sv);
+        $change = false;
 
         if ($si->name == "tag_chair" && $sv->has_reqv("tag_chair")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR, false);
-            $sv->update($si->name, join(" ", $ts));
+            $change = $sv->update($si->name, join(" ", $ts));
         }
 
         if ($si->name == "tag_sitewide" && $sv->has_reqv("tag_sitewide")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR, false);
-            $sv->update($si->name, join(" ", $ts));
+            $change = $sv->update($si->name, join(" ", $ts));
         }
 
         if ($si->name == "tag_vote" && $sv->has_reqv("tag_vote")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR, 1);
-            if ($sv->update("tag_vote", join(" ", $ts)))
-                $sv->need_lock["PaperTag"] = true;
+            if (($change = $sv->update("tag_vote", join(" ", $ts)))) {
+                $sv->request_write_lock("PaperTag");
+            }
         }
 
         if ($si->name == "tag_approval" && $sv->has_reqv("tag_approval")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
-            if ($sv->update("tag_approval", join(" ", $ts)))
-                $sv->need_lock["PaperTag"] = true;
+            if (($change = $sv->update("tag_approval", join(" ", $ts)))) {
+                $sv->request_write_lock("PaperTag");
+            }
         }
 
         if ($si->name == "tag_rank" && $sv->has_reqv("tag_rank")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
-            if (count($ts) > 1)
+            if (count($ts) > 1) {
                 $sv->error_at("tag_rank", "Multiple ranking tags are not supported yet.");
-            else
-                $sv->update("tag_rank", join(" ", $ts));
+            } else {
+                $change = $sv->update("tag_rank", join(" ", $ts));
+            }
         }
 
         if ($si->name == "tag_color") {
@@ -149,86 +162,67 @@ class Tags_SettingParser extends SettingParser {
                         $ts[] = $t . "=" . $k;
                 }
             }
-            $sv->update("tag_color", join(" ", $ts));
+            $change = $sv->update("tag_color", join(" ", $ts));
         }
 
         if ($si->name == "tag_au_seerev" && $sv->has_reqv("tag_au_seerev")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
-            $sv->update("tag_au_seerev", join(" ", $ts));
+            $change = $sv->update("tag_au_seerev", join(" ", $ts));
         }
 
+        if ($change) {
+            $this->diffs[$si->name] = true;
+        }
         return true;
     }
 
     function save(SettingValues $sv, Si $si) {
-        if ($si->name == "tag_vote" && $sv->has_savedv("tag_vote")) {
+        if (!isset($this->diffs[$si->name])) {
+            return;
+        }
+
+        if ($si->name == "tag_vote" || $si->name === "tag_approval") {
             // check allotments
             $pcm = $sv->conf->pc_members();
-            foreach (preg_split('/\s+/', $sv->savedv("tag_vote")) as $t) {
-                if ($t === "")
-                    continue;
-                $base = substr($t, 0, strpos($t, "#"));
-                $allotment = substr($t, strlen($base) + 1);
-                $sqlbase = sqlq_for_like($base);
-
-                $result = $sv->conf->q("select paperId, tag, tagIndex from PaperTag where tag like '%~{$sqlbase}'");
-                $pvals = array();
-                $cvals = array();
-                $negative = false;
-                while (($row = edb_row($result))) {
-                    $who = substr($row[1], 0, strpos($row[1], "~"));
-                    if ($row[2] < 0) {
-                        $sv->error_at(null, "Removed " . Text::user_html($pcm[$who]) . "’s negative “{$base}” vote for #$row[0].");
-                        $negative = true;
-                    } else {
-                        $pvals[$row[0]] = get($pvals, $row[0], 0) + $row[2];
-                        $cvals[$who] = get($cvals, $who, 0) + $row[2];
-                    }
+            $removals = [];
+            foreach (preg_split('/\s+/', $sv->savedv($si->name)) as $t) {
+                list($tag, $index) = Tagger::unpack($t);
+                if ($tag !== false) {
+                    $removals[] = "right(tag," . (strlen($tag) + 1) . ")='~" . sqlq($tag) . "'";
                 }
-
-                foreach ($cvals as $who => $what)
-                    if ($what > $allotment)
-                        $sv->error_at("tag_vote", Text::user_html($pcm[$who]) . " already has more than $allotment votes for tag “{$base}”.");
-
-                $q = ($negative ? " or (tag like '%~{$sqlbase}' and tagIndex<0)" : "");
-                $sv->conf->qe_raw("delete from PaperTag where tag='" . sqlq($base) . "'$q");
-
-                $q = array();
-                foreach ($pvals as $pid => $what)
-                    $q[] = "($pid, '" . sqlq($base) . "', $what)";
-                if (count($q) > 0)
-                    $sv->conf->qe_raw("insert into PaperTag values " . join(", ", $q));
             }
+            if (!empty($removals)) {
+                $result = $sv->conf->qe_raw("delete from PaperTag where tagIndex<0 and left(tag,1)!='~' and (" . join(" or ", $removals) . ")");
+                if ($result->affected_rows) {
+                    $sv->warning_at($si->name, "Removed negative votes.");
+                }
+            }
+            $sv->mark_invalidate_caches(["autosearch" => true]);
         }
 
-        if ($si->name == "tag_approval" && $sv->has_savedv("tag_approval")) {
-            $pcm = $sv->conf->pc_members();
-            foreach (preg_split('/\s+/', $sv->savedv("tag_approval")) as $t) {
-                if ($t === "")
-                    continue;
-                $result = $sv->conf->q_raw("select paperId, tag, tagIndex from PaperTag where tag like '%~" . sqlq_for_like($t) . "'");
-                $pvals = array();
-                $negative = false;
-                while (($row = edb_row($result))) {
-                    $who = substr($row[1], 0, strpos($row[1], "~"));
-                    if ($row[2] < 0) {
-                        $sv->error_at(null, "Removed " . Text::user_html($pcm[$who]) . "’s negative “{$t}” approval vote for #$row[0].");
-                        $negative = true;
-                    } else
-                        $pvals[$row[0]] = get($pvals, $row[0], 0) + 1;
+        $sv->mark_invalidate_caches(["tags" => true]);
+    }
+
+    static function crosscheck(SettingValues $sv) {
+        $vs = [];
+        '@phan-var array<string,list<string>> $vs';
+        $descriptions = [
+            "tag_approval" => "approval voting",
+            "tag_vote" => "allotment voting",
+            "tag_rank" => "ranking"
+        ];
+        foreach (array_keys($descriptions) as $n) {
+            foreach (Tagger::split_unpack($sv->newv($n)) as $ti) {
+                $lx = &$vs[strtolower($ti[0])];
+                $lx = $lx ?? [];
+                $lx[] = $n;
+                if (count($lx) === 2) {
+                    $sv->warning_at($lx[0], "Tag “" . htmlspecialchars($ti[0]) . "” is also used for " . $descriptions[$n] . ".");
                 }
-
-                $q = ($negative ? " or (tag like '%~" . sqlq_for_like($t) . "' and tagIndex<0)" : "");
-                $sv->conf->qe_raw("delete from PaperTag where tag='" . sqlq($t) . "'$q");
-
-                $q = array();
-                foreach ($pvals as $pid => $what)
-                    $q[] = "($pid, '" . sqlq($t) . "', $what)";
-                if (count($q) > 0)
-                    $sv->conf->qe_raw("insert into PaperTag values " . join(", ", $q));
+                if (count($lx) > 1) {
+                    $sv->warning_at($n, "Tag “" . htmlspecialchars($ti[0]) . "” is also used for " . $descriptions[$lx[0]] . ".");
+                }
             }
         }
-
-        $sv->conf->invalidate_caches(["taginfo" => true]);
     }
 }

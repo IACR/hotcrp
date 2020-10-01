@@ -3,9 +3,11 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Topic_SearchTerm extends SearchTerm {
+    /** @var true|list<int> */
     private $topics;
     private $negated;
 
+    /** @param true|list<int> $topics */
     function __construct($topics, $negated) {
         parent::__construct("topic");
         $this->topics = $topics;
@@ -49,13 +51,15 @@ class Topic_SearchTerm extends SearchTerm {
     }
     function sqlexpr(SearchQueryInfo $sqi) {
         $tm = "";
-        if ($this->topics === [])
+        if ($this->topics === []) {
             return "false";
-        else if (is_array($this->topics))
+        } else if (is_array($this->topics)) {
             $tm = " and topicId in (" . join(",", $this->topics) . ")";
+        }
         $t = "exists (select * from PaperTopic where paperId=Paper.paperId$tm)";
-        if ($this->negated)
+        if ($this->negated) {
             $t = "not $t";
+        }
         return $t;
     }
     function exec(PaperInfo $row, PaperSearch $srch) {
@@ -68,10 +72,11 @@ class Topic_SearchTerm extends SearchTerm {
         }
         return $this->negated ? !$v : $v;
     }
-    function compile_condition(PaperInfo $row, PaperSearch $srch) {
-        $o = (object) ["type" => "topic", "topics" => $this->topics];
-        if ($this->negated)
-            $o = (object) ["type" => "not", "child" => [$o]];
+    function script_expression(PaperInfo $row, PaperSearch $srch) {
+        $o = ["type" => "topic", "topics" => $this->topics];
+        if ($this->negated) {
+            $o = ["type" => "not", "child" => [$o]];
+        }
         return $o;
     }
 }

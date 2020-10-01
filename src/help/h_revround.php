@@ -3,7 +3,7 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class RevRound_HelpTopic {
-    static function render($hth) {
+    static function render(HelpRenderer $hth) {
         echo "<p>Many conferences divide their review assignments into multiple <em>rounds</em>.
 Each round is given a name, such as “R1” or “lastround.”
 (We suggest very short names like “R1”.)
@@ -35,15 +35,17 @@ The automatic and bulk assignment pages also let you set a review round.</p>";
             $rounds = array();
             if ($hth->conf->has_rounds()) {
                 $result = $hth->conf->qe("select distinct reviewRound from PaperReview");
-                while (($row = edb_row($result)))
-                    if ($row[0] && ($rname = $hth->conf->round_name($row[0])))
+                while (($row = $result->fetch_row())) {
+                    if ($row[0] && ($rname = $hth->conf->round_name((int) $row[0])))
                         $rounds[] = "“" . $hth->search_link(htmlspecialchars($rname), "round:$rname") . "”";
+                }
                 sort($rounds);
             }
-            if (count($rounds))
+            if (count($rounds)) {
                 $texts[] = "Review rounds currently in use: " . commajoin($rounds) . ".";
-            else if (!count($texts))
+            } else if (!count($texts)) {
                 $texts[] = "So far no review rounds have been defined.";
+            }
             echo $hth->subhead("Round status");
             echo "<p>", join(" ", $texts), "</p>\n";
         }

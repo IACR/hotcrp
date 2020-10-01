@@ -4,13 +4,18 @@
 
 class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
     // NB see also count()
+    /** @var string */
     private $____method;
     private $____a = [];
     private $____files = [];
     private $____x = [];
+    /** @var bool */
     private $____post_ok = false;
+    /** @var bool */
     private $____post_empty = false;
+    /** @var false|string */
     private $____page = false;
+    /** @var false|string */
     private $____path = false;
     function __construct($method, $data = null) {
         $this->____method = $method;
@@ -20,25 +25,34 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
             }
         }
     }
+    /** @param string $page
+     * @param string $path */
     function set_page_path($page, $path) {
         $this->____page = $page;
         $this->____path = $path;
     }
+    /** @return string */
     function method() {
         return $this->____method;
     }
+    /** @return bool */
     function is_get() {
         return $this->____method === "GET";
     }
+    /** @return bool */
     function is_post() {
         return $this->____method === "POST";
     }
+    /** @return false|string */
     function page() {
         return $this->____page;
     }
+    /** @return false|string */
     function path() {
         return $this->____path;
     }
+    /** @param int $n
+     * @return false|string */
     function path_component($n, $decoded = false) {
         if ((string) $this->____path !== "") {
             $p = explode("/", substr($this->____path, 1));
@@ -119,12 +133,14 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
             $this->$name = $value;
         }
     }
+    /** @return int */
     function count() {
         return count(get_object_vars($this)) - 8;
     }
     function jsonSerialize() {
         return $this->as_array();
     }
+    /** @return array<string,mixed> */
     function as_array() {
         $d = [];
         foreach (get_object_vars($this) as $k => $v) {
@@ -133,9 +149,21 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return $d;
     }
+    /** @param list<string> $keys
+     * @return array<string,mixed> */
+    function subset_as_array($keys) {
+        $d = [];
+        foreach ($keys as $k) {
+            if (substr($k, 0, 4) !== "____" && isset($this->$k))
+                $d[$k] = $this->$k;
+        }
+        return $d;
+    }
+    /** @return object */
     function as_object() {
         return (object) $this->as_array();
     }
+    /** @return list<string> */
     function keys() {
         $d = [];
         foreach (array_keys(get_object_vars($this)) as $k) {
@@ -144,18 +172,39 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return $d;
     }
+    /** @param string $key
+     * @return bool */
     function contains($key) {
         return property_exists($this, $key);
     }
+    /** @param string $name */
     function set_file($name, $finfo) {
         $this->____files[$name] = $finfo;
     }
+    /** @param string $name
+     * @param string $content
+     * @param ?string $filename
+     * @param ?string $mimetype */
+    function set_file_content($name, $content, $filename = null, $mimetype = null) {
+        $this->____files[$name] = [
+            "name" => $filename ?? "__set_file_content.$name",
+            "type" => $mimetype ?? "application/octet-stream",
+            "size" => strlen($content),
+            "content" => $content,
+            "error" => 0
+        ];
+    }
+    /** @return bool */
     function has_files() {
         return !empty($this->____files);
     }
+    /** @param string $name
+     * @return bool */
     function has_file($name) {
         return isset($this->____files[$name]);
     }
+    /** @param string $name
+     * @return ?array{name:string,type:string,size:int,tmp_name:string,error:int} */
     function file($name) {
         $f = null;
         if (array_key_exists($name, $this->____files)) {
@@ -163,6 +212,8 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return $f;
     }
+    /** @param string $name
+     * @return string|false */
     function file_filename($name) {
         $fn = false;
         if (array_key_exists($name, $this->____files)) {
@@ -170,25 +221,50 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return $fn;
     }
-    function file_contents($name) {
+    /** @param string $name
+     * @return int|false */
+    function file_size($name) {
+        $sz = false;
+        if (array_key_exists($name, $this->____files)) {
+            $sz = $this->____files[$name]["size"];
+        }
+        return $sz;
+    }
+    /** @param string $name
+     * @param int $offset
+     * @param ?int $maxlen
+     * @return string|false */
+    function file_contents($name, $offset = 0, $maxlen = null) {
         $data = false;
         if (array_key_exists($name, $this->____files)) {
-            $data = @file_get_contents($this->____files[$name]["tmp_name"]);
+            $finfo = $this->____files[$name];
+            if (isset($finfo["content"])) {
+                $data = substr($finfo["content"], $offset, $maxlen ?? PHP_INT_MAX);
+            } else if ($maxlen === null) {
+                $data = @file_get_contents($finfo["tmp_name"], false, null, $offset);
+            } else {
+                $data = @file_get_contents($finfo["tmp_name"], false, null, $offset, $maxlen);
+            }
         }
         return $data;
     }
     function files() {
         return $this->____files;
     }
+    /** @return bool */
     function has_annexes() {
         return !empty($this->____x);
     }
+    /** @return array<string,mixed> */
     function annexes() {
         return $this->____x;
     }
+    /** @param string $name
+     * @return bool */
     function has_annex($name) {
         return isset($this->____x[$name]);
     }
+    /** @param string $name */
     function annex($name) {
         $x = null;
         if (array_key_exists($name, $this->____x)) {
@@ -196,18 +272,32 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return $x;
     }
+    /** @template T
+     * @param string $name
+     * @param class-string<T> $class
+     * @return T */
+    function checked_annex($name, $class) {
+        $x = $this->____x[$name] ?? null;
+        if (!$x || !($x instanceof $class)) {
+            throw new Exception("Bad annex $name.");
+        }
+        return $x;
+    }
+    /** @param string $name */
     function set_annex($name, $x) {
         $this->____x[$name] = $x;
     }
     function approve_post() {
         $this->____post_ok = true;
     }
+    /** @return bool */
     function post_ok() {
         return $this->____post_ok;
     }
     function set_post_empty() {
         $this->____post_empty = true;
     }
+    /** @return bool */
     function post_empty() {
         return $this->____post_empty;
     }
@@ -231,5 +321,57 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         } else {
             return null;
         }
+    }
+
+    static function make_global() : Qrequest {
+        $qreq = new Qrequest($_SERVER["REQUEST_METHOD"]);
+        $qreq->set_page_path(Navigation::page(), Navigation::path());
+        foreach ($_GET as $k => $v) {
+            $qreq->set_req($k, $v);
+        }
+        foreach ($_POST as $k => $v) {
+            $qreq->set_req($k, $v);
+        }
+        if (empty($_POST)) {
+            $qreq->set_post_empty();
+        }
+
+        // $_FILES requires special processing since we want error messages.
+        $errors = [];
+        foreach ($_FILES as $nx => $fix) {
+            if (is_array($fix["error"])) {
+                $fis = [];
+                foreach (array_keys($fix["error"]) as $i) {
+                    $fis[$i ? "$nx.$i" : $nx] = ["name" => $fix["name"][$i], "type" => $fix["type"][$i], "size" => $fix["size"][$i], "tmp_name" => $fix["tmp_name"][$i], "error" => $fix["error"][$i]];
+                }
+            } else {
+                $fis = [$nx => $fix];
+            }
+            foreach ($fis as $n => $fi) {
+                if ($fi["error"] == UPLOAD_ERR_OK) {
+                    if (is_uploaded_file($fi["tmp_name"])) {
+                        $qreq->set_file($n, $fi);
+                    }
+                } else if ($fi["error"] != UPLOAD_ERR_NO_FILE) {
+                    $s = "";
+                    if (isset($fi["name"])) {
+                        $s .= '<span class="lineno">' . htmlspecialchars($fi["name"]) . ':</span> ';
+                    }
+                    if ($fi["error"] == UPLOAD_ERR_INI_SIZE
+                        || $fi["error"] == UPLOAD_ERR_FORM_SIZE) {
+                        $s .= "Uploaded file too big. The maximum upload size is " . ini_get("upload_max_filesize") . "B.";
+                    } else if ($fi["error"] == UPLOAD_ERR_PARTIAL) {
+                        $s .= "File upload interrupted.";
+                    } else {
+                        $s .= "Error uploading file.";
+                    }
+                    $errors[] = $s;
+                }
+            }
+        }
+        if (!empty($errors)) {
+            $qreq->set_annex("upload_errors", $errors);
+        }
+        return $qreq;
     }
 }

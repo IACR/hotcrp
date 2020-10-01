@@ -3,17 +3,33 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Formula_PaperColumn extends PaperColumn {
+    /** @var Formula */
     public $formula;
+    /** @var callable */
     private $formula_function;
+    /** @var ScoreInfo */
     private $statistics;
+    /** @var ?ScoreInfo */
     private $override_statistics;
+    /** @var array<int,mixed> */
     private $results;
+    /** @var ?array<int,mixed> */
     private $override_results;
+    /** @var ?string */
     private $real_format;
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         $this->formula = $cj->formula;
         $this->statistics = new ScoreInfo;
+    }
+    function add_decoration($decor) {
+        if (preg_match('/\A%\d*(?:\.\d*)[bdeEfFgGoxX]\z/', $decor)) {
+            $this->__add_decoration($decor, [$this->real_format]);
+            $this->real_format = $decor;
+            return true;
+        } else {
+            return parent::add_decoration($decor);
+        }
     }
     function completion_name() {
         if (strpos($this->formula->name, " ") !== false) {
@@ -22,7 +38,7 @@ class Formula_PaperColumn extends PaperColumn {
             return $this->formula->name;
         }
     }
-    function sort_name(PaperList $pl, ListSorter $sorter = null) {
+    function sort_name() {
         return $this->formula->name ? : $this->formula->expression;
     }
     function prepare(PaperList $pl, $visible) {
@@ -36,15 +52,15 @@ class Formula_PaperColumn extends PaperColumn {
         }
         return true;
     }
-    function analyze_sort(PaperList $pl, &$rows, ListSorter $sorter) {
+    function prepare_sort(PaperList $pl, $sortindex) {
         $formulaf = $this->formula->compile_sortable_function();
-        $k = $sorter->uid;
-        foreach ($rows as $row) {
+        $k = $this->uid;
+        foreach ($pl->rowset() as $row) {
             $row->$k = $formulaf($row, null, $pl->user);
         }
     }
-    function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
-        $k = $sorter->uid;
+    function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
+        $k = $this->uid;
         $as = $a->$k;
         $bs = $b->$k;
         if ($as === null || $bs === null) {
@@ -53,16 +69,12 @@ class Formula_PaperColumn extends PaperColumn {
             return $as == $bs ? 0 : ($as < $bs ? -1 : 1);
         }
     }
-    function analyze(PaperList $pl, &$rows, $fields) {
-        if (!$this->is_visible) {
-            return;
-        }
+    function analyze(PaperList $pl, $fields) {
         $formulaf = $this->formula_function;
         $this->results = $this->override_results = [];
-        $this->real_format = null;
         $isreal = $this->formula->result_format_is_real();
-        $override_rows = null;
-        foreach ($rows as $row) {
+        $override_rows = [];
+        foreach ($pl->rowset() as $row) {
             $v = $formulaf($row, null, $pl->user);
             $this->results[$row->paperId] = $v;
             if ($isreal && !$this->real_format && is_float($v)
@@ -74,7 +86,7 @@ class Formula_PaperColumn extends PaperColumn {
                 $override_rows[] = $row;
             }
         }
-        if ($override_rows) {
+        if (!empty($override_rows)) {
             $overrides = $pl->user->add_overrides(Contact::OVERRIDE_CONFLICT);
             foreach ($override_rows as $row) {
                 $vv = $formulaf($row, null, $pl->user);
@@ -136,7 +148,7 @@ class Formula_PaperColumn extends PaperColumn {
             return is_int($x) ? $x : sprintf("%.2f", $x);
         }
     }
-    function statistic($pl, $stat) {
+    function statistic_html(PaperList $pl, $stat) {
         if ($stat === ScoreInfo::SUM
             && !$this->formula->result_format_is_real()) {
             return "—";
@@ -144,8 +156,9 @@ class Formula_PaperColumn extends PaperColumn {
         $t = $this->unparse_statistic($this->statistics, $stat);
         if ($this->override_statistics) {
             $tt = $this->unparse_statistic($this->override_statistics, $stat);
-            if ($t !== $tt)
+            if ($t !== $tt) {
                 $t = '<span class="fn5">' . $t . '</span><span class="fx5">' . $tt . '</span>';
+            }
         }
         return $t;
     }
@@ -164,7 +177,7 @@ class Formula_PaperColumnFactory {
         }
         return new Formula_PaperColumn($f->conf, (object) $cj);
     }
-    static function expand($name, $user, $xfj, $m) {
+    static function expand($name, Contact $user, $xfj, $m) {
         $vsbound = $user->permissive_view_score_bound();
         if ($name === "formulas") {
             return array_map(function ($f) use ($xfj) {
@@ -205,7 +218,7 @@ class Formula_PaperColumnFactory {
                 return [Formula_PaperColumnFactory::make($ff, $xfj)];
             }
         } else if ($ff && $want_error) {
-            $user->conf->xt_factory_error("Formula error: " . $ff->error_html());
+            PaperColumn::column_error($user, "Formula error: " . $ff->error_html());
         }
         return null;
     }

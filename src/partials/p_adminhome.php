@@ -16,7 +16,7 @@ class AdminHome_Partial {
         }
         if (isset($qreq->clearbug) || isset($qreq->clearnewpcrev)) {
             unset($qreq->clearbug, $qreq->clearnewpcrev);
-            $user->conf->self_redirect($qreq);
+            $user->conf->redirect_self($qreq);
         }
     }
     static function render(Contact $user) {
@@ -28,7 +28,7 @@ class AdminHome_Partial {
         }
         $result = Dbl::qx($conf->dblink, "show variables like 'max_allowed_packet'");
         $max_file_size = ini_get_bytes("upload_max_filesize");
-        if (($row = edb_row($result))
+        if (($row = $result->fetch_row())
             && $row[1] < $max_file_size
             && !$conf->opt("dbNoPapers")) {
             $m[] = $errmarker . "MySQL’s <code>max_allowed_packet</code> setting, which is " . htmlspecialchars($row[1]) . "&nbsp;bytes, is less than the PHP upload file limit, which is $max_file_size&nbsp;bytes.  You should update <code>max_allowed_packet</code> in the system-wide <code>my.cnf</code> file or the system may not be able to handle large papers.";
@@ -56,18 +56,18 @@ class AdminHome_Partial {
         }
         // Conference names
         if ($conf->opt("shortNameDefaulted")) {
-            $m[] = "<a href=\"" . hoturl("settings", "group=basics") . "\">Set the conference abbreviation</a> to a short name for your conference, such as “OSDI ’14”.";
+            $m[] = "<a href=\"" . $conf->hoturl("settings", "group=basics") . "\">Set the conference abbreviation</a> to a short name for your conference, such as “OSDI ’14”.";
         } else if (simplify_whitespace($conf->short_name) != $conf->short_name) {
-            $m[] = "The <a href=\"" . hoturl("settings", "group=basics") . "\">conference abbreviation</a> setting has a funny value. To fix it, remove leading and trailing spaces, use only space characters (no tabs or newlines), and make sure words are separated by single spaces (never two or more).";
+            $m[] = "The <a href=\"" . $conf->hoturl("settings", "group=basics") . "\">conference abbreviation</a> setting has a funny value. To fix it, remove leading and trailing spaces, use only space characters (no tabs or newlines), and make sure words are separated by single spaces (never two or more).";
         }
         $site_contact = $conf->site_contact();
         if (!$site_contact->email || $site_contact->email == "you@example.com") {
-            $m[] = "<a href=\"" . hoturl("settings", "group=basics") . "\">Set the conference contact’s name and email</a> so submitters can reach someone if things go wrong.";
+            $m[] = "<a href=\"" . $conf->hoturl("settings", "group=basics") . "\">Set the conference contact’s name and email</a> so submitters can reach someone if things go wrong.";
         }
         // Any -100 preferences around?
         $result = $conf->preference_conflict_result("s", "limit 1");
-        if (($row = edb_row($result))) {
-            $m[] = 'PC members have indicated paper conflicts (using review preferences of &#8722;100 or less) that aren’t yet confirmed. <a href="' . hoturl_post("conflictassign") . '" class="nw">Confirm these conflicts</a>';
+        if (($row = $result->fetch_row())) {
+            $m[] = 'PC members have indicated paper conflicts (using review preferences of &#8722;100 or less) that aren’t yet confirmed. <a href="' . $conf->hoturl_post("conflictassign") . '" class="nw">Confirm these conflicts</a>';
         }
         // Weird URLs?
         foreach (array("conferenceSite", "paperSite") as $k) {
@@ -79,8 +79,8 @@ class AdminHome_Partial {
         if ($conf->setting("pcrev_assigntime", 0) > $conf->setting("pcrev_informtime", 0)) {
             $assigntime = $conf->setting("pcrev_assigntime");
             $result = $conf->qe("select paperId from PaperReview where reviewType>" . REVIEW_PC . " and timeRequested>timeRequestNotified and reviewSubmitted is null and reviewNeedsSubmit!=0 limit 1");
-            if (edb_nrows($result))
-                $m[] = "PC review assignments have changed.&nbsp; <a href=\"" . hoturl("mail", "template=newpcrev") . "\">Send review assignment notifications</a> <span class=\"barsep\">·</span> <a href=\"" . hoturl_post("index", "clearnewpcrev=$assigntime") . "\">Clear this message</a>";
+            if ($result->num_rows)
+                $m[] = "PC review assignments have changed.&nbsp; <a href=\"" . $conf->hoturl("mail", "template=newpcrev") . "\">Send review assignment notifications</a> <span class=\"barsep\">·</span> <a href=\"" . $conf->hoturl_post("index", "clearnewpcrev=$assigntime") . "\">Clear this message</a>";
             else
                 $conf->save_setting("pcrev_informtime", $assigntime);
         }
@@ -92,7 +92,7 @@ class AdminHome_Partial {
             foreach ($conf->defined_round_list() as $i => $rname) {
                 if (!$conf->missed_review_deadline($i, true, false)
                     && $conf->setting($conf->review_deadline($i, true, false))) {
-                    $m[] = "The deadline for review round " . htmlspecialchars($conf->assignment_round_option(false)) . " has passed. You may want to <a href=\"" . hoturl("settings", "group=reviews") . "\">change the round for new assignments</a> to " . htmlspecialchars($rname) . ".";
+                    $m[] = "The deadline for review round " . htmlspecialchars($conf->assignment_round_option(false)) . " has passed. You may want to <a href=\"" . $conf->hoturl("settings", "group=reviews") . "\">change the round for new assignments</a> to " . htmlspecialchars($rname) . ".";
                     break;
                 }
             }

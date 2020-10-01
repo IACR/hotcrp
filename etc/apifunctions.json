@@ -114,7 +114,7 @@
     },
     {
         "name": "settags", "post": true,
-        "callback": "PaperApi::settags_api"
+        "callback": "Tags_API::settags_api"
     },
     {
         "name": "shepherd", "paper": true, "get": true, "post": true,
@@ -129,8 +129,11 @@
         "callback": "TagAnno_API::set"
     },
     {
-        "name": "tagreport", "paper": true, "get": true,
-        "callback": "PaperApi::tagreport_api"
+        "name": "tagmessages", "paper": true, "get": true,
+        "callback": "Tags_API::tagmessages_api"
+    },
+    {
+        "name": "tagreport", "alias": "tagmessages"
     },
     {
         "name": "trackerconfig", "post": true,
@@ -153,7 +156,7 @@
     },
     {
         "name": "votereport", "paper": true, "get": true, "post": true,
-        "callback": "PaperApi::votereport_api"
+        "callback": "Tags_API::votereport_api"
     },
     {
         "name": "whoami", "get": true,

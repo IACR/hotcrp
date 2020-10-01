@@ -19,8 +19,8 @@ if ($nav->page === "u") {
     }
 }
 
-function gx_call_requests($conf, $user, $qreq, $group, $gx) {
-    $i = $conf->xt_add_allow_checker([$qreq, "xt_allow"]);
+function gx_call_requests(Conf $conf, Contact $user, Qrequest $qreq, $group, GroupedExtensions $gx) {
+    $gx->add_xt_checker([$qreq, "xt_allow"]);
     $reqgj = [];
     $not_allowed = false;
     foreach ($gx->members($group, "request_callback") as $gj) {
@@ -30,7 +30,6 @@ function gx_call_requests($conf, $user, $qreq, $group, $gx) {
             $not_allowed = true;
         }
     }
-    $conf->xt_remove_allow_checker($i);
     if ($not_allowed && $qreq->method() === "POST" && !$qreq->post_ok()) {
         $conf->msg($conf->_i("badpost"), 2);
     }
@@ -45,7 +44,7 @@ function gx_call_requests($conf, $user, $qreq, $group, $gx) {
 if ($nav->page === "images" || $nav->page === "scripts" || $nav->page === "stylesheets") {
     $_GET["file"] = $nav->page . $nav->path;
     include("cacheable.php");
-} else if ($nav->page === "api" || $nav->page === "cacheable") {
+} else if ($nav->page === "api" || $nav->page === "cacheable" || $nav->page === "scorechart") {
     include("{$nav->page}.php");
 } else if ($nav->page === "iacrcopyright") {
     include("iacrcopyright/index.php");

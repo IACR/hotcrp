@@ -14,17 +14,19 @@ class Withdraw_AssignmentFinisher {
         $res = $state->query_items(["type" => "status", "pid" => $this->pid]);
         if (!$res
             || $res[0]["_withdrawn"] <= 0
-            || $res[0]->get_before("_withdrawn") > 0)
+            || $res[0]->pre("_withdrawn") > 0) {
             return;
+        }
         $ltre = [];
-        foreach ($state->conf->tags()->filter("votish") as $dt)
+        foreach ($state->conf->tags()->filter("votish") as $dt) {
             $ltre[] = preg_quote(strtolower($dt->tag));
+        }
         $res = $state->query(["type" => "tag", "pid" => $this->pid]);
         $tag_re = '{\A(?:\d+~|)(?:' . join("|", $ltre) . ')\z}i';
         foreach ($res as $x) {
             if (preg_match($tag_re, $x["ltag"])) {
-                $x["_index"] = 0.0;
-                $x["_vote"] = true;
+                $x["_index"] = null;
+                $x["_override"] = true;
                 $state->add($x);
             }
         }
@@ -58,28 +60,30 @@ class Status_AssignmentParser extends UserlessAssignmentParser {
         Status_AssignmentParser::load_status_state($state);
     }
     function apply(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
-        global $Now;
         $m = $state->remove(["type" => "status", "pid" => $prow->paperId]);
         $res = $m[0];
         $ch = false;
         if ($this->xtype === "submit") {
             if ($res["_submitted"] === 0) {
-                if (($whynot = $state->user->perm_finalize_paper($prow)))
+                if (($whynot = $state->user->perm_finalize_paper($prow))) {
                     return whyNotText($whynot);
-                $res["_submitted"] = ($res["_withdrawn"] > 0 ? -$Now : $Now);
+                }
+                $res["_submitted"] = ($res["_withdrawn"] > 0 ? -Conf::$now : Conf::$now);
             }
         } else if ($this->xtype === "unsubmit") {
             if ($res["_submitted"] !== 0) {
-                if (($whynot = $state->user->perm_update_paper($prow)))
+                if (($whynot = $state->user->perm_edit_paper($prow))) {
                     return whyNotText($whynot);
+                }
                 $res["_submitted"] = 0;
             }
         } else if ($this->xtype === "withdraw") {
             if ($res["_withdrawn"] === 0) {
                 assert($res["_submitted"] >= 0);
-                if (($whynot = $state->user->perm_withdraw_paper($prow)))
+                if (($whynot = $state->user->perm_withdraw_paper($prow))) {
                     return whyNotText($whynot);
-                $res["_withdrawn"] = $Now;
+                }
+                $res["_withdrawn"] = Conf::$now;
                 $res["_submitted"] = -$res["_submitted"];
                 if ($state->conf->tags()->has_votish) {
                     Tag_AssignmentParser::load_tag_state($state);
@@ -93,13 +97,15 @@ class Status_AssignmentParser extends UserlessAssignmentParser {
         } else if ($this->xtype === "revive") {
             if ($res["_withdrawn"] !== 0) {
                 assert($res["_submitted"] <= 0);
-                if (($whynot = $state->user->perm_revive_paper($prow)))
+                if (($whynot = $state->user->perm_revive_paper($prow))) {
                     return whyNotText($whynot);
+                }
                 $res["_withdrawn"] = 0;
-                if ($res["_submitted"] === -100)
-                    $res["_submitted"] = $Now;
-                else
+                if ($res["_submitted"] === -100) {
+                    $res["_submitted"] = Conf::$now;
+                } else {
                     $res["_submitted"] = -$res["_submitted"];
+                }
                 $res["_withdraw_reason"] = null;
             }
         }
@@ -116,40 +122,41 @@ class Status_Assigner extends Assigner {
         return new Status_Assigner($item, $state);
     }
     private function status_html($type) {
-        if ($this->item->get($type, "_withdrawn"))
+        if ($this->item->get($type, "_withdrawn")) {
             return "Withdrawn";
-        else if ($this->item->get($type, "_submitted"))
+        } else if ($this->item->get($type, "_submitted")) {
             return "Submitted";
-        else
+        } else {
             return "Not ready";
+        }
     }
     function unparse_display(AssignmentSet $aset) {
         return '<del>' . $this->status_html(true) . '</del> '
             . '<ins>' . $this->status_html(false) . '</ins>';
     }
     function unparse_csv(AssignmentSet $aset, AssignmentCsv $acsv) {
-        $x = [];
-        if (($this->item->get(true, "_submitted") === 0) !== ($this->item["_submitted"] === 0))
-            $x[] = ["pid" => $this->pid, "action" => $this->item["_submitted"] === 0 ? "unsubmit" : "submit"];
-        if ($this->item->get(true, "_withdrawn") === 0 && $this->item["_withdrawn"] !== 0)
-            $x[] = ["pid" => $this->pid, "action" => "revive"];
-        else if ($this->item->get(true, "_withdrawn") !== 0 && $this->item["_withdrawn"] === 0) {
-            $y = ["pid" => $this->pid, "action" => "withdraw"];
-            if ((string) $this->item["_withdraw_reason"] !== "")
-                $y["withdraw_reason"] = $this->item["_withdraw_reason"];
-            $x[] = $y;
+        if (($this->item->pre("_submitted") === 0) !== ($this->item["_submitted"] === 0)) {
+            $acsv->add(["pid" => $this->pid, "action" => $this->item["_submitted"] === 0 ? "unsubmit" : "submit"]);
         }
-        return $x;
+        if ($this->item->pre("_withdrawn") !== 0 && $this->item["_withdrawn"] === 0) {
+            $acsv->add(["pid" => $this->pid, "action" => "revive"]);
+        } else if ($this->item->pre("_withdrawn") === 0 && $this->item["_withdrawn"] !== 0) {
+            $x = ["pid" => $this->pid, "action" => "withdraw"];
+            if ((string) $this->item["_withdraw_reason"] !== "") {
+                $x["withdraw_reason"] = $this->item["_withdraw_reason"];
+            }
+            $acsv->add($x);
+        }
+        return null;
     }
     function add_locks(AssignmentSet $aset, &$locks) {
         $locks["Paper"] = "write";
     }
     function execute(AssignmentSet $aset) {
-        global $Now;
         $submitted = $this->item["_submitted"];
-        $old_submitted = $this->item->get(true, "_submitted");
+        $old_submitted = $this->item->pre("_submitted");
         $withdrawn = $this->item["_withdrawn"];
-        $old_withdrawn = $this->item->get(true, "_withdrawn");
+        $old_withdrawn = $this->item->pre("_withdrawn");
         $aset->stage_qe("update Paper set timeSubmitted=?, timeWithdrawn=?, withdrawReason=? where paperId=?", $submitted, $withdrawn, $this->item["_withdraw_reason"], $this->pid);
         if (($withdrawn > 0) !== ($old_withdrawn > 0)) {
             $aset->user->log_activity($withdrawn > 0 ? "Paper withdrawn" : "Paper revived", $this->pid);

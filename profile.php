@@ -9,13 +9,13 @@ require_once("src/initweb.php");
 function change_email_by_capability($Qreq) {
     global $Conf, $Me;
     ensure_session();
-    $capmgr = $Conf->capability_manager();
-    $capdata = $capmgr->check(trim($Qreq->changeemail));
+    $capdata = CapabilityInfo::find($Conf, trim($Qreq->changeemail), CapabilityInfo::CHANGEEMAIL);
+    $capcontent = null;
     if (!$capdata
-        || $capdata->capabilityType != CAPTYPE_CHANGEEMAIL
         || !$capdata->contactId
-        || !($capdata->data = json_decode($capdata->data))
-        || !get($capdata->data, "uemail")) {
+        || !($capcontent = json_decode($capdata->data))
+        || !is_object($capcontent)
+        || !($capcontent->uemail ?? null)) {
         if (trim($Qreq->changeemail) !== "1") {
             Ht::error_at("changeemail", "That email change code has expired, or you didn’t enter it correctly.");
         }
@@ -26,14 +26,14 @@ function change_email_by_capability($Qreq) {
     if ($capdata && !($Acct = $Conf->user_by_id($capdata->contactId))) {
         Ht::error_at("changeemail", "The account associated with that email change code no longer exists.");
     }
-    if ($Acct && strcasecmp($Acct->email, $capdata->data->oldemail) !== 0) {
+    if ($Acct && strcasecmp($Acct->email, $capcontent->oldemail) !== 0) {
         Ht::error_at("changeemail", "You have changed your email address since creating that email change code.");
         $Acct = null;
     }
 
-    $newemail = $Acct ? $capdata->data->uemail : null;
+    $newemail = $Acct ? $capcontent->uemail : null;
     if ($Acct && $Conf->user_id_by_email($newemail)) {
-        Conf::msg_error("The email address you requested, " . htmlspecialchars($newemail) . ", is already in use on this site. You may want to <a href=\"" . hoturl("mergeaccounts") . "\">merge these accounts</a>.");
+        Conf::msg_error("The email address you requested, " . htmlspecialchars($newemail) . ", is already in use on this site. You may want to <a href=\"" . $Conf->hoturl("mergeaccounts") . "\">merge these accounts</a>.");
         return false;
     }
 
@@ -44,7 +44,7 @@ function change_email_by_capability($Qreq) {
             return false;
         } else if ($Qreq->go && $Qreq->post_ok()) {
             $Qreq->password = trim((string) $Qreq->password);
-            $info = $newcdbu->check_password($Qreq->password);
+            $info = $newcdbu->check_password_info($Qreq->password);
             if (!$info["ok"]) {
                 $qreqa = ["email" => $newemail] + $Qreq->as_array();
                 LoginHelper::login_error($Conf, new Qrequest("POST", $qreqa), $info);
@@ -57,14 +57,14 @@ function change_email_by_capability($Qreq) {
         && $Qreq->go
         && $Qreq->post_ok()) {
         $Acct->change_email($newemail);
-        $capmgr->delete($capdata);
+        $capdata->delete();
         $Conf->confirmMsg("Your email address has been changed.");
         if (!$Me->has_account_here() || $Me->contactId == $Acct->contactId) {
-            $Me = $Acct->activate($Qreq);
+            Contact::set_guser($Acct->activate($Qreq));
         }
-        if (Contact::session_user_index($capdata->data->oldemail) !== false) {
+        if (Contact::session_user_index($capcontent->oldemail) >= 0) {
             LoginHelper::change_session_users([
-                $capdata->data->oldemail => -1, $newemail => 1
+                $capcontent->oldemail => -1, $newemail => 1
             ]);
         }
         Navigation::redirect($Conf->hoturl("profile"));
@@ -84,12 +84,14 @@ function change_email_by_capability($Qreq) {
                 '</div>';
         }
         echo '<div class="', Ht::control_class("changeemail", "f-i"), '"><label for="changeemail">Change code</label>',
+            Ht::render_feedback_at("changeemail"),
             Ht::entry("changeemail", $Qreq->changeemail == "1" ? "" : $Qreq->changeemail, ["id" => "changeemail", "class" => "fullw", "autocomplete" => "one-time-code"]),
-            Ht::render_messages_at("changeemail"), '</div>';
+            '</div>';
         if ($newcdbu) {
             echo '<div class="', Ht::control_class("password", "f-i"), '"><label for="password">Password for ', htmlspecialchars($newemail), '</label>',
+            Ht::render_feedback_at("password"),
             Ht::password("password", "", ["autocomplete" => "password", "class" => "fullw"]),
-            Ht::render_messages_at("password"), '</div>';
+            '</div>';
         }
         echo '<div class="popup-actions">',
             Ht::submit("go", "Change email", ["class" => "btn-primary", "value" => 1]),
@@ -101,10 +103,12 @@ function change_email_by_capability($Qreq) {
     }
 }
 
-if ($Qreq->changeemail && $Qreq->cancel) {
-    $Conf->self_redirect($Qreq);
-} else if ($Qreq->changeemail && !$Me->is_actas_user()) {
-    change_email_by_capability($Qreq);
+if ($Qreq->changeemail) {
+    if ($Qreq->cancel) {
+        $Conf->redirect_self($Qreq);
+    } else if (!$Me->is_actas_user()) {
+        change_email_by_capability($Qreq);
+    }
 }
 
 if (!$Me->is_signed_in()) {
@@ -113,6 +117,7 @@ if (!$Me->is_signed_in()) {
 
 $newProfile = 0;
 $UserStatus = new UserStatus($Me);
+$UserStatus->set_user($Me);
 $UserStatus->set_context(["args" => [$UserStatus]]);
 
 if ($Qreq->u === null && ($Qreq->user || $Qreq->contact)) {
@@ -157,16 +162,16 @@ if ($Qreq->u === "me" || $Qreq->u === "self") {
         $Acct = $Conf->user_by_email($Qreq->u);
         if (!$Acct && $Qreq->search) {
             $cs = new ContactSearch(ContactSearch::F_USER, $Qreq->u, $Me);
-            if ($cs->ids) {
-                $Acct = $Conf->user_by_id($cs->ids[0]);
-                $list = new SessionList("u/all/" . urlencode($Qreq->search), $cs->ids, "“" . htmlspecialchars($Qreq->u) . "”", $Conf->hoturl_site_relative_raw("users", ["t" => "all"]));
-                $list->set_cookie();
+            if ($cs->user_ids()) {
+                $Acct = $Conf->user_by_id(($cs->user_ids())[0]);
+                $list = new SessionList("u/all/" . urlencode($Qreq->search), $cs->user_ids(), "“" . htmlspecialchars($Qreq->u) . "”", $Conf->hoturl_site_relative_raw("users", ["t" => "all"]));
+                $list->set_cookie($Me);
                 $Qreq->u = $Acct->email;
             } else {
                 Conf::msg_error("No user matches “" . htmlspecialchars($Qreq->u) . "”.");
                 unset($Qreq->u);
             }
-            $Conf->self_redirect($Qreq);
+            $Conf->redirect_self($Qreq);
         }
     }
 }
@@ -186,7 +191,12 @@ if (!$Acct
         Conf::msg_error("You’re logged in as a different user now, so your changes were ignored.");
     }
     unset($Qreq->u, $Qreq->save, $Qreq->savebulk);
-    $Conf->self_redirect($Qreq);
+    $Conf->redirect_self($Qreq);
+}
+
+// Redirect if canceled.
+if ($Qreq->cancel) {
+    $Conf->redirect_self($Qreq);
 }
 
 $need_highlight = false;
@@ -217,59 +227,72 @@ if (($Acct->contactId != $Me->contactId || !$Me->has_account_here())
 }
 
 
+/** @param UserStatus $user_status
+ * @param ?Contact $Acct
+ * @return ?Contact */
 function save_user($cj, $user_status, $Acct, $allow_modification) {
-    global $Conf, $Me, $Now, $newProfile;
+    global $Conf, $Me, $newProfile;
     if ($newProfile) {
         $Acct = null;
     }
+    assert(!$Acct === !!$newProfile);
 
     // check for missing fields
     UserStatus::normalize_name($cj);
     if ($newProfile && !isset($cj->email)) {
         $user_status->error_at("email", "Email address required.");
-        return false;
+        return null;
     }
 
     // check email
-    if ($newProfile || strcasecmp($cj->email, $Acct->email)) {
+    if (!$Acct || strcasecmp($cj->email, $Acct->email)) {
         if ($Acct && $Acct->data("locked")) {
-            return $user_status->error_at("email", "This account is locked, so you can’t change its email address.");
+            $user_status->error_at("email", "This account is locked, so you can’t change its email address.");
+            return null;
         } else if (($new_acct = $Conf->user_by_email($cj->email))) {
             if ($allow_modification) {
                 $cj->id = $new_acct->contactId;
             } else {
                 $msg = "Email address “" . htmlspecialchars($cj->email) . "” is already in use.";
                 if ($Me->privChair) {
-                    $msg = str_replace("an account", "<a href=\"" . hoturl("profile", "u=" . urlencode($cj->email)) . "\">an account</a>", $msg);
+                    $msg = str_replace("an account", "<a href=\"" . $Conf->hoturl("profile", "u=" . urlencode($cj->email)) . "\">an account</a>", $msg);
                 }
                 if (!$newProfile) {
-                    $msg .= " You may want to <a href=\"" . hoturl("mergeaccounts") . "\">merge these accounts</a>.";
+                    $msg .= " You may want to <a href=\"" . $Conf->hoturl("mergeaccounts") . "\">merge these accounts</a>.";
                 }
-                return $user_status->error_at("email", $msg);
+                $user_status->error_at("email", $msg);
+                return null;
             }
         } else if ($Conf->external_login()) {
-            if ($cj->email === "")
-                return $user_status->error_at("email", "Not a valid username.");
+            if ($cj->email === "") {
+                $user_status->error_at("email", "Not a valid username.");
+                return null;
+            }
         } else if ($cj->email === "") {
-            return $user_status->error_at("email", "You must supply an email address.");
+            $user_status->error_at("email", "You must supply an email address.");
+            return null;
         } else if (!validate_email($cj->email)) {
-            return $user_status->error_at("email", "“" . htmlspecialchars($cj->email) . "” is not a valid email address.");
+            $user_status->error_at("email", "“" . htmlspecialchars($cj->email) . "” is not a valid email address.");
+            return null;
         } else if ($Acct && !$Acct->has_account_here()) {
-            return $user_status->error_at("email", "Your current account is only active on other HotCRP.com sites. Due to a server limitation, you can’t change your email until activating your account on this site.");
+            $user_status->error_at("email", "Your current account is only active on other HotCRP.com sites. Due to a server limitation, you can’t change your email until activating your account on this site.");
+            return null;
         }
         if (!$newProfile && (!$Me->privChair || $Acct === $Me)) {
+            assert($Acct->contactId > 0);
             $old_preferredEmail = $Acct->preferredEmail;
             $Acct->preferredEmail = $cj->email;
-            $capmgr = $Conf->capability_manager();
-            $capability = $capmgr->create($Acct, CAPTYPE_CHANGEEMAIL, [
-                "timeExpires" => $Now + 259200,
-                "data" => json_encode_db(["oldemail" => $Acct->email, "uemail" => $cj->email])
-            ]);
-            $rest = ["capability" => $capability];
-            $mailer = new HotCRPMailer($Conf, $Acct, $rest);
-            $prep = $mailer->make_preparation("@changeemail", $rest);
-            if ($prep->sendable
-                || $Conf->opt("debugShowSensitiveEmail")) {
+            $capability = new CapabilityInfo($Conf, false, CapabilityInfo::CHANGEEMAIL);
+            $capability->set_user($Acct)->set_expires_after(259200);
+            $capability->data = json_encode_db(["oldemail" => $Acct->email, "uemail" => $cj->email]);
+            if (($token = $capability->create())) {
+                $rest = ["capability_token" => $token, "sensitive" => true];
+                $mailer = new HotCRPMailer($Conf, $Acct, $rest);
+                $prep = $mailer->prepare("@changeemail", $rest);
+            } else {
+                $prep = null;
+            }
+            if ($prep->can_send()) {
                 $prep->send();
                 $Conf->warnMsg("Mail has been sent to " . htmlspecialchars($cj->email) . ". Use the link it contains to confirm your email change request.");
             } else {
@@ -289,7 +312,7 @@ function save_user($cj, $user_status, $Acct, $allow_modification) {
 function parseBulkFile($text, $filename) {
     global $Conf, $Me;
     $text = cleannl(convert_to_utf8($text));
-    $filename = $filename ? "$filename:" : "line ";
+    $filename = $filename ? htmlspecialchars($filename) . ":" : "line ";
     $success = $errors = array();
 
     if (!preg_match('/\A[^\r\n]*(?:,|\A)(?:user|email)(?:[,\r\n]|\z)/', $text)
@@ -306,8 +329,8 @@ function parseBulkFile($text, $filename) {
 
     $csv = new CsvParser($text);
     $csv->set_comment_chars("#%");
-    if (($line = $csv->next_array())) {
-        if (preg_grep('{\A(?:email|user)\z}i', $line)) {
+    if (($line = $csv->next_list())) {
+        if (preg_grep('/\A(?:email|user)\z/i', $line)) {
             $csv->set_header($line);
         } else if (count($line) == 1) {
             $csv->set_header(["user"]);
@@ -357,12 +380,13 @@ function parseBulkFile($text, $filename) {
             continue;
         }
 
-        if (isset($cj->email) && $cj->email !== "")
+        if (isset($cj->email) && $cj->email !== "") {
             $saved_users[strtolower($cj->email)] = $csv->lineno();
-        if (($saved_user = save_user($cj, $ustatus, null, true)))
-            $success[] = "<a href=\"" . hoturl("profile", "u=" . urlencode($saved_user->email)) . "\">"
-                . Text::user_html_nolink($saved_user) . "</a>";
-        foreach ($ustatus->problems() as $e) {
+        }
+        if (($saved_user = save_user($cj, $ustatus, null, true))) {
+            $success[] = "<a href=\"" . $Conf->hoturl("profile", "u=" . urlencode($saved_user->email)) . "\">" . $saved_user->name_h(NAME_E) . "</a>";
+        }
+        foreach ($ustatus->problem_texts() as $e) {
             $errors[] = '<span class="lineno">' . $filename . $csv->lineno() . ":</span> " . $e;
         }
     }
@@ -370,6 +394,7 @@ function parseBulkFile($text, $filename) {
     if (!empty($ustatus->unknown_topics)) {
         $errors[] = "There were unrecognized topics (" . htmlspecialchars(commajoin(array_keys($ustatus->unknown_topics))) . ").";
     }
+    $successMsg = "";
     if (count($success) == 1) {
         $successMsg = "Saved account " . $success[0] . ".";
     } else if (count($success)) {
@@ -378,14 +403,15 @@ function parseBulkFile($text, $filename) {
     if (count($success)) {
        $successMsg .= " You may need to <a href='../iacr/coll.php'><strong>import their coauthors</strong></a>";
     }
+    $errorMsg = "";
     if (count($errors)) {
         $errorMsg = '<div class="parseerr"><p>' . join("</p>\n<p>", $errors) . "</p></div>";
     }
-    if (count($success) && count($errors)) {
+    if ($successMsg !== "" && $errorMsg !== "") {
         $Conf->confirmMsg($successMsg . "<br />$errorMsg");
-    } else if (count($success)) {
+    } else if ($successMsg !== "") {
         $Conf->confirmMsg($successMsg);
-    } else if (count($errors)) {
+    } else if ($errorMsg !== "") {
         Conf::msg_error($errorMsg);
     } else {
         $Conf->warnMsg("Nothing to do.");
@@ -402,16 +428,16 @@ if (!$Qreq->post_ok()) {
         parseBulkFile($text, $Qreq->file_filename("bulk"));
     }
     $Qreq->bulkentry = "";
-    $Conf->self_redirect($Qreq, ["anchor" => "bulk"]);
+    $Conf->redirect_self($Qreq, ["anchor" => "bulk"]);
 } else if ($Qreq->savebulk && $newProfile) {
     $success = true;
     if ($Qreq->bulkentry && $Qreq->bulkentry !== "Enter users one per line") {
         $success = parseBulkFile($Qreq->bulkentry, "");
     }
     if (!$success) {
-        $Me->save_session("profile_bulkentry", array($Now, $Qreq->bulkentry));
+        $Me->save_session("profile_bulkentry", array(Conf::$now, $Qreq->bulkentry));
     }
-    $Conf->self_redirect($Qreq, ["anchor" => "bulk"]);
+    $Conf->redirect_self($Qreq, ["anchor" => "bulk"]);
 } else if (isset($Qreq->save)) {
     assert($Acct->is_empty() === !!$newProfile);
     $cj = (object) ["id" => $Acct->has_account_here() ? $Acct->contactId : "new"];
@@ -421,34 +447,37 @@ if (!$Qreq->post_ok()) {
     $saved_user = save_user($cj, $UserStatus, $Acct, false);
     if (!$UserStatus->has_error()) {
         if ($UserStatus->has_messages()) {
-            $Conf->msg($UserStatus->messages(), $UserStatus->problem_status());
+            $Conf->msg($UserStatus->message_texts(), $UserStatus->problem_status());
         }
         if ($newProfile) {
-            $Conf->msg("Created an account for <a href=\"" . hoturl("profile", "u=" . urlencode($saved_user->email)) . "\">" . Text::user_html_nolink($saved_user) . "</a>. A password has been emailed to that address. You may now create another account.", "xconfirm");
+            $Conf->msg("Created an account for <a href=\"" . $Conf->hoturl("profile", "u=" . urlencode($saved_user->email)) . "\">" . $saved_user->name_h(NAME_E) . "</a>. A password has been emailed to that address. You may now create another account.", "xconfirm");
         } else {
             $Conf->msg("Profile updated.", "xconfirm");
-            if ($Acct->contactId != $Me->contactId)
+            if ($Acct->contactId != $Me->contactId) {
                 $Qreq->u = $Acct->email;
+            }
         }
         if (isset($Qreq->redirect)) {
-            go(hoturl("index"));
+            $Conf->redirect();
         } else {
             $xcj = [];
             if ($newProfile) {
-                foreach (["roles", "follow", "tags"] as $k)
+                foreach (["pctype", "ass", "contactTags"] as $k) {
                     if (isset($cj->$k))
                         $xcj[$k] = $cj->$k;
+                }
             }
-            if ($UserStatus->has_warning())
+            if ($UserStatus->has_problem()) {
                 $xcj["warning_fields"] = $UserStatus->problem_fields();
+            }
             $Me->save_session("profile_redirect", $xcj);
-            $Conf->self_redirect($Qreq);
+            $Conf->redirect_self($Qreq);
         }
     }
 } else if (isset($Qreq->merge)
            && !$newProfile
            && $Acct->contactId == $Me->contactId) {
-    go(hoturl("mergeaccounts"));
+    $Conf->redirect_hoturl("mergeaccounts");
 }
 
 if (isset($Qreq->delete) && !Dbl::has_error() && $Qreq->post_ok()) {
@@ -463,7 +492,7 @@ if (isset($Qreq->delete) && !Dbl::has_error() && $Qreq->post_ok()) {
         } else if ($Acct->data("locked")) {
             Conf::msg_error("This account is locked and can’t be deleted.");
         } else {
-            $Conf->q("insert into DeletedContactInfo set contactId=?, firstName=?, lastName=?, unaccentedName=?, email=?", $Acct->contactId, $Acct->firstName, $Acct->lastName, $Acct->unaccentedName, $Acct->email);
+            $Conf->q("insert into DeletedContactInfo set contactId=?, firstName=?, lastName=?, unaccentedName=?, email=?, affiliation=?", $Acct->contactId, $Acct->firstName, $Acct->lastName, $Acct->unaccentedName, $Acct->email, $Acct->affiliation);
             foreach (array("ContactInfo",
                            "PaperComment", "PaperConflict", "PaperReview",
                            "PaperReviewPreference", "PaperReviewRefused",
@@ -482,7 +511,7 @@ if (isset($Qreq->delete) && !Dbl::has_error() && $Qreq->post_ok()) {
             // done
             $Conf->confirmMsg("Permanently deleted account " . htmlspecialchars($Acct->email) . ".");
             $Me->log_activity_for($Acct, "Account deleted " . htmlspecialchars($Acct->email));
-            go(hoturl("users", "t=all"));
+            $Conf->redirect_hoturl("users", "t=all");
         }
     }
 }
@@ -498,12 +527,13 @@ if (!$newProfile
 }
 if ($Qreq->t && $Qreq->t !== $profile_topic && $Qreq->method() === "GET") {
     $Qreq->t = $profile_topic === "main" ? null : $profile_topic;
-    $Conf->self_redirect($Qreq);
+    $Conf->redirect_self($Qreq);
 }
+$UserStatus->set_context(["root" => $profile_topic]);
 
 // set session list
 if (!$newProfile
-    && ($list = SessionList::load_cookie("u"))
+    && ($list = SessionList::load_cookie($Me, "u"))
     && $list->set_current_id($Acct->contactId)) {
     $Conf->set_active_list($list);
 }
@@ -536,45 +566,37 @@ if (!$useRequest
     && $Me->privChair
     && $Acct->is_empty()
     && ($Qreq->role === "chair" || $Qreq->role === "pc")) {
-    $userj->roles = (object) [$Qreq->role => true];
+    $userj->roles = [$Qreq->role];
 }
 
 // set warnings about user json
-if (!$newProfile) {
-    if (!isset($userj->firstName) && !isset($userj->lastName)) {
-        $UserStatus->warning_at("firstName", "Please enter your name.");
-        $UserStatus->warning_at("lastName", false);
-    }
-    if (!isset($userj->affiliation)) {
-        $UserStatus->warning_at("affiliation", "Please enter your affiliation (use “None” or “Unaffiliated” if you have none).");
-    }
-    if ($Acct->is_pc_member()) {
-        if (!isset($userj->collaborators)) {
-            $UserStatus->warning_at("collaborators", "Please enter your recent collaborators and other affiliations. This information can help detect conflicts of interest. Enter “None” if you have none.");
-        }
-        if ($Conf->has_topics() && !isset($userj->topics)) {
-            $UserStatus->warning_at("topics", "Please enter your topic interests. We use topic interests to improve the paper assignment process.");
-        }
+if (!$newProfile && !$useRequest) {
+    $UserStatus->gxt()->set_context(["args" => [$UserStatus, $Acct]]);
+    foreach ($UserStatus->gxt()->members("__crosscheck", "crosscheck_callback") as $gj) {
+        $UserStatus->gxt()->call_callback($gj->crosscheck_callback, $gj);
     }
 }
 
 // compute current form json
 if ($useRequest) {
     $UserStatus->ignore_msgs = true;
-    $formcj = (object) ["id" => $Acct->has_account_here() ? $Acct->contactId : "new"];
-    $UserStatus->set_context(["args" => [$UserStatus, $formcj, $Qreq]]);
-    $UserStatus->request_group("");
 } else {
-    $formcj = $userj;
+    if (($cdbu = $Acct->contactdb_user())) {
+        $Acct->import_prop($cdbu);
+        if ($Acct->prop_changed()) {
+            $Acct->save_prop();
+        }
+    }
 }
 if (($prdj = $Me->session("profile_redirect"))) {
     $Me->save_session("profile_redirect", null);
     foreach ($prdj as $k => $v) {
         if ($k === "warning_fields") {
-            foreach ($v as $k)
+            foreach ($v as $k) {
                 $UserStatus->warning_at($k, null);
+            }
         } else {
-            $formcj->$k = $v;
+            $Qreq->$k = $v;
         }
     }
 }
@@ -590,11 +612,13 @@ $form_params["t"] = $Qreq->t;
 if (isset($Qreq->ls)) {
     $form_params["ls"] = $Qreq->ls;
 }
-echo Ht::form(hoturl_post("profile", $form_params),
-              ["id" => "profile-form", "class" => "need-unload-protection"]);
+echo Ht::form($Conf->hoturl_post("profile", $form_params),
+              ["id" => "form-profile", "class" => "need-unload-protection"]);
 
 // left menu
-echo '<div class="leftmenu-left"><nav class="leftmenu-menu"><h1 class="leftmenu">Account</h1><div class="leftmenu-list">';
+echo '<div class="leftmenu-left"><nav class="leftmenu-menu">',
+    '<h1 class="leftmenu"><a href="" class="uic js-leftmenu qq">Account</a></h1>',
+    '<ul class="leftmenu-list">';
 
 if ($Me->privChair) {
     foreach ([["New account", "new"], ["Bulk update", "bulk"], ["Your profile", null]] as $t) {
@@ -602,65 +626,54 @@ if ($Me->privChair) {
             continue;
         }
         $active = $t[1] && $newProfile === ($t[1] === "new" ? 1 : 2);
-        echo '<div class="leftmenu-item',
+        echo '<li class="leftmenu-item',
             ($active ? ' active' : ' ui js-click-child'),
             ' font-italic', '">';
         if ($active) {
             echo $t[0];
         } else {
-            echo Ht::link($t[0], $Conf->selfurl(null, ["u" => $t[1], "t" => null]));
+            echo Ht::link($t[0], $Conf->selfurl($Qreq, ["u" => $t[1], "t" => null]));
         }
-        echo '</div>';
+        echo '</li>';
     }
 }
 
 if (!$newProfile) {
     $first = $Me->privChair;
     foreach ($UserStatus->gxt()->members("", "title") as $gj) {
-        echo '<div class="leftmenu-item',
+        echo '<li class="leftmenu-item',
             ($gj->name === $profile_topic ? ' active' : ' ui js-click-child'),
-            ($first ? ' mt-4' : ''), '">';
+            ($first ? ' leftmenu-item-gap4' : ''), '">';
         if ($gj->name === $profile_topic) {
             echo $gj->title;
         } else {
-            echo Ht::link($gj->title, $Conf->selfurl(null, ["t" => $gj->name]));
+            echo Ht::link($gj->title, $Conf->selfurl($Qreq, ["t" => $gj->name]));
         }
-        echo '</div>';
+        echo '</li>';
         $first = false;
     }
 
-    echo '</div><div class="leftmenu-if-left if-alert mt-5">',
+    echo '</ul><div class="leftmenu-if-left if-alert mt-5">',
         Ht::submit("save", "Save changes", ["class" => "btn-primary"]),
         '</div>';
 } else {
-    echo '</div>';
+    echo '</ul>';
 }
 
 echo '</nav></div>',
     '<main id="profilecontent" class="leftmenu-content main-column">';
 
-if ($UserStatus->has_messages()) {
-    $status = 0;
-    $msgs = [];
-    foreach ($UserStatus->messages(true) as $m) {
-        $status = max($m[2], $status);
-        $msgs[] = $m[1];
-    }
-    echo '<div class="msgs-wide">', Ht::msg($msgs, $status), "</div>\n";
+if ($newProfile === 2
+    && $Qreq->bulkentry === null
+    && ($session_bulkentry = $Me->session("profile_bulkentry"))
+    && is_array($session_bulkentry)
+    && $session_bulkentry[0] > Conf::$now - 5) {
+    $Qreq->bulkentry = $session_bulkentry[1];
+    $Me->save_session("profile_bulkentry", null);
 }
 
 if ($newProfile === 2) {
-    if ($Qreq->bulkentry === null
-        && ($session_bulkentry = $Me->session("profile_bulkentry"))
-        && is_array($session_bulkentry)
-        && $session_bulkentry[0] > $Now - 5) {
-        $Qreq->bulkentry = $session_bulkentry[1];
-        $Me->save_session("profile_bulkentry", null);
-    }
-
     echo '<h2 class="leftmenu">Bulk update</h2>';
-    $UserStatus->set_context(["args" => [$UserStatus, $Qreq]]);
-    $UserStatus->render_group("__bulk");
 } else {
     echo Ht::hidden("profile_contactid", $Acct->contactId);
     if (isset($Qreq->redirect)) {
@@ -668,10 +681,12 @@ if ($newProfile === 2) {
     }
 
     echo '<div id="foldaccount" class="';
-    if (isset($formcj->roles)
-        && (isset($formcj->roles->pc) || isset($formcj->roles->chair))) {
+    if ($Qreq->pctype === "chair"
+        || $Qreq->pctype === "pc"
+        || (!isset($Qreq->pctype) && ($Acct->roles & Contact::ROLE_PC) !== 0)) {
         echo "fold1o fold2o";
-    } else if (isset($formcj->roles) && isset($formcj->roles->sysadmin)) {
+    } else if ($Qreq->ass
+               || (!isset($Qreq->pctype) && ($Acct->roles & Contact::ROLE_ADMIN) !== 0)) {
         echo "fold1c fold2o";
     } else {
         echo "fold1c fold2c";
@@ -688,10 +703,22 @@ if ($newProfile === 2) {
         echo htmlspecialchars($UserStatus->gxt()->get($profile_topic)->title);
     }
     echo '</h2>';
+}
 
-    $UserStatus->set_context(["root" => $profile_topic, "args" => [$UserStatus, $userj, $formcj]]);
-    $UserStatus->render_group($profile_topic);
+if ($UserStatus->has_messages()) {
+    $status = 0;
+    $msgs = [];
+    foreach ($UserStatus->message_list() as $m) {
+        $status = max($m->status, $status);
+        $msgs[] = $m->message;
+    }
+    echo '<div class="msgs-wide">', Ht::msg($msgs, $status), "</div>\n";
+}
 
+$UserStatus->set_context(["args" => [$UserStatus, $Qreq]]);
+$UserStatus->render_group($newProfile === 2 ? "__bulk" : $profile_topic);
+
+if ($newProfile !== 2) {
     if ($UserStatus->global_self() && false) {
         echo '<div class="form-g"><div class="checki"><label><span class="checkc">',
             Ht::checkbox("saveglobal", 1, $useRequest ? !!$Qreq->saveglobal : true, ["class" => "ignore-diff"]),
@@ -704,6 +731,6 @@ if ($newProfile === 2) {
 echo "</main></form>";
 
 if (!$newProfile) {
-    Ht::stash_script('hiliter_children("#profile-form")');
+    Ht::stash_script('hiliter_children("#form-profile")');
 }
 $Conf->footer();

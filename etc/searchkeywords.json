@@ -13,27 +13,27 @@
         "name": "au",
         "parse_callback": "Author_SearchTerm::parse"
     },
-    {   "name": "auth", "alias": "au"   },
+    {   "name": "auth", "alias": "au", "deprecated": true   },
     {   "name": "author", "alias": "au"   },
     {
         "name": "co",
         "parse_callback": "TextMatch_SearchTerm::parse", "has": "any"
     },
     {   "name": "collab", "alias": "co"   },
-    {   "name": "collaborator", "alias": "co"   },
+    {   "name": "collaborator", "alias": "co", "deprecated": true   },
     {   "name": "collaborators", "alias": "co"   },
     {
         "name": "aumatch",
         "parse_callback": "AuthorMatch_SearchTerm::parse"
     },
-    {   "name": "authmatch", "alias": "aumatch"   },
+    {   "name": "authmatch", "alias": "aumatch", "deprecated": true   },
     {   "name": "authormatch", "alias": "aumatch"   },
     {
         "name": "comatch",
         "parse_callback": "AuthorMatch_SearchTerm::parse"
     },
     {   "name": "collabmatch", "alias": "comatch"   },
-    {   "name": "collaboratormatch", "alias": "comatch"   },
+    {   "name": "collaboratormatch", "alias": "comatch", "deprecated": true   },
     {   "name": "collaboratorsmatch", "alias": "comatch"   },
     {
         "name": "acmatch",
@@ -53,10 +53,10 @@
     },
     {   "name": "pcconflict", "alias": "pcconf"   },
     {
-        "name": "reconf",
-        "parse_callback": "PaperSearch::parse_reconflict"
+        "name": "reconflict",
+        "parse_callback": "Reconflict_SearchTerm::parse"
     },
-    {   "name": "reconflict", "alias": "reconf"   },
+    {   "name": "reconf", "alias": "reconflict"   },
     {
         "name": "status",
         "parse_callback": "PaperStatus_SearchTerm::parse"
@@ -99,13 +99,13 @@
         "has": "any"
     },
     {   "name": "revpref", "alias": "pref"   },
-    {   "name": "repref", "alias": "pref"   },
+    {   "name": "repref", "alias": "pref", "deprecated": true   },
     {   "name": "preference", "alias": "pref"   },
     {   "name": "prefexp", "alias": "pref"   },
     {   "name": "revprefexp", "alias": "pref"   },
-    {   "name": "reprefexp", "alias": "pref"   },
+    {   "name": "reprefexp", "alias": "pref", "deprecated": true   },
     {   "name": "prefexpertise", "alias": "pref"   },
-    {   "name": "revprefexpertise", "alias": "pref"   },
+    {   "name": "revprefexpertise", "alias": "pref", "deprecated": true   },
     {   "name": "reprefexpertise", "alias": "pref"   },
     {
         "name": "round",
@@ -115,7 +115,7 @@
         "name": "rate",
         "parse_callback": "ReviewAdjustment_SearchTerm::parse_rate", "has": "any"
     },
-    {   "name": "rating", "alias": "rate"   },
+    {   "name": "rating", "alias": "rate", "deprecated": true   },
     {
         "name": "topic",
         "parse_callback": "Topic_SearchTerm::parse", "has": "any"
@@ -142,10 +142,13 @@
     },
     {   "name": "decision", "alias": "dec"   },
     {
-        "name": "editfinal",
+        "name": "editfinal", "deprecated": true,
         "parse_callback": "EditFinal_SearchTerm::parse", "has": "yes"
     },
-    {   "name": "edit-final", "alias": "editfinal"   },
+    {
+        "name": "perm",
+        "parse_callback": "Perm_SearchTerm::parse"
+    },
     {
         "name": "tag",
         "parse_callback": "Tag_SearchTerm::parse",
@@ -159,7 +162,8 @@
     {
         "name": "notag",
         "parse_callback": "Tag_SearchTerm::parse",
-        "negated": true, "sorting": false, "is_hash": false, "has": "any"
+        "negated": true, "sorting": false, "is_hash": false, "has": "any",
+        "deprecated": true
     },
     {
         "name": "order",
@@ -174,27 +178,23 @@
     {   "name": "revorder", "alias": "rorder"   },
     {
         "name": "color",
-        "require": "src/search/st_tag.php",
         "parse_callback": "Color_SearchTerm::parse",
-        "has": "color"
+        "has": "color", "deprecated": true
     },
     {
         "name": "style",
-        "require": "src/search/st_tag.php",
         "parse_callback": "Color_SearchTerm::parse",
-        "has": "any"
+        "has": "any", "deprecated": true
     },
     {
         "name": "badge",
-        "require": "src/search/st_tag.php",
         "parse_callback": "Color_SearchTerm::parse_badge",
-        "has": "any"
+        "has": "any", "deprecated": true
     },
     {
         "name": "emoji",
-        "require": "src/search/st_tag.php",
         "parse_callback": "Color_SearchTerm::parse_emoji",
-        "has": "any"
+        "has": "any", "deprecated": true
     },
     {
         "name": "formula",
@@ -219,15 +219,15 @@
     {   "name": "retoken", "alias": "token"   },
     {   "name": "reviewtoken", "alias": "token"   },
     {
-        "match": "(|c|i|p|complete-?|incomplete-?|partial-?|in-?progress-?|not-?started-?|pending-?|pending-?approval-?|propos(?:al|ed)-?)(|meta-?|pri-?|sec-?|ext-?|primary-?|secondary-?|external-?)(?:re|rev|review)",
+        "match": "(|c|i|p|complete-?|incomplete-?|partial-?|in-?progress-?|not-?started-?|pending-?|pending-?(?:my-?|)approval-?|propos(?:al|ed)-?)(|meta-?|pri-?|sec-?|ext-?|primary-?|secondary-?|external-?)(?:re|rev|review)",
         "expand_callback": "Review_SearchTerm::keyword_factory"
     },
     {
-        "match": "(?:|review-?)(|c|i|p|complete-?|incomplete-?|in-?progress-?|not-?started-?|partial-?|pending-?|pending-?approval-?|propos(?:al|ed)-?)(meta|pri|sec|ext|primary|secondary|external)",
+        "match": "(?:|review-?)(|c|i|p|complete-?|incomplete-?|in-?progress-?|not-?started-?|partial-?|pending-?|pending-?(?:my-?|)approval-?|propos(?:al|ed)-?)(meta|pri|sec|ext|primary|secondary|external)",
         "expand_callback": "Review_SearchTerm::keyword_factory"
     },
     {
-        "match": "(?:|review-?)(complete|incomplete|in-?progress|not-?started|partial|pending|pending-?approval|propos(?:al|ed))()",
+        "match": "(?:|review-?)(complete|incomplete|in-?progress|not-?started|partial|pending|pending-?(?:my-?|)approval|propos(?:al|ed))()",
         "expand_callback": "Review_SearchTerm::keyword_factory"
     },
     {
@@ -253,40 +253,33 @@
     },
     {
         "name": "show",
-        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true,
-        "view_action": "show", "sorting": false
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {
         "name": "as",
-        "parse_callback": "Show_SearchTerm::parse",
-        "view_action": "as", "sorting": false
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {
         "name": "hide",
-        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true,
-        "view_action": "hide", "sorting": false
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {
         "name": "edit",
-        "parse_callback": "Show_SearchTerm::parse",
-        "view_action": "edit", "sorting": false
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {
         "name": "showsort",
-        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true,
-        "view_action": "show", "sorting": true
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {   "name": "sortshow", "alias": "showsort"   },
     {
         "name": "editsort",
-        "parse_callback": "Show_SearchTerm::parse",
-        "view_action": "edit", "sorting": true
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {   "name": "sortedit", "alias": "editsort"   },
     {
         "name": "sort",
-        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true,
-        "view_action": false, "sorting": true
+        "parse_callback": "Show_SearchTerm::parse", "allow_parens": true
     },
     {
         "name": "HEADING",
@@ -304,6 +297,7 @@
     },
     {
         "name": "no",
-        "parse_callback": "PaperSearch::parse_has"
+        "parse_callback": "PaperSearch::parse_has",
+        "deprecated": true
     }
 ]

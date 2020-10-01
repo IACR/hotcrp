@@ -11,28 +11,29 @@ class Tag_Fexpr extends Fexpr {
         $this->tag = $tag;
         $this->tsm = $tsm;
         $this->isvalue = $isvalue;
-        $this->_format = $isvalue ? null : self::FBOOL;
+        $this->_format = $isvalue ? null : self::FTAGVALUE;
     }
     static function parse_modifier(FormulaCall $ff, $arg) {
-        if (!$ff->args && $arg[0] !== ".") {
-            $ff->args[] = substr($arg, 1);
+        if (!$ff->rawargs && $arg[0] !== ".") {
+            $ff->rawargs[] = substr($arg, 1);
             return true;
-        } else if (count($ff->args) === 1 && $arg[0] === ":") {
-            $ff->args[0] .= $arg;
+        } else if (count($ff->rawargs) === 1 && $arg[0] === ":") {
+            $ff->rawargs[0] .= $arg;
             return true;
         } else {
             return false;
         }
     }
     static function make(FormulaCall $ff) {
-        if (count($ff->args) === 1
-            && preg_match('{\A(?:|~~?|\S+~)' . TAG_REGEX_NOTWIDDLE . '\z}', $ff->args[0])) {
-            $tag = $ff->args[0];
+        if (count($ff->rawargs) === 1
+            && preg_match('{\A#?(?:|~~?|\S+~)' . TAG_REGEX_NOTWIDDLE . '\z}', $ff->rawargs[0])) {
+            $tag = $ff->rawargs[0];
             $tsm = new TagSearchMatcher($ff->formula->user);
             $tsm->add_check_tag(str_starts_with($tag, "_~") ? substr($tag, 1) : $tag, true);
             return new Tag_Fexpr($tag, $tsm, $ff->kwdef->is_value);
         } else {
-            return $ff->lerror("Invalid tag.");
+            $ff->lerror("Invalid tag.");
+            return null;
         }
     }
     static function tag_value($tags, $search, $isvalue) {
@@ -81,7 +82,7 @@ class Tag_Fexpr extends Fexpr {
                 assert(strpos($regex, "|") === false
                        && str_starts_with($regex, "{ {$state->user->contactId}~"));
                 $regex = "\"{ \"." . $state->loop_cid() . "."
-                    . json_encode(substr($regex, strlen($state->user->contactId) + 2));
+                    . json_encode(substr($regex, strlen((string) $state->user->contactId) + 2));
             } else {
                 $regex = json_encode($regex);
             }

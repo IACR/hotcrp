@@ -16,45 +16,14 @@ function next_lexicographic_permutation(i, size) {
 handle_ui.on("js-settings-option-type", function (event) {
     var issel = /^(?:selector|radio)/.test(this.value);
     foldup.call(this, null, {n: 4, f: !issel});
-    // ensure display and visibility are shown
-    var which = this.id.replace(/^.*_/, "_");
-    if ($("#optd" + which).val())
-        foldup.call(this, null, {n: 3, f: false});
-    if ($("#optp" + which).val() !== "rev")
-        foldup.call(this, null, {n: 6, f: false});
-    if ($("#optdt" + which).val() !== "prominent")
-        foldup.call(this, null, {n: 7, f: false});
-    /* if (document.activeElement === this && issel)
-        $("#optv" + which).focus(); */
 });
 
-handle_ui.on("js-settings-option-description", function () {
-    foldup.call(this, null, {n: 3, f: false});
+handle_ui.on("js-settings-show-option-property", function () {
+    var prop = this.getAttribute("data-option-property"),
+        $j = $(this).closest(".settings-opt").find(".is-option-" + prop);
+    $j.removeClass("hidden");
     if (document.activeElement === this)
-        $(this).closest(".settings-opt").find(".settings-opt-description").focus();
-});
-
-handle_ui.on("js-settings-option-presence", function (event) {
-    foldup.call(this, null, {n: 10, f: false});
-    foldup.call(this, null, {n: 9, f: false});
-    if (document.activeElement === this)
-        $(this).closest(".settings-opt").find(".settings-opt-presence").focus();
-});
-
-handle_ui.on("js-settings-option-condition", function (event) {
-    foldup.call(this, null, {n: 8, f: !/^search/.test(this.value)});
-});
-
-handle_ui.on("js-settings-option-visibility", function (event) {
-    foldup.call(this, null, {n: 6, f: false});
-    if (document.activeElement === this)
-        $(this).closest(".settings-opt").find(".settings-opt-visibility").focus();
-});
-
-handle_ui.on("js-settings-option-display", function (event) {
-    foldup.call(this, null, {n: 7, f: false});
-    if (document.activeElement === this)
-        $(this).closest(".settings-opt").find(".settings-opt-display").focus();
+        $j.find("input, select, textarea").not("[type=hidden], :disabled").first().focus();
 });
 
 handle_ui.on("js-settings-option-move", function (event) {
@@ -322,10 +291,10 @@ var revfield_template = '<div id="revfield_$" class="settings-revfield f-contain
     <div class="f-i">\
       <label for="authorView_$">Visibility</label>\
       <span class="select"><select name="authorView_$" id="authorView_$" class="reviewfield_authorView">\
-        <option value="au">Shown to authors</option>\
+        <option value="au">Visible to authors</option>\
         <option value="pc">Hidden from authors</option>\
         <option value="audec">Hidden from authors until decision</option>\
-        <option value="admin">Shown only to administrators</option>\
+        <option value="admin">Administrators only</option>\
       </select></span>\
     </div>\
     <div class="f-i reviewrow_options">\
@@ -340,10 +309,10 @@ var revfield_template = '<div id="revfield_$" class="settings-revfield f-contain
   </div>\
   <div class="f-i">\
     <label for="description_$">Description</label>\
-    <textarea name="description_$" id="description_$" class="reviewtext need-tooltip" rows="2" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
+    <textarea name="description_$" id="description_$" class="w-text need-tooltip" rows="2" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
   <div class="f-i reviewrow_options">\
     <label for="options_$">Choices</label>\
-    <textarea name="options_$" id="options_$" class="reviewtext need-tooltip" rows="6" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
+    <textarea name="options_$" id="options_$" class="w-text need-tooltip" rows="6" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
   <div class="f-i">\
     <button id="moveup_$" class="btn-sm revfield_moveup" type="button">Move up</button><span class="sep"></span>\
 <button id="movedown_$" class="btn-sm revfield_movedown" type="button">Move down</button><span class="sep"></span>\
@@ -355,7 +324,7 @@ var revfield_template = '<div id="revfield_$" class="settings-revfield f-contain
 var revfieldview_template = '<div style="line-height:1.35">\
 <span class="settings-revfn"></span>\
 <span class="settings-revrounds"></span>\
-<span class="settings-revvis"></span>\
+<span class="field-visibility"></span>\
 <div class="settings-revdata"></div>\
 </div>';
 
@@ -401,7 +370,7 @@ function field_visibility_text(visibility) {
     if ((visibility || "pc") === "pc")
         return "(hidden from authors)";
     else if (visibility === "admin")
-        return "(shown only to administrators)";
+        return "(administrators only)";
     else if (visibility === "secret")
         return "(secret)";
     else if (visibility === "audec")
@@ -414,7 +383,7 @@ function create_field_view(fid, fieldj) {
     var $f = $(revfieldview_template.replace(/\$/g, fid)), $x, i, j, x;
     $f.find(".settings-revfn").text(fieldj.name || "<unnamed>");
 
-    $x = $f.find(".settings-revvis");
+    $x = $f.find(".field-visibility");
     x = field_visibility_text(fieldj.visibility);
     x ? $x.text(x) : $x.remove();
 
@@ -572,7 +541,7 @@ function add_dialog(fid, focus) {
             hc.push('<div><span class="settings-revfn">' + text_to_html(s.name) + '</span>', '<hr class="c" /></div>');
             var x = field_visibility_text(s.visibility);
             if (x)
-                hc.push('<span class="settings-revvis">' + text_to_html(x) + '</span>');
+                hc.push('<span class="field-visibility">' + text_to_html(x) + '</span>');
             hc.pop();
             hc.push('<div class="settings-revhint">' + text_to_html(s.description || "") + '</div>');
             if (s.options) {

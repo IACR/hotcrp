@@ -14,16 +14,23 @@ class FormulaGraph extends MessageSet {
 
     const REVIEWER_COLOR = 1;
 
+    /** @var Conf */
     public $conf;
+    /** @var Contact */
     public $user;
     public $type = 0;
+    /** @var Formula */
     public $fx;
+    /** @var list<Formula> */
     private $fxs;
     private $fx_expression;
+    /** @var Formula */
     public $fy;
     private $fx_type = 0;
     private $queries = [];
+    /** @var list<string> */
     private $_qstyles = [];
+    /** @var list<bool> */
     private $_qstyles_bytag = [];
     private $_qstyle_index = 0;
     private $searches = [];
@@ -32,11 +39,20 @@ class FormulaGraph extends MessageSet {
     private $reviewer_color = false;
     private $remapped_rounds = [];
     private $tags = [];
+    /** @var ?Formula */
     private $fxorder;
-    private $_data;
+    /** @var array<string,list<array{int|float|bool,int|float|bool,int|string}>> */
+    private $_scatter_data;
+    /** @var list<array{int|float|bool,int|float|bool,list<int|string>,?string,?string}> */
+    private $_bar_data;
+    /** @var list<object> */
+    private $_cdf_data;
+    /** @var list<array{int|float|bool,int|float|bool}> */
     private $_xorder_data;
     private $_xorder_map;
     private $_axis_remapped = 0;
+    private $_x_tagvalue_bool;
+    private $_y_tagvalue_bool;
 
     function __construct(Contact $user, $gtype, $fx, $fy) {
         $this->conf = $user->conf;
@@ -56,7 +72,7 @@ class FormulaGraph extends MessageSet {
         }
 
         // Y axis expression
-        if (strcasecmp($gtype, "cdf") == 0) {
+        if (strcasecmp($gtype, "cdf") === 0) {
             $this->type = self::CDF;
             $fy = "0";
         } else if (preg_match('/\A(?:raw-?cdf|cdf-?count|count-?cdf|cum-?count|cumulative-?count)\z/i', $gtype)) {
@@ -71,54 +87,69 @@ class FormulaGraph extends MessageSet {
         } else if (preg_match('/\A(?:box|boxplot|candlestick)\z/i', $gtype)) {
             $this->type = self::BOXPLOT;
             $fy = $fy_gtype;
-        } else if (strcasecmp($gtype, "scatter") == 0) {
+        } else if (strcasecmp($gtype, "scatter") === 0) {
             $this->type = self::SCATTER;
             $fy = $fy_gtype;
+        } else {
+            $this->type = self::SCATTER;
         }
 
         $this->fy = new Formula($fy, Formula::ALLOW_INDEXED);
         $this->fy->check($this->user);
-        if (!$this->type) {
-            $this->type = self::SCATTER;
-            if (!$this->fy->index_type() && $this->fy->support_combiner()) {
-                $this->type = self::BARCHART;
-            }
-        }
+        $this->_y_tagvalue_bool = $this->fy->result_format() === Fexpr::FTAGVALUE;
 
         // X axis expression(s)
         $this->fx_expression = $fx;
-        if (strcasecmp($fx, "query") == 0 || strcasecmp($fx, "search") == 0) {
-            $this->fx = new Formula("0", Formula::ALLOW_INDEXED);
+        $this->fxs = [];
+        if (preg_match('/\A(sort|order|rorder)\s+(\S.*)\z/i', $fx, $m)) {
+            if (strcasecmp($m[1], "rorder") === 0) {
+                $m[2] = "-($m[2])";
+            }
+            $this->set_xorder($m[2]);
+            $this->fxs[] = new Formula("pid", Formula::ALLOW_INDEXED);
+        } else if (strcasecmp($fx, "query") === 0 || strcasecmp($fx, "search") === 0) {
+            $this->fxs[] = new Formula("0", Formula::ALLOW_INDEXED);
             $this->fx_type = Fexpr::FSEARCH;
-        } else if (strcasecmp($fx, "tag") == 0) {
-            $this->fx = new Formula("0", Formula::ALLOW_INDEXED);
+        } else if (strcasecmp($fx, "tag") === 0) {
+            $this->fxs[] = new Formula("0", Formula::ALLOW_INDEXED);
             $this->fx_type = Fexpr::FTAG;
         } else if (!($this->type & self::CDF)) {
-            $this->fx = new Formula($fx, Formula::ALLOW_INDEXED);
-            if (!$this->fx->check($this->user)) {
-                $this->error_at("fx", "X axis formula error: " . $this->fx->error_html());
-            }
+            $this->fxs[] = new Formula($fx, Formula::ALLOW_INDEXED);
         } else {
-            $this->fxs = [];
             while (true) {
                 $fx = preg_replace('/\A\s*;*\s*/', '', $fx);
                 if ($fx === "") {
                     break;
                 }
                 $pos = Formula::span_maximal_formula($fx);
-                $this->fxs[] = $f = new Formula(substr($fx, 0, $pos), Formula::ALLOW_INDEXED);
-                if (!$f->check($this->user)) {
-                    $this->error_at("fx", "X axis formula error: " . $f->error_html());
-                }
+                $this->fxs[] = new Formula(substr($fx, 0, $pos), Formula::ALLOW_INDEXED);
+                $fx = substr($fx, $pos);
             }
         }
+        foreach ($this->fxs as $i => $f) {
+            if (!$f->check($this->user)) {
+                $this->error_at("fx", "X axis formula error: " . $f->error_html());
+            } else if ($i === 0) {
+                $this->fx_type = $this->fx_type ? : $f->result_format();
+                $this->_x_tagvalue_bool = $this->fx_type === Fexpr::FTAGVALUE;
+            } else if ($f->result_format() !== $this->fx_type) {
+                $this->error_at("fx", "X axis error: Different formulas use different units");
+                $this->fx_type = 0;
+            }
+        }
+        $this->fx = count($this->fxs) === 1 ? $this->fxs[0] : null;
 
         if ($this->fy->error_html()) {
             $this->error_at("fy", "Y axis formula error: " . $this->fy->error_html());
-        } else if (($this->type & self::BARCHART) && !$this->fy->support_combiner()) {
-            $this->error_at("fy", "Y axis formula “" . htmlspecialchars($fy) . "” is unsuitable for bar charts, use an aggregate function like “sum(" . htmlspecialchars($fy) . ")”.");
-            $this->fy = new Formula("sum(0)", Formula::ALLOW_INDEXED);
-            $this->fy->check($this->user);
+        } else if ($this->type & self::BARCHART) {
+            if ($this->fy->result_format() === Fexpr::FBOOL) {
+                $this->fy = new Formula("sum(" . $fy . ")", Formula::ALLOW_INDEXED);
+                $this->fy->check($this->user);
+            } else if (!$this->fy->support_combiner()) {
+                $this->error_at("fy", "Y axis formula “" . htmlspecialchars($fy) . "” is unsuitable for bar charts, use an aggregate function like “sum(" . htmlspecialchars($fy) . ")”.");
+                $this->fy = new Formula("sum(0)", Formula::ALLOW_INDEXED);
+                $this->fy->check($this->user);
+            }
         } else if (($this->type & self::CDF) && $this->fx_type === Fexpr::FTAG) {
             $this->error_at("fy", "CDFs by tag don’t make sense.");
         }
@@ -135,18 +166,21 @@ class FormulaGraph extends MessageSet {
             $q = trim($qreq->q);
             $queries[] = $q === "" || $q === "(All)" ? "all" : $q;
             $styles[] = trim((string) $qreq->s);
-        } else if (empty($queries))
+        } else if (empty($queries)) {
             $queries[] = $styles[] = "";
+        }
         while (count($queries) > 1
                && $queries[count($queries) - 1] === $queries[count($queries) - 2]) {
             array_pop($queries);
             array_pop($styles);
         }
-        if (count($queries) === 1 && $queries[0] === "all")
+        if (count($queries) === 1 && $queries[0] === "all") {
             $queries[0] = "";
+        }
         return [$queries, $styles];
     }
 
+    /** @param string $style */
     function add_query($q, $style, $fieldname = false) {
         $qn = count($this->queries);
         $this->queries[] = $q;
@@ -160,17 +194,18 @@ class FormulaGraph extends MessageSet {
             $this->_qstyles_bytag[] = false;
         }
         if ($style === "") {
-            if (($n = $this->_qstyle_index % 4))
+            if (($n = $this->_qstyle_index % 4)) {
                 $style = "color" . $n;
+            }
             ++$this->_qstyle_index;
         }
         $this->_qstyles[] = $style;
-        $psearch = new PaperSearch($this->user, array("q" => $q));
+        $psearch = new PaperSearch($this->user, ["q" => $q]);
         foreach ($psearch->paper_ids() as $pid) {
             $this->papermap[$pid][] = $qn;
         }
-        if (!empty($psearch->warnings)) {
-            $this->error_at($fieldname, $psearch->warnings);
+        foreach ($psearch->problem_texts() as $w) {
+            $this->error_at($fieldname, $w);
         }
         $this->searches[] = $q !== "" ? $psearch : null;
     }
@@ -178,13 +213,11 @@ class FormulaGraph extends MessageSet {
     function set_xorder($xorder) {
         $this->fxorder = null;
         $xorder = simplify_whitespace($xorder);
-        if ($xorder !== "" && $this->type !== self::SCATTER) {
+        if ($xorder !== "") {
             $fxorder = new Formula($xorder, Formula::ALLOW_INDEXED);
             $fxorder->check($this->user);
             if ($fxorder->error_html()) {
                 $this->error_at("xorder", "X order formula error: " . $fxorder->error_html());
-            } else if (!$fxorder->support_combiner()) {
-                $this->error_at("xorder", "X order formula “" . htmlspecialchars($xorder) . "” is unsuitable, use an aggregate function.");
             } else {
                 $this->fxorder = $fxorder;
             }
@@ -196,11 +229,10 @@ class FormulaGraph extends MessageSet {
     }
 
     function fx_format() {
-        return $this->fx_type ? : $this->fx->result_format();
+        return $this->fx_type;
     }
 
     function fx_combinable() {
-        $format = $this->fx->result_format();
         return !$this->fx_type;
     }
 
@@ -215,29 +247,34 @@ class FormulaGraph extends MessageSet {
         return $queries;
     }
 
+    /** @param Formula $fx
+     * @return list<object> */
     private function _cdf_data_one_fx($fx, $qcolors, $dashp, PaperInfoSet $rowset) {
         $data = [];
 
         $fxf = $fx->compile_json_function();
         $reviewf = null;
         if ($fx->indexed()) {
-            $reviewf = Formula::compile_indexes_function($this->user, $this->fx->index_type());
+            $reviewf = Formula::compile_indexes_function($this->user, $fx->index_type());
         }
 
-        foreach ($rowset->all() as $prow) {
+        foreach ($rowset as $prow) {
             $revs = $reviewf ? $reviewf($prow, $this->user) : [null];
             $queries = $this->papermap[$prow->paperId];
             foreach ($revs as $rcid) {
                 if (($x = $fxf($prow, $rcid, $this->user)) !== null) {
+                    $this->_x_tagvalue_bool = $this->_x_tagvalue_bool && is_bool($x);
                     if ($rcid) {
                         $queries = $this->_filter_queries($prow, $prow->review_of_user($rcid));
                     }
                     if ($this->fx_type === Fexpr::FSEARCH) {
-                        foreach ($queries as $q)
+                        foreach ($queries as $q) {
                             $data[0][] = $q;
+                        }
                     } else {
-                        foreach ($queries as $q)
+                        foreach ($queries as $q) {
                             $data[$q][] = $x;
+                        }
                     }
                 }
             }
@@ -250,7 +287,7 @@ class FormulaGraph extends MessageSet {
                 $d->className = $s;
             }
             $dlabel = "";
-            if (get($this->queries, $q) && count($this->queries) > 1) {
+            if (($this->queries[$q] ?? null) && count($this->queries) > 1) {
                 $dlabel = $this->queries[$q];
             }
             if ($dlabel || $fxlabel) {
@@ -275,7 +312,7 @@ class FormulaGraph extends MessageSet {
                 ++$nneed_anal;
             }
         }
-        foreach ($rowset->all() as $prow) {
+        foreach ($rowset as $prow) {
             if ($nneed_anal === 0) {
                 break;
             }
@@ -300,17 +337,18 @@ class FormulaGraph extends MessageSet {
         }
         if ($nneed_anal !== 0) {
             foreach ($need_anal as $qi => $na) {
-                if ($na)
+                if ($na) {
                     $qcolors[$qi] = join(" ", $qcolors[$qi]);
+                }
             }
         }
 
         // compute data
-        $this->_data = [];
+        $this->_cdf_data = [];
         $dashps = [null, [10,5], [5,5], [1,1]];
         foreach ($this->fxs as $i => $fx) {
             $dashp = $dashps[$i % count($dashps)];
-            $this->_data = array_merge($this->_data,
+            $this->_cdf_data = array_merge($this->_cdf_data,
                 $this->_cdf_data_one_fx($fx, $qcolors, $dashp, $rowset));
         }
     }
@@ -322,6 +360,7 @@ class FormulaGraph extends MessageSet {
         }
     }
 
+    /** @return 1|string */
     private function _paper_style(PaperInfo $prow) {
         $qnum = $this->papermap[$prow->paperId][0];
         if ($this->_qstyles_bytag[$qnum]) {
@@ -338,7 +377,7 @@ class FormulaGraph extends MessageSet {
 
     private function _add_tag_data(&$data, $d, PaperInfo $prow) {
         assert($this->fx_type === Fexpr::FTAG);
-        $tags = TagInfo::split_unpack($prow->viewable_tags($this->user));
+        $tags = Tagger::split_unpack($prow->viewable_tags($this->user));
         foreach ($tags as $ti) {
             if (!isset($this->tags[$ti[0]])) {
                 $this->tags[$ti[0]] = count($this->tags);
@@ -346,6 +385,19 @@ class FormulaGraph extends MessageSet {
             $d[0] = $this->tags[$ti[0]];
             $data[] = $d;
         }
+    }
+
+    private function _account_tags(PaperInfo $prow) {
+        assert($this->fx_type === Fexpr::FTAG);
+        $tags = Tagger::split_unpack($prow->viewable_tags($this->user));
+        $r = [];
+        foreach ($tags as $ti) {
+            if (!isset($this->tags[$ti[0]])) {
+                $this->tags[$ti[0]] = count($this->tags);
+            }
+            $r[] = $this->tags[$ti[0]];
+        }
+        return $r;
     }
 
     private function _scatter_data(PaperInfoSet $rowset) {
@@ -357,54 +409,65 @@ class FormulaGraph extends MessageSet {
         $fxf = $this->fx->compile_json_function();
         $fyf = $this->fy->compile_json_function();
         $reviewf = null;
-        if ($this->fx->indexed() || $this->fy->indexed()) {
-            $reviewf = Formula::compile_indexes_function($this->user, $this->fx->index_type() | $this->fy->index_type());
+        if ($this->fx->indexed()
+            || $this->fy->indexed()
+            || ($this->fxorder && $this->fxorder->indexed())) {
+            $reviewf = Formula::compile_indexes_function($this->user, $this->fx->index_type() | $this->fy->index_type() | ($this->fxorder ? $this->fxorder->index_type() : 0));
         }
-        $orderf = $order_data = null;
+        $orderf = $ordercf = $order_data = null;
         if ($this->fxorder) {
-            $orderf = $this->fxorder->compile_extractor_function();
-            $ordercf = $this->fxorder->compile_combiner_function();
             $order_data = [];
+            if ($reviewf) {
+                $orderf = $this->fxorder->compile_extractor_function();
+                $ordercf = $this->fxorder->compile_combiner_function();
+            } else {
+                $orderf = $this->fxorder->compile_json_function();
+                $ordercf = function ($x) { return $x[0]; };
+            }
         }
 
         $data = [];
-        foreach ($rowset->all() as $prow) {
-            $s = $ps = $this->_paper_style($prow);
-            $d = [0, 0, 0];
+        '@phan-var array<string,list<array{int|float|bool,int|float|bool,int|string}>> $data';
+        foreach ($rowset as $prow) {
+            $ps = $this->_paper_style($prow);
             $revs = $reviewf ? $reviewf($prow, $this->user) : [null];
             foreach ($revs as $rcid) {
                 $rrow = $rcid ? $prow->review_of_user($rcid) : null;
-                $d[0] = $fxf($prow, $rcid, $this->user);
-                $d[1] = $fyf($prow, $rcid, $this->user);
-                if ($d[0] === null || $d[1] === null) {
+                $x = $fxf($prow, $rcid, $this->user);
+                $y = $fyf($prow, $rcid, $this->user);
+                if ($x === null || $y === null) {
                     continue;
                 }
-                $d[2] = $prow->paperId;
+                $this->_x_tagvalue_bool = $this->_x_tagvalue_bool && is_bool($x);
+                $this->_y_tagvalue_bool = $this->_y_tagvalue_bool && is_bool($y);
+                $id = $prow->paperId;
                 if ($rrow && $rrow->reviewOrdinal) {
-                    $d[2] .= unparseReviewOrdinal($rrow->reviewOrdinal);
-                }
-                if ($orderf) {
-                    $order_data[$d[0]] = get($order_data, $d[0], []);
-                    $order_data[$d[0]][] = $orderf($prow, $rcid, $this->user);
+                    $id .= unparseReviewOrdinal($rrow->reviewOrdinal);
                 }
                 if ($ps === self::REVIEWER_COLOR) {
-                    $s = get($this->reviewer_color, $d[0]) ? : "";
+                    $s = $this->reviewer_color[$x] ?? "";
+                } else {
+                    $s = $ps;
                 }
                 if ($this->fx_type === Fexpr::FSEARCH) {
                     foreach ($this->_filter_queries($prow, $rrow) as $q) {
-                        $d[0] = $q;
-                        $data[$s][] = $d;
+                        $data[$s][] = [$q, $y, $id];
                     }
                 } else if ($this->fx_type === Fexpr::FTAG) {
-                    $this->_add_tag_data($data[$s], $d, $prow);
+                    foreach ($this->_account_tags($prow) as $ta) {
+                        $data[$s][] = [$ta, $y, $id];
+                    }
                 } else {
-                    $data[$s][] = $d;
+                    $data[$s][] = [$x, $y, $id];
+                }
+                if ($orderf) {
+                    $order_data[$x][] = $orderf($prow, $rcid, $this->user);
                 }
             }
         }
-        $this->_data = $data;
+        $this->_scatter_data = $data;
 
-        if ($orderf) {
+        if ($ordercf) {
             $this->_xorder_data = [];
             foreach ($order_data as $x => $vs) {
                 $this->_xorder_data[] = [$x, $ordercf($vs)];
@@ -415,17 +478,16 @@ class FormulaGraph extends MessageSet {
     // combine data: [x, y, pids, style, [query...]]
 
     static function barchart_compare($a, $b) {
-        if (get_i($a, 4) != get_i($b, 4)) {
-            return get_i($a, 4) - get_i($b, 4);
-        }
-        if ($a[0] != $b[0]) {
+        if (($a[4] ?? 0) != ($b[4] ?? 0)) {
+            return ($a[4] ?? 0) - ($b[4] ?? 0);
+        } else if ($a[0] != $b[0]) {
             return $a[0] < $b[0] ? -1 : 1;
+        } else {
+            return strcmp($a[3], $b[3]);
         }
-        return strcmp($a[3], $b[3]);
     }
 
     private function _combine_data(PaperInfoSet $rowset) {
-        $data = [];
         if ($this->fx->result_format() === Fexpr::FREVIEWER) {
             $this->_prepare_reviewer_color($this->user);
         }
@@ -433,17 +495,25 @@ class FormulaGraph extends MessageSet {
         $fxf = $this->fx->compile_json_function();
         $fytrack = $this->fy->compile_extractor_function();
         $fycombine = $this->fy->compile_combiner_function();
-        $reviewf = null;
-        if ($this->fx->indexed() || $this->fy->index_type()) {
-            $reviewf = Formula::compile_indexes_function($this->user, ($this->fx->indexed() ? $this->fx->index_type() : 0) | $this->fy->index_type());
+        $index_type = $this->fx->index_type() | $this->fy->index_type()
+            | ($this->fxorder ? $this->fxorder->index_type() : 0);
+        $reviewf = Formula::compile_indexes_function($this->user, $index_type);
+        $orderf = $ordercf = $order_data = null;
+        if ($this->fxorder) {
+            $order_data = [];
+            $orderf = $this->fxorder->compile_extractor_function();
+            $ordercf = $this->fxorder->compile_combiner_function();
         }
 
-        foreach ($rowset->all() as $prow) {
+        $data = [];
+        '@phan-var list<array{int|float|bool,int|float|bool,int|string,string,?string}> $data';
+        foreach ($rowset as $prow) {
             $queries = $this->papermap[$prow->paperId];
-            $s = $ps = $this->_paper_style($prow);
+            $ps = $this->_paper_style($prow);
             $revs = $reviewf ? $reviewf($prow, $this->user) : [null];
             foreach ($revs as $rcid) {
-                if (($x = $fxf($prow, $rcid, $this->user)) === null) {
+                $x = $fxf($prow, $rcid, $this->user);
+                if ($x === null) {
                     continue;
                 }
                 $rrow = $rcid ? $prow->review_of_user($rcid) : null;
@@ -451,59 +521,83 @@ class FormulaGraph extends MessageSet {
                     $queries = $this->_filter_queries($prow, $rrow);
                 }
                 if ($ps === self::REVIEWER_COLOR) {
-                    $s = get($this->reviewer_color, $x) ? : "";
+                    $s = $this->reviewer_color[$x] ?? "";
+                } else {
+                    $s = $ps;
                 }
-                $d = [$x, $fytrack($prow, $rcid, $this->user), $prow->paperId, $s];
-                if ($rrow && $rrow->reviewOrdinal && $this->fx->indexed()) {
-                    $d[2] .= unparseReviewOrdinal($rrow->reviewOrdinal);
+                $y = $fytrack($prow, $rcid, $this->user);
+                $id = $prow->paperId;
+                if ($rrow
+                    && $rrow->reviewOrdinal
+                    && !($index_type & Fexpr::IDX_PC)) {
+                    $id .= unparseReviewOrdinal($rrow->reviewOrdinal);
                 }
                 foreach ($queries as $q) {
-                    $q && ($d[4] = $q);
                     if ($this->fx_type === Fexpr::FTAG) {
-                        $this->_add_tag_data($data, $d, $prow);
+                        foreach ($this->_account_tags($prow) as $ta) {
+                            $data[] = [$ta, $y, $id, $s, $q];
+                        }
                     } else {
-                        $data[] = $d;
+                        $data[] = [$x, $y, $id, $s, $q];
                     }
+                }
+                if ($orderf) {
+                    $order_data[$x][] = $orderf($prow, $rcid, $this->user);
                 }
             }
         }
 
-        $is_sum = $this->fy->is_sum();
+        $is_sum = $this->fy->is_sumlike();
         usort($data, "FormulaGraph::barchart_compare");
         $newdata = [];
+        '@phan-var list<array{int|float|bool,int|float|bool,list<int|string>,?string,?string}> $newdata';
         $ndata = count($data);
-        for ($i = 0; $i != $ndata; $i = $j) {
-            $d = [$data[$i][0], [$data[$i][1]], [$data[$i][2]], $data[$i][3],
-                  get($data[$i], 4)];
-            for ($j = $i + 1;
-                 $j != $ndata
-                   && $data[$j][0] == $d[0]
-                   && get($data[$j], 4) == $d[4]
-                   && (!$is_sum || $data[$j][3] == $d[3]);
-                 ++$j) {
-                $d[1][] = $data[$j][1];
-                $d[2][] = $data[$j][2];
-                if ($d[3] && $d[3] != $data[$j][3]) {
-                    $d[3] = "";
+        for ($i = 0; $i !== $ndata; ) {
+            $d0 = $data[$i];
+            $x = $d0[0];
+            $ys = $ids = [];
+            $s = $d0[3];
+            $q = $d0[4];
+            do {
+                $ys[] = $d0[1];
+                if (!$is_sum || $d0[1][0]) {
+                    $ids[] = $d0[2];
                 }
-            }
-            $d[1] = $fycombine($d[1]);
-            if (!$d[4]) {
-                array_pop($d);
-                $d[3] || array_pop($d);
-            }
+                if ($s && $d0[3] != $s) {
+                    $s = "";
+                }
+                ++$i;
+            } while ($i !== $ndata
+                     && ($d0 = $data[$i])[0] == $x
+                     && (!$is_sum || $d0[3] == $s)
+                     && $d0[4] == $q);
+            $y = $fycombine($ys);
             if ($reviewf && !$this->fx->indexed()) {
-                $d[2] = array_values(array_unique($d[2]));
+                $ids = array_values(array_unique($ids));
             }
-            $newdata[] = $d;
+            if ($q) {
+                $newdata[] = [$x, $y, $ids, $s, $q];
+            } else if ($s) {
+                $newdata[] = [$x, $y, $ids, $s];
+            } else {
+                $newdata[] = [$x, $y, $ids];
+            }
         }
-        $this->_data = $newdata;
+        $this->_bar_data = $newdata;
+
+        if ($ordercf) {
+            $this->_xorder_data = [];
+            foreach ($order_data as $x => $vs) {
+                $this->_xorder_data[] = [$x, $ordercf($vs)];
+            }
+        }
     }
 
     private function _valuemap_axes($format) {
         $axes = 0;
-        if ((!$this->fx_type && $this->fx->result_format() === $format)
-            || ($this->fx_type == Fexpr::FTAG && $format === Fexpr::FTAG)) {
+        if ((!$this->fx_type && !$format)
+            || ($this->fx_type === Fexpr::FTAG && $format === Fexpr::FTAG)
+            || ($this->fx_type === Fexpr::FREVIEWER && $format === Fexpr::FREVIEWER)) {
             $axes |= 1;
         }
         if (!($this->type & self::CDF) && $this->fy->result_format() === $format) {
@@ -516,17 +610,18 @@ class FormulaGraph extends MessageSet {
         assert(!!$axes);
         $vs = [];
         if ($this->type & self::CDF) {
-            foreach ($this->_data as $dx) {
-                foreach ($dx->d as $d)
+            foreach ($this->_cdf_data as $dx) {
+                foreach ($dx->d as $d) {
                     $vs[$d] = true;
+                }
             }
         } else if ($this->type & self::BARCHART) {
-            foreach ($this->_data as $d) {
+            foreach ($this->_bar_data as $d) {
                 ($axes & 1) && $d[0] !== null && ($vs[$d[0]] = true);
                 ($axes & 2) && $d[1] !== null && ($vs[$d[1]] = true);
             }
         } else {
-            foreach ($this->_data as $dx) {
+            foreach ($this->_scatter_data as $dx) {
                 foreach ($dx as $d) {
                     ($axes & 1) && $d[0] !== null && ($vs[$d[0]] = true);
                     ($axes & 2) && $d[1] !== null && ($vs[$d[1]] = true);
@@ -539,19 +634,19 @@ class FormulaGraph extends MessageSet {
     private function _valuemap_rewrite($axes, $m) {
         assert(!!$axes);
         if ($this->type & self::CDF) {
-            foreach ($this->_data as $dx) {
+            foreach ($this->_cdf_data as $dx) {
                 foreach ($dx->d as &$d) {
                     array_key_exists($d, $m) && ($d = $m[$d]);
                 }
                 unset($d);
             }
         } else if ($this->type & self::BARCHART) {
-            foreach ($this->_data as &$d) {
+            foreach ($this->_bar_data as &$d) {
                 ($axes & 1) && array_key_exists($d[0], $m) && ($d[0] = $m[$d[0]]);
                 ($axes & 2) && array_key_exists($d[1], $m) && ($d[1] = $m[$d[1]]);
             }
         } else {
-            foreach ($this->_data as &$dx) {
+            foreach ($this->_scatter_data as &$dx) {
                 foreach ($dx as &$d) {
                     ($axes & 1) && array_key_exists($d[0], $m) && ($d[0] = $m[$d[0]]);
                     ($axes & 2) && array_key_exists($d[1], $m) && ($d[1] = $m[$d[1]]);
@@ -570,15 +665,17 @@ class FormulaGraph extends MessageSet {
 
     private function _reviewer_reformat() {
         if (!($axes = $this->_valuemap_axes(Fexpr::FREVIEWER))
-            || !($cids = $this->_valuemap_collect($axes)))
+            || !($cids = $this->_valuemap_collect($axes))) {
             return;
+        }
         $cids = array_filter(array_keys($cids), "is_numeric");
-        $result = $this->conf->qe("select contactId, firstName, lastName, email, roles, contactTags from ContactInfo where contactId ?a", $cids);
+        $result = $this->conf->qe("select contactId, firstName, lastName, affiliation, email, roles, contactTags from ContactInfo where contactId ?a", $cids);
         $this->reviewers = [];
-        while (($c = Contact::fetch($result, $this->conf)))
+        while (($c = Contact::fetch($result, $this->conf))) {
             $this->reviewers[$c->contactId] = $c;
+        }
         Dbl::free($result);
-        uasort($this->reviewers, "Contact::compare");
+        uasort($this->reviewers, $this->conf->user_comparator());
         $i = 0;
         $m = [];
         foreach ($this->reviewers as $c) {
@@ -595,7 +692,7 @@ class FormulaGraph extends MessageSet {
         $i = 0;
         $m = [];
         foreach ($this->conf->defined_round_list() as $n => $rname)
-            if (get($rs, $n)) {
+            if ($rs[$n] ?? null) {
                 $this->remapped_rounds[++$i] = $rname;
                 $m[$n] = $i;
             }
@@ -617,35 +714,38 @@ class FormulaGraph extends MessageSet {
     }
 
     private function _xorder_rewrite() {
-        if (!$this->_xorder_data)
+        if (!$this->_xorder_data) {
             return;
+        }
         usort($this->_xorder_data, function ($x, $y) {
-            if ($x[1] != $y[1])
+            if ($x[1] != $y[1]) {
                 return $x[1] < $y[1] ? -1 : 1;
-            else if ($x[0] != $y[0])
+            } else if ($x[0] != $y[0]) {
                 return $x[0] < $y[0] ? -1 : 1;
-            else
+            } else {
                 return 0;
+            }
         });
         $xo = [];
-        foreach ($this->_xorder_data as $i => $d)
+        foreach ($this->_xorder_data as $i => $d) {
             $xo[$d[0]] = $i + 1;
+        }
         $this->_xorder_map = $xo;
         if ($this->type & self::CDF) {
-            foreach ($this->_data as $dx) {
+            foreach ($this->_cdf_data as $dx) {
                 foreach ($dx->d as &$d) {
-                    $d = get($xo, $d);
+                    $d = $xo[$d];
                 }
                 unset($d);
             }
         } else if ($this->type & self::BARCHART) {
-            foreach ($this->_data as &$d) {
-                $d[0] = get($xo, $d[0]);
+            foreach ($this->_bar_data as &$d) {
+                $d[0] = $xo[$d[0]];
             }
         } else {
-            foreach ($this->_data as &$dx) {
+            foreach ($this->_scatter_data as &$dx) {
                 foreach ($dx as &$d) {
-                    $d[0] = get($xo, $d[0]);
+                    $d[0] = $xo[$d[0]];
                 }
                 unset($d);
             }
@@ -653,51 +753,63 @@ class FormulaGraph extends MessageSet {
     }
 
     function data() {
-        if ($this->_data !== null)
-            return $this->_data;
+        if ($this->_cdf_data === null
+            && $this->_bar_data === null
+            && $this->_scatter_data === null) {
+            // load data
+            $paperIds = array_keys($this->papermap);
+            $queryOptions = ["paperId" => $paperIds, "tags" => true];
+            foreach ($this->fxs as $f) {
+                $f->add_query_options($queryOptions);
+            }
+            $this->fy->add_query_options($queryOptions);
+            if (($this->fx && $this->fx->indexed()) || $this->fy->indexed()) {
+                $queryOptions["reviewSignatures"] = true;
+            }
 
-        // load data
-        $paperIds = array_keys($this->papermap);
-        $queryOptions = array("paperId" => $paperIds, "tags" => true);
-        $this->fx->add_query_options($queryOptions);
-        $this->fy->add_query_options($queryOptions);
-        if ($this->fx->indexed() || $this->fy->indexed())
-            $queryOptions["reviewSignatures"] = true;
+            $result = $this->conf->paper_result($queryOptions, $this->user);
+            $rowset = new PaperInfoSet;
+            while (($prow = PaperInfo::fetch($result, $this->user))) {
+                if ($this->user->can_view_paper($prow)) {
+                    $rowset->add($prow);
+                }
+            }
+            Dbl::free($result);
 
-        $result = $this->conf->paper_result($queryOptions, $this->user);
-        $rowset = new PaperInfoSet;
-        while (($prow = PaperInfo::fetch($result, $this->user)))
-            if ($this->user->can_view_paper($prow))
-                $rowset->add($prow);
-        Dbl::free($result);
-
-        if ($this->type & self::CDF)
-            $this->_cdf_data($rowset);
-        else if ($this->type & self::BARCHART)
-            $this->_combine_data($rowset);
-        else
-            $this->_scatter_data($rowset);
-        $this->_reviewer_reformat();
-        $this->_revround_reformat();
-        $this->_tag_reformat();
-        $this->_xorder_rewrite();
-
-        return $this->_data;
+            if ($this->type & self::CDF) {
+                $this->_cdf_data($rowset);
+            } else if ($this->type & self::BARCHART) {
+                $this->_combine_data($rowset);
+            } else {
+                $this->_scatter_data($rowset);
+            }
+            $this->_reviewer_reformat();
+            $this->_revround_reformat();
+            $this->_tag_reformat();
+            $this->_xorder_rewrite();
+        }
+        if ($this->type & self::CDF) {
+            return $this->_cdf_data;
+        } else if ($this->type & self::BARCHART) {
+            return $this->_bar_data;
+        } else {
+            return $this->_scatter_data;
+        }
     }
 
+    /** @param 'x'|'y' $axis */
     function axis_json($axis) {
         $isx = $axis === "x";
-        $f = $isx ? $this->fx : $this->fy;
-        $j = array();
+        $j = [];
 
-        $counttype = $this->fx->indexed() ? "reviews" : "papers";
+        $counttype = $this->fx && $this->fx->indexed() ? "reviews" : "papers";
         if ($isx) {
             $j["label"] = $this->fx_expression;
         } else if ($this->type === self::FBARCHART) {
             $j["label"] = "fraction of $counttype";
             $j["fraction"] = true;
         } else if ($this->type === self::BARCHART
-                   && $f->expression === "sum(1)") {
+                   && $this->fy->expression === "sum(1)") {
             $j["label"] = "# $counttype";
         } else if ($this->type === self::RAWCDF) {
             $j["label"] = "Cumulative count of $counttype";
@@ -705,33 +817,30 @@ class FormulaGraph extends MessageSet {
         } else if ($this->type & self::CDF) {
             $j["label"] = "CDF of $counttype";
         } else if (!$this->fx_type) {
-            $j["label"] = $f->expression;
+            $j["label"] = $this->fy->expression;
         }
 
-        $format = $f->result_format();
-        if ($isx && $this->fxs && $format) {
-            foreach ($this->fxs as $fx) {
-                if ($fx->result_format() !== $format) {
-                    $format = 0;
-                    break;
-                }
-            }
-        }
-        if ($isx && $this->fx_type == Fexpr::FSEARCH) {
-            $j["ticks"] = ["named", $this->queries];
-        } else if ($isx && $this->fx_type == Fexpr::FTAG) {
+        $format = $isx ? $this->fx_type : $this->fy->result_format();
+        $ticks = $named_ticks = null;
+        if ($isx && $this->fx_type === Fexpr::FSEARCH) {
+            $named_ticks = $this->queries;
+        } else if ($isx && $this->fx_type === Fexpr::FTAG) {
             $tagger = new Tagger($this->user);
-            $j["ticks"] = ["named", array_map(function ($t) use ($tagger) {
+            $named_ticks = array_map(function ($t) use ($tagger) {
                 return $tagger->unparse($t);
-            }, array_keys($this->tags))];
+            }, array_keys($this->tags));
         } else if ($format instanceof ReviewField) {
             $n = count($format->options);
             $ol = $format->option_letter ? chr($format->option_letter - $n) : null;
-            $j["ticks"] = ["score", $n, $ol, $format->option_class_prefix];
+            $ticks = ["score", $n, $ol, $format->option_class_prefix];
             if ($format->option_letter && $isx) {
                 $j["flip"] = true;
             }
         } else {
+            if ($format === Fexpr::FTAGVALUE
+                && ($isx ? $this->_x_tagvalue_bool : $this->_y_tagvalue_bool)) {
+                $format = Fexpr::FBOOL;
+            }
             if ($format === Fexpr::FREVIEWER) {
                 $x = [];
                 foreach ($this->reviewers as $r) {
@@ -744,38 +853,44 @@ class FormulaGraph extends MessageSet {
                     $rd["id"] = $r->contactId;
                     $x[$r->sort_position] = $rd;
                 }
-                $j["ticks"] = ["named", $x];
+                $named_ticks = $x;
             } else if ($format === Fexpr::FDECISION) {
-                $j["ticks"] = ["named", $this->conf->decision_map()];
+                $named_ticks = $this->conf->decision_map();
             } else if ($format === Fexpr::FBOOL) {
-                $j["ticks"] = ["named", ["no", "yes"]];
-            } else if ($format instanceof PaperOption && $format->has_selector()) {
-                $j["ticks"] = ["named", $format->selector];
+                $named_ticks = ["no", "yes"];
+            } else if ($format instanceof Selector_PaperOption) {
+                $named_ticks = $format->selector_options();
             } else if ($format === Fexpr::FROUND) {
-                $j["ticks"] = ["named", $this->remapped_rounds];
+                $named_ticks = $this->remapped_rounds;
             } else if ($format === Fexpr::FREVTYPE) {
-                $j["ticks"] = ["named", ReviewForm::$revtype_names];
+                $named_ticks = ReviewForm::$revtype_names;
             } else if (is_int($format) && $format >= Fexpr::FDATE && $format <= Fexpr::FTIMEDELTA) {
-                $j["ticks"] = ["time"];
+                $ticks = ["time"];
             } else if ($isx && $this->_xorder_map) {
-                if (isset($j["label"]))
+                if (isset($j["label"])) {
                     $j["label"] .= " order";
-                else
+                } else {
                     $j["label"] = "order";
+                }
             }
-            if (!$isx && isset($j["ticks"])) {
+            if (!$isx && ($ticks !== null || $named_ticks !== null)) {
                 $j["rotate_ticks"] = -90;
             }
         }
 
-        if ($isx && $this->_xorder_map && isset($j["ticks"])
-            && $j["ticks"][0] === "named") {
+        if ($isx && $this->_xorder_map && $named_ticks !== null) {
             $newticks = [];
-            foreach ($j["ticks"][1] as $n => $x) {
+            foreach ($named_ticks as $n => $x) {
                 if (isset($this->_xorder_map[$n]))
-                    $newticks[$this->_xorder_map[$n]] = $x;
+                    $named_ticks[$this->_xorder_map[$n]] = $x;
             }
-            $j["ticks"][1] = $newticks;
+            $named_ticks = $newticks;
+        }
+
+        if ($ticks !== null) {
+            $j["ticks"] = $ticks;
+        } else if ($named_ticks !== null) {
+            $j["ticks"] = ["named", $named_ticks];
         }
 
         if ($this->_axis_remapped & ($isx ? 1 : 2)) {
@@ -785,10 +900,12 @@ class FormulaGraph extends MessageSet {
     }
 
     function type_json() {
-        $tj = [self::SCATTER => "scatter", self::CDF => "cdf",
+        $tj = [
+            self::SCATTER => "scatter", self::CDF => "cdf",
             self::RAWCDF => "cumulative-count", self::BARCHART => "bar",
-            self::FBARCHART => "full-stack", self::BOXPLOT => "box"];
-        return get($tj, $this->type);
+            self::FBARCHART => "full-stack", self::BOXPLOT => "box"
+        ];
+        return $tj[$this->type] ?? null;
     }
 
     function graph_json() {

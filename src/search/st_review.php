@@ -11,20 +11,25 @@ class ReviewSearchMatcher extends ContactCountMatcher {
     const PROPOSED = 32;
     const MYREQUEST = 64;
     const APPROVED = 128;
+    const SUBMITTED = 256;
 
+    /** @var int */
     private $review_type = 0;
+    /** @var int */
     private $completeness = 0;
     public $view_score;
     public $round;
     public $review_testable = true;
     private $tokens;
     private $wordcountexpr;
+    /** @var ?ReviewField */
     private $rfield;
     private $rfield_score1;
     private $rfield_score2;
     private $rfield_scoret;
     private $rfield_scorex;
     private $rfield_text;
+    /** @var ?int */
     private $requester;
     private $ratings;
     private $frozen = false;
@@ -51,8 +56,13 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         "pending" => self::PENDINGAPPROVAL,
         "pending-approval" => self::PENDINGAPPROVAL,
         "pendingapproval" => self::PENDINGAPPROVAL,
+        "pending-my-approval" => self::PENDINGAPPROVAL | self::MYREQUEST,
+        "pendingmy-approval" => self::PENDINGAPPROVAL | self::MYREQUEST,
+        "pending-myapproval" => self::PENDINGAPPROVAL | self::MYREQUEST,
+        "pendingmyapproval" => self::PENDINGAPPROVAL | self::MYREQUEST,
         "proposal" => self::PROPOSED,
         "proposed" => self::PROPOSED,
+        "submitted" => self::SUBMITTED
     ];
 
     function __construct($countexpr = null, $contacts = null) {
@@ -125,6 +135,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
             $this->round = $rounds;
         }
     }
+    /** @param int $cid */
     function apply_requester($cid) {
         $this->requester = $cid;
     }
@@ -182,8 +193,10 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         if ($this->test(0))
             return false;
         $where = [];
-        if ($this->completeness & self::COMPLETE) {
+        if ($this->completeness & self::SUBMITTED) {
             $where[] = "reviewSubmitted is not null";
+        } else if ($this->completeness & self::COMPLETE) {
+            $where[] = "reviewSubmitted is not null or timeApprovalRequested<0";
         }
         if ($this->completeness & self::PENDINGAPPROVAL) {
             $where[] = "(reviewSubmitted is null and timeApprovalRequested>0)";
@@ -227,7 +240,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         if ($this->ratings && $this->ratings->must_exist()) {
             $where[] = "exists (select * from ReviewRating where paperId={$table_name}.paperId and reviewId={$table_name}.reviewId)";
         }
-        if ($this->requester) {
+        if ($this->requester !== null) {
             $where[] = "requestedBy=" . $this->requester;
         }
         if ($this->completeness & self::MYREQUEST) {
@@ -258,20 +271,20 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         }
         if ($this->completeness) {
             if ((($this->completeness & self::COMPLETE)
-                 && !$rrow->reviewSubmitted)
+                 && $rrow->reviewStatus < ReviewInfo::RS_ADOPTED)
+                || (($this->completeness & self::SUBMITTED)
+                    && $rrow->reviewStatus < ReviewInfo::RS_COMPLETED)
                 || (($this->completeness & self::INCOMPLETE)
                     && !$rrow->reviewNeedsSubmit)
                 || (($this->completeness & self::INPROGRESS)
-                    && ($rrow->reviewSubmitted || $rrow->reviewModified < 2))
+                    && $rrow->reviewStatus !== ReviewInfo::RS_DRAFTED
+                    && $rrow->reviewStatus !== ReviewInfo::RS_DELIVERED)
                 || (($this->completeness & self::NOTSTARTED)
-                    && $rrow->reviewModified > 1)
+                    && $rrow->reviewStatus >= ReviewInfo::RS_DRAFTED)
                 || (($this->completeness & self::PENDINGAPPROVAL)
-                    && ($rrow->reviewSubmitted
-                        || $rrow->timeApprovalRequested <= 0
-                        || ($rrow->requestedBy != $user->contactId
-                            && !$user->allow_administer($prow))))
+                    && $rrow->reviewStatus !== ReviewInfo::RS_DELIVERED)
                 || (($this->completeness & self::APPROVED)
-                    && $rrow->timeApprovalRequested >= 0)
+                    && $rrow->reviewStatus !== ReviewInfo::RS_ADOPTED)
                 || (($this->completeness & self::MYREQUEST)
                     && $rrow->requestedBy != $user->contactId)) {
                 return false;
@@ -294,7 +307,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
                 return false;
             }
         } else if ($rrow->reviewType > 0
-                   && $rrow->reviewSubmitted <= 0
+                   && $rrow->reviewStatus < ReviewInfo::RS_ADOPTED
                    && $rrow->reviewNeedsSubmit <= 0
                    && !$this->completeness) {
             // don't count delegated reviews unless contacts or completeness given
@@ -305,7 +318,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
             return false;
         }
         if ($this->requester !== null
-            && ($rrow->requestedBy != $this->requester
+            && ($rrow->requestedBy !== $this->requester
                 || !$user->can_view_review_requester($prow, $rrow))) {
             return false;
         }
@@ -366,7 +379,7 @@ class Review_SearchTerm extends SearchTerm {
         $this->rsm = $rsm;
         $this->rsm->finish();
     }
-    static function keyword_factory($keyword, $user, $kwfj, $m) {
+    static function keyword_factory($keyword, Contact $user, $kwfj, $m) {
         $c = str_replace("-", "", $m[1]);
         $t = str_replace("-", "", $m[2]);
         return (object) [
@@ -429,7 +442,7 @@ class Review_SearchTerm extends SearchTerm {
         return new Review_SearchTerm($rsm);
     }
 
-    static function review_field_factory($keyword, $user, $kwfj, $m) {
+    static function review_field_factory($keyword, Contact $user, $kwfj, $m) {
         $f = $user->conf->find_all_fields($keyword);
         if (count($f) == 1 && $f[0] instanceof ReviewField) {
             return (object) [
@@ -571,5 +584,8 @@ class Review_SearchTerm extends SearchTerm {
             }
             return $this->rsm->test_finish($n);
         }
+    }
+    function debug_json() {
+        return ["type" => $this->type, "count" => $this->rsm->countexpr()];
     }
 }

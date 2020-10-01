@@ -34,7 +34,7 @@ function choose_setting_group($qreq, SettingValues $sv) {
         $Me->escape();
     }
     if ($want_group !== $req_group && !$qreq->post && $qreq->post_empty()) {
-        $Conf->self_redirect($qreq, ["group" => $want_group, "anchor" => $sv->group_anchorid($req_group)]);
+        $Conf->redirect_self($qreq, ["group" => $want_group, "anchor" => $sv->group_anchorid($req_group)]);
     }
     $sv->mark_interesting_group($want_group);
     return $want_group;
@@ -45,16 +45,17 @@ $_SESSION["sg"] = $Group;
 if (isset($Qreq->update) && $Qreq->post_ok()) {
     if ($Sv->execute()) {
         $Me->save_session("settings_highlight", $Sv->message_field_map());
-        if (!empty($Sv->changes))
+        if (!empty($Sv->updated_fields())) {
             $Sv->conf->confirmMsg("Changes saved.");
-        else
+        } else {
             $Sv->conf->warnMsg("No changes.");
+        }
         $Sv->report();
-        $Conf->self_redirect($Qreq);
+        $Conf->redirect_self($Qreq);
     }
 }
 if (isset($Qreq->cancel) && $Qreq->post_ok()) {
-    $Conf->self_redirect($Qreq);
+    $Conf->redirect_self($Qreq);
 }
 
 $Sv->crosscheck();
@@ -63,19 +64,21 @@ $Conf->header("Settings", "settings", ["subtitle" => $Sv->group_title($Group), "
 echo Ht::unstash(); // clear out other script references
 echo $Conf->make_script_file("scripts/settings.js"), "\n";
 
-echo Ht::form(hoturl_post("settings", "group=$Group"),
+echo Ht::form($Conf->hoturl_post("settings", "group=$Group"),
               ["id" => "settingsform", "class" => "need-unload-protection"]);
 
-echo '<div class="leftmenu-left"><nav class="leftmenu-menu"><h1 class="leftmenu">Settings</h1><div class="leftmenu-list">';
+echo '<div class="leftmenu-left"><nav class="leftmenu-menu">',
+    '<h1 class="leftmenu"><a href="" class="uic js-leftmenu qq">Settings</a></h1>',
+    '<ul class="leftmenu-list">';
 foreach ($Sv->group_members("") as $gj) {
     if ($gj->name === $Group) {
-        echo '<div class="leftmenu-item active">', $gj->title, '</div>';
+        echo '<li class="leftmenu-item active">', $gj->title, '</li>';
     } else if ($gj->title) {
-        echo '<div class="leftmenu-item ui js-click-child">',
-            '<a href="', hoturl("settings", "group={$gj->name}"), '">', $gj->title, '</a></div>';
+        echo '<li class="leftmenu-item ui js-click-child">',
+            '<a href="', hoturl("settings", "group={$gj->name}"), '">', $gj->title, '</a></li>';
     }
 }
-echo '</div><div class="leftmenu-if-left if-alert mt-5">',
+echo '</ul><div class="leftmenu-if-left if-alert mt-5">',
     Ht::submit("update", "Save changes", ["class" => "btn-primary"]),
     "</div></nav></div>\n",
     '<main class="leftmenu-content main-column">',

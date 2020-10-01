@@ -9,7 +9,8 @@ class Author_Fexpr extends Fexpr {
     function __construct(FormulaCall $ff, Formula $formula) {
         if ($ff->modifier === "none") {
             $this->matchtype = $ff->modifier;
-        } else if (is_array($ff->modifier) && $ff->modifier[0] == $formula->user->contactId) {
+        } else if (is_array($ff->modifier)
+                   && $ff->modifier[0] == $formula->user->contactId) {
             $this->matchtype = $formula->user->contactId;
         } else if (is_array($ff->modifier) || is_object($ff->modifier)) {
             self::$matchers[] = $ff->modifier;
@@ -23,8 +24,8 @@ class Author_Fexpr extends Fexpr {
                 $arg = substr($arg, 1);
             }
             $csm = new ContactSearch(ContactSearch::F_TAG, $arg, $formula->user);
-            if ($csm->ids !== false) {
-                $ff->modifier = $csm->ids;
+            if (!$csm->has_error()) {
+                $ff->modifier = $csm->user_ids();
             } else if (!str_starts_with($arg, "#")) {
                 $ff->modifier = Text::star_text_pregexes($arg);
             } else {
@@ -36,18 +37,19 @@ class Author_Fexpr extends Fexpr {
         }
     }
     function compile(FormulaCompiler $state) {
+        $prow = $state->_prow();
         $state->queryOptions["authorInformation"] = true;
         if ($this->matchtype === null) {
-            $v = 'count($prow->author_list())';
+            $v = "count({$prow}->author_list())";
         } else if ($this->matchtype === "none") {
-            $v = '!$prow->author_list()';
+            $v = "!{$prow}->author_list()";
         } else if (is_int($this->matchtype)) {
             // can always see if you are an author
-            return '($prow->has_author(' . $this->matchtype . ') ? 1 : 0)';
+            return "({$prow}->has_author(" . $this->matchtype . ") ? 1 : 0)";
         } else {
-            $v = 'Author_Fexpr::count_matches($prow, ' . $this->matchidx . ')';
+            $v = "Author_Fexpr::count_matches({$prow}, " . $this->matchidx . ')';
         }
-        return '($contact->allow_view_authors($prow) ? ' . $v . ' : null)';
+        return "(\$contact->allow_view_authors({$prow}) ? " . $v . ' : null)';
     }
     static function count_matches(PaperInfo $prow, $matchidx) {
         $mf = self::$matchers[$matchidx];
@@ -59,7 +61,7 @@ class Author_Fexpr extends Fexpr {
             }
         } else {
             foreach ($prow->author_list() as $au) {
-                $text = $au->name_email_aff_text();
+                $text = $au->name(NAME_E|NAME_A);
                 if (Text::match_pregexes($mf, $text, UnicodeHelper::deaccent($text)))
                     ++$n;
             }

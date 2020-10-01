@@ -12,18 +12,21 @@ $null_mailer = new HotCRPMailer($Conf, null, [
 ]);
 
 $Qreq->rev_round = (string) $Conf->sanitize_round_name($Qreq->rev_round);
-if ($Qreq->post_ok())
+if ($Qreq->post_ok()) {
     header("X-Accel-Buffering: no");  // NGINX: do not hold on to file
+}
 
 
 function assignment_defaults($qreq) {
     $defaults = [];
-    if (($action = $qreq->default_action) && $action !== "guess")
+    if (($action = $qreq->default_action) && $action !== "guess") {
         $defaults["action"] = $action;
+    }
     $defaults["round"] = $qreq->rev_round;
-    if ($qreq->requestreview_notify && $qreq->requestreview_body)
+    if ($qreq->requestreview_notify && $qreq->requestreview_body) {
         $defaults["extrev_notify"] = ["subject" => $qreq->requestreview_subject,
                                       "body" => $qreq->requestreview_body];
+    }
     return $defaults;
 }
 
@@ -34,28 +37,30 @@ function keep_browser_alive($assignset, $lineno, $line) {
     global $Conf, $csv_lineno, $csv_preparing, $csv_started;
     $time = microtime(true);
     $csv_lineno = $lineno;
-    if (!$csv_started)
+    if (!$csv_started) {
         $csv_started = $time;
-    else if ($time - $csv_started > 1) {
+    } else if ($time - $csv_started > 1) {
         if (!$csv_preparing) {
             echo '<div id="foldmail" class="foldc fold2o">',
                 '<div class="fn fx2 merror">Preparing assignments.<br><span id="mailcount"></span></div>',
                 "</div>";
             $csv_preparing = true;
         }
-        if ($assignset->filename)
+        if ($assignset->filename) {
             $text = '<span class="lineno">'
                 . htmlspecialchars($assignset->filename) . ":$lineno:</span>";
-        else
+        } else {
             $text = "<span class=\"lineno\">line $lineno:</span>";
-        if ($line === false)
+        }
+        if ($line === false) {
             $text .= " processing";
-        else
-            $text .= " <code>" . htmlspecialchars(join(",", $line)) . "</code>";
+        } else {
+            $text .= " <code>" . htmlspecialchars(join(",", $line->as_array())) . "</code>";
+        }
         echo Ht::unstash_script("\$\$('mailcount').innerHTML=" . json_encode_browser($text) . ";");
         flush();
-        while (@ob_end_flush())
-            /* skip */;
+        while (@ob_end_flush()) {
+        }
     }
 }
 
@@ -79,7 +84,7 @@ function complete_assignment($qreq, $callback) {
 // redirect if save cancelled
 if (isset($Qreq->saveassignment) && isset($Qreq->cancel)) {
     unset($Qreq->saveassignment);
-    $Conf->self_redirect($Qreq); // should not return
+    $Conf->redirect_self($Qreq); // should not return
 }
 
 // perform quick assignments all at once
@@ -88,40 +93,23 @@ if (isset($Qreq->saveassignment)
     && isset($Qreq->file)
     && $Qreq->assignment_size_estimate < 1000
     && complete_assignment($Qreq, null)) {
-    $Conf->self_redirect($Qreq);
+    $Conf->redirect_self($Qreq);
 }
 
 
 $Conf->header("Assignments", "bulkassign", ["subtitle" => "Bulk update"]);
 echo '<div class="psmode">',
-    '<div class="papmode"><a href="', hoturl("autoassign"), '">Automatic</a></div>',
-    '<div class="papmode"><a href="', hoturl("manualassign"), '">Manual</a></div>',
-    '<div class="papmode"><a href="', hoturl("conflictassign"), '">Conflicts</a></div>',
-    '<div class="papmode active"><a href="', hoturl("bulkassign"), '">Bulk update</a></div>',
+    '<div class="papmode"><a href="', $Conf->hoturl("autoassign"), '">Automatic</a></div>',
+    '<div class="papmode"><a href="', $Conf->hoturl("manualassign"), '">Manual</a></div>',
+    '<div class="papmode"><a href="', $Conf->hoturl("conflictassign"), '">Conflicts</a></div>',
+    '<div class="papmode active"><a href="', $Conf->hoturl("bulkassign"), '">Bulk update</a></div>',
     '</div><hr class="c" />';
 
 
-// Help list
-echo '<div class="helpside"><div class="helpinside">
-Assignment methods:
-<ul><li><a href="', hoturl("autoassign"), '">Automatic</a></li>
- <li><a href="', hoturl("manualassign"), '">Manual by PC member</a></li>
- <li><a href="', hoturl("assign"), '">Manual by paper</a></li>
- <li><a href="', hoturl("conflictassign"), '">Potential conflicts</a></li>
- <li><a href="', hoturl("bulkassign"), '" class="q"><strong>Bulk update</strong></a></li>
-</ul>
-<hr class="hr">
-<p>Types of PC review:</p>
-<dl><dt>', review_type_icon(REVIEW_PRIMARY), ' Primary</dt><dd>Mandatory review</dd>
-  <dt>', review_type_icon(REVIEW_SECONDARY), ' Secondary</dt><dd>May be delegated to external reviewers</dd>
-  <dt>', review_type_icon(REVIEW_PC), ' Optional</dt><dd>May be declined</dd>
-  <dt>', review_type_icon(REVIEW_META), ' Metareview</dt><dd>Can view all other reviews before completing their own</dd></dl>
-</div></div>';
-
-
 // upload review form action
-if (isset($Qreq->bulkentry) && trim($Qreq->bulkentry) === "Enter assignments")
+if (isset($Qreq->bulkentry) && trim($Qreq->bulkentry) === "Enter assignments") {
     unset($Qreq->bulkentry);
+}
 if (isset($Qreq->upload)
     && $Qreq->post_ok()
     && ($Qreq->bulkentry || $Qreq->has_file("bulk"))) {
@@ -140,6 +128,7 @@ if (isset($Qreq->upload)
         Conf::msg_error("Internal error: cannot read file.");
     } else {
         $assignset = new AssignmentSet($Me, true);
+        $assignset->set_flags(AssignmentState::FLAG_CSV_CONTEXT);
         $defaults = assignment_defaults($Qreq);
         $text = convert_to_utf8($text);
         $assignset->parse($text, $filename, $defaults, "keep_browser_alive");
@@ -155,10 +144,11 @@ if (isset($Qreq->upload)
 
             $atypes = $assignset->assigned_types();
             $apids = $assignset->assigned_pids(true);
-            echo Ht::form(hoturl_post("bulkassign",
-                                      ["saveassignment" => 1,
-                                       "assigntypes" => join(" ", $atypes),
-                                       "assignpids" => join(" ", $apids)])),
+            echo Ht::form($Conf->hoturl_post("bulkassign", [
+                    "saveassignment" => 1,
+                    "assigntypes" => join(" ", $atypes),
+                    "assignpids" => join(" ", $apids)
+                ])),
                 Ht::hidden("default_action", get($defaults, "action", "guess")),
                 Ht::hidden("rev_round", $defaults["round"]),
                 Ht::hidden("file", $text),
@@ -192,7 +182,25 @@ if (isset($Qreq->saveassignment)
 }
 
 
-echo Ht::form(hoturl_post("bulkassign", "upload=1"));
+// Help list
+echo '<div class="helpside"><div class="helpinside">
+Assignment methods:
+<ul><li><a href="', hoturl("autoassign"), '">Automatic</a></li>
+ <li><a href="', hoturl("manualassign"), '">Manual by PC member</a></li>
+ <li><a href="', hoturl("assign"), '">Manual by paper</a></li>
+ <li><a href="', hoturl("conflictassign"), '">Potential conflicts</a></li>
+ <li><a href="', hoturl("bulkassign"), '" class="q"><strong>Bulk update</strong></a></li>
+</ul>
+<hr class="hr">
+<p>Types of PC review:</p>
+<dl><dt>', review_type_icon(REVIEW_PRIMARY), ' Primary</dt><dd>Mandatory review</dd>
+  <dt>', review_type_icon(REVIEW_SECONDARY), ' Secondary</dt><dd>May be delegated to external reviewers</dd>
+  <dt>', review_type_icon(REVIEW_PC), ' Optional</dt><dd>May be declined</dd>
+  <dt>', review_type_icon(REVIEW_META), ' Metareview</dt><dd>Can view all other reviews before completing their own</dd></dl>
+</div></div>';
+
+
+echo Ht::form($Conf->hoturl_post("bulkassign", "upload=1"));
 
 // Upload
 echo '<div class="lg"><div class="f-i" style="margin-top:1em">',
@@ -251,7 +259,7 @@ if (($requestreview_template = $null_mailer->expand_template("requestreview"))) 
 echo '<div class="lg"></div>', Ht::submit("Prepare assignments", ["class" => "btn-primary"]),
     " &nbsp; <span class=\"hint\">You’ll be able to check the assignments before they are saved.</span></div>\n";
 
-echo '<div style="margin-top:1.5em"><a href="', hoturl_post("search", "fn=get&amp;getfn=pcassignments&amp;t=manager&amp;q=&amp;p=all"), '">Download current PC review assignments</a></div>';
+echo '<div style="margin-top:1.5em"><a href="', $Conf->hoturl_post("search", "fn=get&amp;getfn=pcassignments&amp;t=manager&amp;q=&amp;p=all"), '">Download current PC review assignments</a></div>';
 
 echo "</form>
 

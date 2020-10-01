@@ -8,34 +8,44 @@ class SearchConfig_API {
         if ($report !== "pl" && $report !== "pf") {
             return new JsonResult(400, "Bad request.");
         }
-        if ($qreq->method() !== "GET" && $user->privChair) {
+        $search = new PaperSearch($user, "NONE");
+
+        if ($qreq->method() === "POST" && $user->privChair) {
             if (!isset($qreq->display)) {
                 return new JsonResult(400, "Bad request.");
             }
-            $base_display = "";
-            if ($report === "pl") {
-                $base_display = $user->conf->review_form()->default_display();
+            $pl = new PaperList($report, $search, ["sort" => true]);
+            $pl->apply_view_report_default();
+            $default_view = $pl->unparse_view(true);
+            $pl->parse_view($qreq->display, PaperList::VIEWORIGIN_EXPLICIT);
+            $parsed_view = $pl->unparse_view(true);
+
+            // check for errors
+            $pl->table_html();
+            if ($pl->message_set()->has_error()) {
+                return new JsonResult([
+                    "ok" => false,
+                    "errors" => $pl->message_set()->error_texts()
+                ]);
             }
-            $display = simplify_whitespace($qreq->display);
-            if ($display === $base_display) {
+
+            if ($parsed_view === $default_view) {
                 $user->conf->save_setting("{$report}display_default", null);
             } else {
-                $user->conf->save_setting("{$report}display_default", 1, $display);
+                $user->conf->save_setting("{$report}display_default", 1, join(" ", $parsed_view));
             }
             $user->save_session("{$report}display", null);
         }
 
-        $search = new PaperSearch($user, "NONE");
-        $pl = new PaperList($search, ["sort" => true, "report" => $report, "no_session_display" => true, "display" => ""]);
-        $vb = $pl->viewer_list("s");
+        $pl = new PaperList($report, $search, ["sort" => true]);
+        $pl->apply_view_report_default();
+        $vd = $pl->unparse_view(true);
 
-        $search = new PaperSearch($user, "NONE");
-        $pl = new PaperList($search, ["sort" => true, "report" => $report, "no_session_display" => true]);
-        $vd = PaperList::viewer_diff($pl->viewer_list("s"), $vb);
-
-        $search = new PaperSearch($user, get($qreq, "q", "NONE"));
-        $pl = new PaperList($search, ["sort" => get($qreq, "sort", true), "report" => $report]);
-        $vr = PaperList::viewer_diff($pl->viewer_list("s"), $vb);
+        $search = new PaperSearch($user, $qreq->q ?? "NONE");
+        $pl = new PaperList($report, $search, ["sort" => $qreq->sort ?? true]);
+        $pl->apply_view_report_default();
+        $pl->apply_view_session();
+        $vr = $pl->unparse_view(true);
 
         return new JsonResult([
             "ok" => true, "report" => $report,
@@ -60,8 +70,6 @@ class SearchConfig_API {
     }
 
     static function save_namedformula(Contact $user, Qrequest $qreq) {
-        global $Now;
-
         // capture current formula set
         $new_formula_by_id = $formula_by_id = $user->conf->named_formulas();
         $max_id = array_reduce($formula_by_id, function ($max, $f) {
@@ -161,10 +169,10 @@ class SearchConfig_API {
                 $fdef = $formula_by_id[$f->formulaId] ?? null;
                 if (!$fdef) {
                     $q[] = "insert into Formula set name=?, expression=?, createdBy=?, timeModified=?";
-                    array_push($qv, $f->name, $f->expression, $user->privChair ? -$user->contactId : $user->contactId, $Now);
+                    array_push($qv, $f->name, $f->expression, $user->privChair ? -$user->contactId : $user->contactId, Conf::$now);
                 } else if ($f->name !== $fdef->name || $f->expression !== $fdef->expression) {
                     $q[] = "update Formula set name=?, expression=?, timeModified=? where formulaId=?";
-                    array_push($qv, $f->name, $f->expression, $Now, $f->formulaId);
+                    array_push($qv, $f->name, $f->expression, Conf::$now, $f->formulaId);
                 }
             }
             if (empty($new_formula_by_id)) {
@@ -178,7 +186,7 @@ class SearchConfig_API {
             $user->conf->replace_named_formulas(null);
             return self::namedformula($user, $qreq);
         } else {
-            return ["ok" => false, "error" => $msgset->errors(), "errf" => $msgset->message_field_map()];
+            return ["ok" => false, "error" => $msgset->error_texts(), "errf" => $msgset->message_field_map()];
         }
     }
 }

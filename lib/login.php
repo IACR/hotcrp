@@ -3,7 +3,8 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class LoginHelper {
-    const DEBUG = 0;
+    /** @var bool */
+    const DEBUG = false;
 
     static function check_http_auth(Contact $user, Qrequest $qreq) {
         $conf = $user->conf;
@@ -171,7 +172,9 @@ class LoginHelper {
         } else {
             unset($_SESSION["us"]);
         }
-        if (!isset($_SESSION["u"]) || $us[0] !== $_SESSION["u"]) {
+        if (empty($us)) {
+            unset($_SESSION["u"]);
+        } else if (!isset($_SESSION["u"]) || $us[0] !== $_SESSION["u"]) {
             $_SESSION["u"] = $us[0];
         }
     }
@@ -312,9 +315,9 @@ class LoginHelper {
             $e = null;
         } else if (isset($info["unset"])) {
             if ($conf->allow_user_self_register()) {
-                $e = "No account for %2[email]\$H. Check the email address or create a new account <a href=\"%2[newaccount]\$H\">here</a>.";
+                $e = "User %2[email]\$H does not have a password yet. Check the email address or create a password <a href=\"%2[newaccount]\$H\">here</a>.";
             } else {
-                $e = "No account for %2[email]\$H. Check the email address.";
+                $e = "User %2[email]\$H does not have a password. Check the email address.";
             }
         } else if (isset($info["disabled"])) {
             $e = "Your account on this site is disabled. Contact the site administrator for more information.";

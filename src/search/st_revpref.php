@@ -68,7 +68,7 @@ class Revpref_SearchTerm extends SearchTerm {
             $contacts = array_keys($srch->conf->pc_members());
         } else {
             $safe_contacts = 1;
-            $contacts = [$srch->cid];
+            $contacts = [$srch->cxid];
         }
 
         $count = "";
@@ -87,7 +87,7 @@ class Revpref_SearchTerm extends SearchTerm {
 
         if ($count === "") {
             if ($safe_contacts === 0) {
-                $contacts = [$srch->cid];
+                $contacts = [$srch->cxid];
                 $safe_contacts = 1;
             }
             $count = ">0";
@@ -98,19 +98,17 @@ class Revpref_SearchTerm extends SearchTerm {
             $value->is_any = true;
         } else if (preg_match(',\A\s*([=!<>]=?|≠|≤|≥|)\s*(-?\d*)\s*([xyz]?)\z,i', $word, $m)
                    && ($m[2] !== "" || $m[3] !== "")) {
-            if ($m[2] !== "")
+            if ($m[2] !== "") {
                 $value->preference_match = new CountMatcher($m[1] . $m[2]);
-            if ($m[3] !== "")
+            }
+            if ($m[3] !== "") {
                 $value->expertise_match = new CountMatcher(($m[2] === "" ? $m[1] : "") . (121 - ord(strtolower($m[3]))));
+            }
         } else {
             return new False_SearchTerm;
         }
 
-        $qz = new Revpref_SearchTerm($value);
-        if (strcasecmp($word, "none") == 0) {
-            $qz = SearchTerm::make_not($qz);
-        }
-        return $qz;
+        return (new Revpref_SearchTerm($value))->negate_if(strcasecmp($word, "none") === 0);
     }
 
     function sqlexpr(SearchQueryInfo $sqi) {
@@ -130,14 +128,14 @@ class Revpref_SearchTerm extends SearchTerm {
         }
         $q .= " group by paperId";
         $thistab = "Revpref_" . count($sqi->tables);
-        $sqi->add_table($thistab, array("left join", "($q)"));
+        $sqi->add_table($thistab, ["left join", "($q)"]);
         return "coalesce($thistab.count,0)" . $this->rpsm->countexpr();
     }
     function exec(PaperInfo $row, PaperSearch $srch) {
         $can_view = $srch->user->can_view_preference($row, $this->rpsm->safe_contacts);
         $n = 0;
         foreach ($this->rpsm->contact_set() as $cid) {
-            if (($cid == $srch->cid || $can_view)
+            if (($cid == $srch->cxid || $can_view)
                 && $this->rpsm->test_preference($row->preference($cid)))
                 ++$n;
         }

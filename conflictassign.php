@@ -16,65 +16,70 @@ echo '<div class="psmode">',
     '<div class="papmode"><a href="', hoturl("bulkassign"), '">Bulk update</a></div>',
     '</div><hr class="c" />';
 
-echo '<div class="w-text">';
+echo '<div class="w-text mt-5 mb-5">';
 
 if ($Qreq->neg) {
+    echo '<p>This page lists conflicts declared by authors, but not justified by fuzzy matching between authors and PC members’ affiliations and collaborator lists.</p>';
+    echo '<p><a href="', $Conf->hoturl("conflictassign"), '">Check for missing conflicts</a></p>';
 } else {
-    echo '<p>This table lists unconfirmed potential conflicts indicated using reviewer preferences, or detected by fuzzy matching between PC affiliations and collaborator lists and authors. Confirm any true conflicts using the checkboxes.</p>';
+    echo '<p>This page shows potential missing conflicts detected by fuzzy matching between authors and PC members’ affiliations and collaborator lists. Confirm any true conflicts using the checkboxes.</p>';
+    echo '<p><a href="', $Conf->hoturl("conflictassign", "neg=1"), '">Check for inappropriate conflicts</a></p>';
 }
 
 echo "</div>\n";
 
 
-$search = new PaperSearch($Me, [
-    "t" => "alladmin", "q" => "",
-    "pageurl" => $Conf->hoturl_site_relative_raw("conflictassign", ["neg" => $Qreq->neg ? 1 : null])
-]);
+$search = (new PaperSearch($Me, ["t" => "alladmin", "q" => ""]))->set_urlbase("conflictassign", ["neg" => $Qreq->neg ? 1 : null]);
 $rowset = $Conf->paper_set(["allConflictType" => 1, "allReviewerPreference" => 1, "tags" => 1, "paperId" => $search->paper_ids()], $Me);
 
 if ($Qreq->neg) {
     $filter = function ($pl, $row) {
         $user = $pl->reviewer_user();
         $ct = $row->conflict_type($user);
-        return $ct > 0 && $ct < CONFLICT_AUTHOR
+        return !Conflict::is_pinned($ct)
+            && Conflict::is_conflicted($ct)
             && !$row->potential_conflict($user);
     };
 } else {
     $filter = function ($pl, $row) {
         $user = $pl->reviewer_user();
-        return $row->conflict_type($user) == 0
+        $ct = $row->conflict_type($user);
+        return !Conflict::is_pinned($ct)
+            && !Conflict::is_conflicted($ct)
             && ($row->preference($user)[0] <= -100
                 || $row->potential_conflict($user));
     };
 }
-$args = ["display" => "show:authors show:aufull", "rowset" => $rowset];
+$args = ["rowset" => $rowset];
 
 $any = false;
 foreach ($Conf->full_pc_members() as $pc) {
-    $paperlist = new PaperList($search, $args, $Qreq);
-    $paperlist->set_report("conflictassign");
+    $paperlist = new PaperList("conflictassign", $search, $args, $Qreq);
     $paperlist->set_reviewer_user($pc);
     $paperlist->set_row_filter($filter);
     $paperlist->set_table_id_class(null, "pltable-fullw");
-    $tr = $paperlist->table_render("conflictassign", ["header_links" => false, "nofooter" => true]);
+    $tr = $paperlist->table_render(["nofooter" => true, "fullheader" => true]);
     if ($paperlist->count > 0) {
-        if (!$any)
+        if (!$any) {
             echo Ht::form(hoturl("conflictassign")),
                 $tr->table_start,
                 Ht::unstash(),
                 ($tr->thead ? : ""),
                 $tr->tbody_start();
-        else
+        } else {
             echo $tr->heading_separator_row();
+        }
         $t = $Me->reviewer_html_for($pc);
-        if ($pc->affiliation)
+        if ($pc->affiliation) {
             $t .= " <span class=\"auaff\">(" . htmlspecialchars($pc->affiliation) . ")</span>";
+        }
         echo $tr->heading_row($t, ["no_titlecol" => true]), $tr->body_rows();
         $any = true;
     }
 }
-if ($any)
+if ($any) {
     echo "  </tbody>\n</table></form>";
+}
 
 echo '<hr class="c" />';
 $Conf->footer();

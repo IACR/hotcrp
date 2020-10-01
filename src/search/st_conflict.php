@@ -43,17 +43,19 @@ class Conflict_SearchTerm extends SearchTerm {
         $can_view = $srch->user->can_view_conflicts($row);
         $n = 0;
         foreach ($this->csm->contact_set() as $cid) {
-            if (($cid == $srch->cid || $can_view)
+            if (($cid == $srch->cxid || $can_view)
                 && $row->has_conflict($cid))
                 ++$n;
         }
         return $this->csm->test($n);
     }
-    function compile_condition(PaperInfo $row, PaperSearch $srch) {
-        if (!$this->ispc)
+    function script_expression(PaperInfo $row, PaperSearch $srch) {
+        if (!$this->ispc) {
             return null;
-        if (!$srch->conf->setting("sub_pcconf"))
+        } else if (!$srch->conf->setting("sub_pcconf")) {
             return $this->exec($row, $srch);
-        return (object) ["type" => "pc_conflict", "cids" => $this->csm->contact_set(), "compar" => $this->csm->compar(), "value" => $this->csm->value()];
+        } else {
+            return ["type" => "pc_conflict", "cids" => $this->csm->contact_set(), "compar" => $this->csm->compar(), "value" => $this->csm->value()];
+        }
     }
 }

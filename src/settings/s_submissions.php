@@ -11,8 +11,9 @@ class Submissions_SettingRenderer {
     static function render_deadlines(SettingValues $sv) {
         echo '<div class="form-g">';
         // maybe sub_reg was overridden
-        if (($sub_reg = $sv->conf->setting("__sub_reg", false)) !== false)
+        if (($sub_reg = $sv->conf->setting("__sub_reg", false)) !== false) {
             $sv->set_oldv("sub_reg", $sub_reg);
+        }
         $sv->echo_entry_group("sub_reg", "Registration deadline", null, "New submissions can be started until this deadline.");
         $sv->echo_entry_group("sub_sub", "Submission deadline", null, "Submissions must be complete by this deadline.");
         $sv->echo_entry_group("sub_grace", "Grace period");
@@ -37,7 +38,7 @@ class Submissions_SettingRenderer {
     }
     static function crosscheck(SettingValues $sv) {
         if ($sv->has_interest("sub_open")
-            && $sv->newv("sub_freeze", -1) == 0
+            && $sv->newv("sub_freeze") == 0
             && $sv->newv("sub_open") > 0
             && $sv->newv("sub_sub") <= 0)
             $sv->warning_at(null, "Authors can update their submissions until the deadline, but there is no deadline. This is sometimes unintentional. You may want to either (1) specify a submission deadline, (2) select “Authors must freeze the final version of each submission”, or (3) manually turn off “Open site for submissions” at the proper time.");
@@ -46,13 +47,12 @@ class Submissions_SettingRenderer {
 
 class Submissions_SettingParser extends SettingParser {
     function validate(SettingValues $sv, Si $si) {
-        global $Now;
         $d1 = $sv->newv($si->name);
         if ($si->name === "sub_open") {
             if ($d1 <= 0
                 && $sv->oldv("sub_open") > 0
                 && $sv->newv("sub_sub") <= 0) {
-                $sv->save("sub_close", $Now);
+                $sv->save("sub_close", Conf::$now);
             }
         } else if ($si->name === "sub_sub") {
             $sv->check_date_before("sub_reg", "sub_sub", true);

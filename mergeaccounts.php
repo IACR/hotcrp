@@ -26,7 +26,7 @@ function crpmerge($qreq, $MiniMe) {
 
     // send mail at start of process
     HotCRPMailer::send_to($merger->oldu, "@mergeaccount",
-                          ["cc" => Text::user_email_to($merger->newu),
+                          ["cc" => Text::nameo($merger->newu, NAME_MAILQUOTE|NAME_E),
                            "other_contact" => $merger->newu]);
 
     // actually merge users or change email
@@ -35,12 +35,12 @@ function crpmerge($qreq, $MiniMe) {
     if (!$merger->has_error()) {
         $Conf->confirmMsg("Merged account " . htmlspecialchars($merger->oldu->email) . ".");
         $merger->newu->log_activity("Account merged " . $merger->oldu->email);
-        go(hoturl("index"));
+        $Conf->redirect();
     } else {
         $merger->newu->log_activity("Account merged " . $merger->oldu->email . " with errors");
         $MergeError = '<div class="multimessage">'
             . join("\n", array_map(function ($m) { return '<div class="mmm">' . $m . '</div>'; },
-                                   $merger->errors()))
+                                   $merger->error_texts()))
             . '</div>';
     }
 }
@@ -64,7 +64,7 @@ if (isset($Qreq->merge) && $Qreq->post_ok()) {
             Ht::error_at("password");
         } else if ($MiniMe->contactId && $MiniMe->contactId == $Me->contactId) {
             $Conf->confirmMsg("Accounts successfully merged.");
-            go(hoturl("index"));
+            $Conf->redirect();
         } else
             crpmerge($Qreq, $MiniMe);
     }
@@ -87,7 +87,7 @@ else
 . "that account into this one. "
 );
 
-echo Ht::form(hoturl_post("mergeaccounts"));
+echo Ht::form($Conf->hoturl_post("mergeaccounts"));
 
 // Try to prevent glasses interactions from screwing up merges
 echo Ht::hidden("actas", $Me->contactId);

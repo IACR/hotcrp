@@ -3,21 +3,26 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Reviews_SettingRenderer {
+    /** @param SettingValues $sv
+     * @param int|'$' $rnum */
     private static function echo_round($sv, $rnum, $nameval, $review_count, $deletable) {
         $rname = "roundname_$rnum";
-        if ($sv->use_req() && $rnum !== '$')
+        if ($sv->use_req() && $rnum !== '$') {
             $nameval = (string) $sv->reqv($rname);
+        }
         $rname_si = $sv->si($rname);
-        if ($nameval === "(new round)" || $rnum === '$')
+        if ($nameval === "(new round)" || $rnum === '$') {
             $rname_si->placeholder = "(new round)";
+        }
         $sv->set_oldv($rname, $nameval);
 
         echo '<div class="mg js-settings-review-round" data-review-round-number="', $rnum, '"><div>',
             $sv->label($rname, "Round"), ' &nbsp;',
             $sv->render_entry($rname);
         echo '<div class="d-inline-block" style="min-width:7em;margin-left:2em">';
-        if ($rnum !== '$' && $review_count)
+        if ($rnum !== '$' && $review_count) {
             echo '<a href="', $sv->conf->hoturl("search", "q=" . urlencode("round:" . ($rnum ? $sv->conf->round_name($rnum) : "none"))), '">(', plural($review_count, "review"), ')</a>';
+        }
         echo '</div>';
         if ($deletable) {
             echo '<div class="d-inline-block" style="padding-left:2em">',
@@ -25,18 +30,20 @@ class Reviews_SettingRenderer {
                 Ht::button("Delete round", ["class" => "js-settings-review-round-delete"]),
                 '</div>';
         }
-        if ($rnum === '$')
+        if ($rnum === '$') {
             echo '<div class="f-h">Names like “R1” and “R2” work well.</div>';
+        }
         echo '</div>';
 
         // deadlines
         $entrysuf = $rnum ? "_$rnum" : "";
-        if ($rnum === '$' && count($sv->conf->round_list()))
+        if ($rnum === '$' && count($sv->conf->round_list())) {
             $dlsuf = "_" . (count($sv->conf->round_list()) - 1);
-        else if ($rnum !== '$' && $rnum)
+        } else if ($rnum !== '$' && $rnum) {
             $dlsuf = "_" . $rnum;
-        else
+        } else {
             $dlsuf = "";
+        }
         $si = $sv->si("extrev_soft$dlsuf");
         $si->date_backup = "pcrev_soft$dlsuf";
         $si = $sv->si("extrev_hard$dlsuf");
@@ -77,44 +84,52 @@ class Reviews_SettingRenderer {
         $sv->set_oldv("rev_roundtag", "#" . $sv->conf->assignment_round(false));
         $round_value = $sv->oldv("rev_roundtag");
         if (preg_match('/\A\#(\d+)\z/', $sv->curv("rev_roundtag"), $m)
-            && get($rounds, intval($m[1]), ";") != ";")
+            && get($rounds, intval($m[1]), ";") != ";") {
             $round_value = $m[0];
+        }
 
         $sv->set_oldv("extrev_roundtag", "#same");
-        if ($sv->conf->setting_data("extrev_roundtag", null) !== null)
+        if ($sv->conf->setting_data("extrev_roundtag", null) !== null) {
             $sv->set_oldv("extrev_roundtag", "#" . $sv->conf->assignment_round(true));
+        }
         $extround_value = $sv->oldv("extrev_roundtag");
         if (preg_match('/\A\#(\d+)\z/', $sv->curv("extrev_roundtag"), $m)
-            && get($rounds, intval($m[1]), ";") != ";")
+            && get($rounds, intval($m[1]), ";") != ";") {
             $extround_value = $m[0];
+        }
 
         // does round 0 exist?
         $print_round0 = true;
         if ($round_value != "#0"
             && $extround_value != "#0"
             && (!$sv->use_req() || $sv->has_reqv("roundname_0"))
-            && !$sv->conf->round0_defined())
+            && !$sv->conf->round0_defined()) {
             $print_round0 = false;
+        }
 
         $roundorder = [];
-        foreach ($sv->conf->defined_round_list() as $i => $rname)
+        foreach ($sv->conf->defined_round_list() as $i => $rname) {
             $roundorder[$i] = $rounds[$i];
-        foreach ($rounds as $i => $rname)
+        }
+        foreach ($rounds as $i => $rname) {
             $roundorder[$i] = $rounds[$i];
-        if ($print_round0)
+        }
+        if ($print_round0) {
             $roundorder[0] = ";";
+        }
 
         // round selector
         $selector = [];
         foreach ($roundorder as $i => $rname) {
-            if ($rname !== "" && $rname !== ";")
+            if ($rname !== "" && $rname !== ";") {
                 $selector["#$i"] = (object) ["label" => $rname, "id" => "rev_roundtag_$i"];
-            else if ($i === 0 && $print_round0)
+            } else if ($i === 0 && $print_round0) {
                 $selector["#0"] = "unnamed";
+            }
         }
 
         echo '<div id="roundtable">', Ht::hidden("has_tag_rounds", 1);
-        $round_map = edb_map($sv->conf->ql("select reviewRound, count(*) from PaperReview group by reviewRound"));
+        $round_map = Dbl::fetch_map($sv->conf->ql("select reviewRound, count(*) from PaperReview group by reviewRound"));
         $num_printed = 0;
         foreach ($roundorder as $i => $rname) {
             if ($i ? $rname !== ";" : $print_round0) {
@@ -152,37 +167,44 @@ class Reviews_SettingRenderer {
         echo '<div class="form-g has-fold foldo">';
         $sv->echo_checkbox('pcrev_any', "PC members can review any submission", ["class" => "uich js-foldup"]);
         if ($sv->conf->setting("pcrev_any")
-            && $sv->conf->check_track_sensitivity(Track::UNASSREV))
+            && $sv->conf->check_track_sensitivity(Track::UNASSREV)) {
             echo '<p class="f-h fx">', $sv->setting_link("Current track settings", "tracks"), ' may restrict self-assigned reviews.</p>';
+        }
         echo "</div>\n";
 
+
         $hint = "";
-        if ($sv->conf->has_any_metareviews())
+        if ($sv->conf->check_track_sensitivity(Track::VIEWREVID)) {
+            $hint = '<p class="settings-ag f-h">' . $sv->setting_link("Current track settings", "tracks") . ' restrict reviewer name visibility.</p>';
+        }
+        $sv->echo_radio_table("pc_seeblindrev", [0 => "Yes",
+                1 => "Only after completing a review for the same submission"],
+            'Can PC members see <strong>reviewer names<span class="fn2"> and comments</span></strong> except for conflicts?',
+            ["after" => $hint]);
+
+
+        $hint = "";
+        if ($sv->conf->has_any_metareviews()) {
             $hint .= ' Metareviewers can always see associated reviews and reviewer names.';
+        }
         if ($sv->conf->check_track_sensitivity(Track::VIEWREV)
-            || $sv->conf->check_track_sensitivity(Track::VIEWALLREV))
+            || $sv->conf->check_track_sensitivity(Track::VIEWALLREV)) {
             $hint .= ' ' . $sv->setting_link("Current track settings", "tracks") . ' restrict review visibility.';
-        if ($hint !== "")
+        }
+        if ($hint !== "") {
             $hint = '<p class="settings-ag f-h">' . ltrim($hint) . '</p>';
-        $sv->echo_radio_table("pc_seeallrev", [Conf::PCSEEREV_YES => "Yes",
-                  Conf::PCSEEREV_UNLESSINCOMPLETE => "Yes, unless they haven’t completed an assigned review for the same submission",
-                  Conf::PCSEEREV_UNLESSANYINCOMPLETE => "Yes, after completing all their assigned reviews",
-                  Conf::PCSEEREV_IFCOMPLETE => "Only after completing a review for the same submission"],
-            'Can PC members <strong>see all reviews<span class="fx2"> and comments</span></strong> except for conflicts?',
-            ["after" => $hint, "fold" => Conf::PCSEEREV_IFCOMPLETE]);
+        }
+        $sv->echo_radio_table("pc_seeallrev", [
+                Conf::PCSEEREV_YES => "Yes",
+                Conf::PCSEEREV_UNLESSINCOMPLETE => "Yes, unless they haven’t completed an assigned review for the same submission",
+                Conf::PCSEEREV_UNLESSANYINCOMPLETE => "Yes, after completing all their assigned reviews",
+                Conf::PCSEEREV_IFCOMPLETE => "Only after completing a review for the same submission"
+            ], 'Can PC members see <strong>review contents<span class="fx2"> and comments</span></strong> except for conflicts?',
+            ["after" => $hint]);
 
         echo '<div class="form-nearby form-g">';
         $sv->echo_checkbox("lead_seerev", "Discussion leads can always see submitted reviews and reviewer names");
         echo '</div>';
-
-
-        $hint = "";
-        if ($sv->conf->check_track_sensitivity(Track::VIEWREVID))
-            $hint = '<p class="settings-ag f-h">' . $sv->setting_link("Current track settings", "tracks") . ' restrict reviewer name visibility.</p>';
-        $sv->echo_radio_table("pc_seeblindrev", [0 => "Yes",
-                1 => "Only after completing a review for the same submission"],
-            'Can PC members see <strong><span class="fn2">comments and </span>reviewer names</strong> except for conflicts?',
-            ["after" => $hint, "fold" => 1]);
 
 
         echo '<div class="form-g">';
@@ -202,23 +224,29 @@ class Reviews_SettingRenderer {
             ], 'Can external reviewers see reviews, comments, and eventual decisions for their assigned submissions, once they’ve completed a review?');
     }
     static function render_extrev_editdelegate(SettingValues $sv) {
-        echo '<div id="foldpcrev_editdelegate" class="form-g has-fold fold',
-            $sv->curv("extrev_chairreq") >= 0 ? 'o' : 'c',
-            ' fold2o" data-fold-values="0 1 2">';
+        echo '<div id="foldpcrev_editdelegate" class="form-g has-fold',
+            $sv->curv("extrev_chairreq") >= 0 ? ' fold1o' : ' fold1c',
+            '" data-fold1-values="0 1 2">';
         $sv->echo_radio_table("extrev_chairreq", [-1 => "No",
                 1 => "Yes, but administrators must approve all requests",
                 2 => "Yes, but administrators must approve external reviewers with potential conflicts",
-                0 => "Yes"],
-                "Can PC reviewers request external reviews?",
-                ["fold" => true]);
-        echo '<div class="fx">';
+                0 => "Yes"
+            ], "Can PC reviewers request external reviews?",
+            ["item_class" => "uich js-foldup"]);
+        echo '<div class="fx1">';
         // echo '<p>Secondary PC reviews can be delegated to external reviewers. When the external review is complete, the secondary PC reviewer need not complete a review of their own.</p>', "\n";
+
+        $label3 = "Yes, and external reviews are visible only to their requesters";
+        if ($sv->conf->fetch_ivalue("select exists (select * from PaperReview where reviewType=" . REVIEW_EXTERNAL . " and reviewSubmitted>0)")) {
+            $label3 = '<label for="pcrev_editdelegate_3">' . $label3 . '</label><div class="settings-ap f-hx fx">Existing ' . Ht::link("submitted external reviews", $sv->conf->hoturl("search", ["q" => "re:ext:submitted"]), ["target" => "_new"]) . ' will remain visible to others.</div>';
+        }
         $sv->echo_radio_table("pcrev_editdelegate", [
                 0 => "No",
                 1 => "Yes",
                 2 => "Yes, and external reviews are hidden until requesters approve them",
-                3 => "Yes, and external reviews are visible only to their requesters"
-            ], "Can PC members edit the external reviews they requested?");
+                3 => $label3
+            ], "Can PC members edit the external reviews they requested?",
+            ["fold_values" => [3]]);
         echo "</div></div>\n";
     }
     static function render_extrev_requestmail(SettingValues $sv) {
@@ -233,7 +261,7 @@ class Reviews_SettingRenderer {
             '<label for="mailbody_requestreview">Mail template for external review requests</label></a>',
             '<span class="fx"> (<a href="', $sv->conf->hoturl("mail"), '">keywords</a> allowed; set to empty for default)</span></div>',
             $sv->render_textarea("mailbody_requestreview", ["class" => "text-monospace fx", "cols" => 80, "rows" => 20]);
-        $sv->echo_messages_at("mailbody_requestreview");
+        $sv->echo_feedback_at("mailbody_requestreview");
         echo "</div></div>\n";
     }
 
@@ -246,39 +274,42 @@ class Reviews_SettingRenderer {
     }
 
     static function crosscheck(SettingValues $sv) {
-        global $Now;
         $errored = false;
         foreach ($sv->conf->round_list() as $i => $rname) {
             $suf = $i ? "_$i" : "";
-            foreach (Conf::$review_deadlines as $deadline)
+            foreach (Conf::$review_deadlines as $deadline) {
                 if ($sv->has_interest($deadline . $suf)
-                    && $sv->newv($deadline . $suf) > $Now
+                    && $sv->newv($deadline . $suf) > Conf::$now
                     && $sv->newv("rev_open") <= 0
                     && !$errored) {
                     $sv->warning_at("rev_open", "A review deadline is set in the future, but the site is not open for reviewing. This is sometimes unintentional.");
                     $errored = true;
                     break;
                 }
+            }
         }
 
         if (($sv->has_interest("au_seerev") || $sv->has_interest("pcrev_soft"))
             && $sv->newv("au_seerev") != Conf::AUSEEREV_NO
             && $sv->newv("au_seerev") != Conf::AUSEEREV_TAGS
             && $sv->newv("pcrev_soft") > 0
-            && $Now < $sv->newv("pcrev_soft")
-            && !$sv->has_error())
+            && Conf::$now < $sv->newv("pcrev_soft")
+            && !$sv->has_error()) {
             $sv->warning_at(null, "Authors can see reviews and comments although it is before the review deadline. This is sometimes unintentional.");
+        }
 
         if (($sv->has_interest("rev_blind") || $sv->has_interest("extrev_view"))
             && $sv->newv("rev_blind") == Conf::BLIND_NEVER
-            && $sv->newv("extrev_view") == 1)
+            && $sv->newv("extrev_view") == 1) {
             $sv->warning_at("extrev_view", "Reviews aren’t blind, so external reviewers can see reviewer names and comments despite your settings.");
+        }
 
         if ($sv->has_interest("mailbody_requestreview")
             && $sv->newv("mailbody_requestreview")
             && (strpos($sv->newv("mailbody_requestreview"), "%LOGINURL%") !== false
-                || strpos($sv->newv("mailbody_requestreview"), "%LOGINURLPARTS%") !== false))
+                || strpos($sv->newv("mailbody_requestreview"), "%LOGINURLPARTS%") !== false)) {
             $sv->warning_at("mailbody_requestreview", "The <code>%LOGINURL%</code> and <code>%LOGINURLPARTS%</code> keywords should no longer be used in email templates.");
+        }
     }
 }
 
@@ -366,8 +397,7 @@ class Round_SettingParser extends SettingParser {
 
         // register callback if we need to change reviews' rounds
         if (!empty($this->rev_round_changes)) {
-            $sv->need_lock["PaperReview"] = $sv->need_lock["ReviewRequest"] =
-                $sv->need_lock["PaperReviewRefused"] = true;
+            $sv->request_write_lock("PaperReview", "ReviewRequest", "PaperReviewRefused");
             return true;
         } else {
             return false;

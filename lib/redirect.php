@@ -2,19 +2,22 @@
 // redirect.php -- HotCRP redirection helper functions
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
+/** @deprecated */
 function go($url = false) {
     Navigation::redirect($url);
 }
 
+/** @deprecated */
 function error_go($url, $message) {
     if ($url === false) {
         $url = hoturl("index");
     }
     Conf::msg_error($message);
-    go($url);
+    Navigation::redirect($url);
 }
 
-function make_session_name($conf, $n) {
+/** @return string */
+function make_session_name(Conf $conf, $n) {
     if (($n === "" || $n === null || $n === true)
         && ($x = $conf->opt("dbName"))) {
         $n = $x;
@@ -50,7 +53,7 @@ function set_session_name(Conf $conf) {
     }
 
     if (session_id() !== "") {
-        error_log("set_session_name with active session at " . json_encode(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS)) . " / " . Navigation::self() . " / " . session_id() . " / cookie[{$sn}]=" . get($_COOKIE, $sn));
+        error_log("set_session_name with active session / " . Navigation::self() . " / " . session_id() . " / cookie[{$sn}]=" . ($_COOKIE[$sn] ?? "") . "\n" . debug_string_backtrace());
     }
 
     session_name($sn);
@@ -67,11 +70,11 @@ function set_session_name(Conf $conf) {
     if ($secure !== null) {
         $params["secure"] = !!$secure;
     }
-    if ($domain !== null) {
+    if ($domain !== null || !isset($params["domain"])) {
         $params["domain"] = $domain;
     }
     $params["httponly"] = true;
-    if (($samesite = $conf->opt("sessionSameSite", "Lax"))) {
+    if (($samesite = $conf->opt("sessionSameSite"))) {
         $params["samesite"] = $samesite;
     }
     if (PHP_VERSION_ID >= 70300) {
@@ -91,7 +94,6 @@ if (function_exists("session_create_id")) {
 }
 
 function ensure_session($flags = 0) {
-    global $Conf, $Now;
     if (session_id() !== ""
         && !($flags & ENSURE_SESSION_REGENERATE_ID)) {
         return;
@@ -111,13 +113,13 @@ function ensure_session($flags = 0) {
         }
         $session_data = $_SESSION ? : [];
         $new_sid = session_create_id();
-        $_SESSION["deletedat"] = $Now;
+        $_SESSION["deletedat"] = Conf::$now;
         session_commit();
 
         session_id($new_sid);
         if (!isset($_COOKIE[$sn]) || $_COOKIE[$sn] !== $new_sid) {
             $params = session_get_cookie_params();
-            $params["expires"] = $Now + $params["lifetime"];
+            $params["expires"] = Conf::$now + $params["lifetime"];
             unset($params["lifetime"]);
             hotcrp_setcookie($sn, $new_sid, $params);
         }
@@ -127,7 +129,7 @@ function ensure_session($flags = 0) {
 
     // maybe kill old session
     if (isset($_SESSION["deletedat"])
-        && $_SESSION["deletedat"] < $Now - 30) {
+        && $_SESSION["deletedat"] < Conf::$now - 30) {
         $_SESSION = [];
     }
 
@@ -142,9 +144,9 @@ function ensure_session($flags = 0) {
             session_regenerate_id();
         }
         $_SESSION["testsession"] = false;
-    } else if ($Conf->_session_handler
-               && is_callable([$Conf->_session_handler, "refresh_cookie"])) {
-        call_user_func([$Conf->_session_handler, "refresh_cookie"], $sn, session_id());
+    } else if (Conf::$main->_session_handler
+               && is_callable([Conf::$main->_session_handler, "refresh_cookie"])) {
+        call_user_func([Conf::$main->_session_handler, "refresh_cookie"], $sn, session_id());
     }
 }
 
@@ -167,14 +169,13 @@ function post_value($allow_empty = false) {
 }
 
 function kill_session() {
-    global $Now;
     if (($sn = session_name())
         && isset($_COOKIE[$sn])) {
         if (session_id() !== "") {
             session_commit();
         }
         $params = session_get_cookie_params();
-        $params["expires"] = $Now - 86400;
+        $params["expires"] = Conf::$now - 86400;
         unset($params["lifetime"]);
         hotcrp_setcookie($sn, "", $params);
         $_COOKIE[$sn] = "";

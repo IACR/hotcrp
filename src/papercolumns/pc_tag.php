@@ -5,7 +5,7 @@
 class Tag_PaperColumn extends PaperColumn {
     private $is_value;
     private $dtag;
-    private $ltag;
+    private $etag;
     private $ctag;
     private $editable = false;
     private $emoji = false;
@@ -14,78 +14,71 @@ class Tag_PaperColumn extends PaperColumn {
         parent::__construct($conf, $cj);
         $this->override = PaperColumn::OVERRIDE_IFEMPTY;
         $this->dtag = $cj->tag;
-        $this->is_value = get($cj, "tagvalue");
+        $this->is_value = $cj->tagvalue ?? null;
     }
     function mark_editable() {
         $this->editable = true;
-        if ($this->is_value === null) {
-            $this->is_value = true;
-        }
+        $this->is_value = $this->is_value ?? true;
     }
-    function sorts_my_tag($sorter, Contact $user) {
-        return strcasecmp(Tagger::check_tag_keyword($sorter->type, $user, Tagger::NOVALUE | Tagger::ALLOWCONTACTID), $this->ltag) == 0;
+    function etag() {
+        return $this->etag;
     }
     function prepare(PaperList $pl, $visible) {
         if (!$pl->user->can_view_tags(null)) {
             return false;
         }
         $tagger = new Tagger($pl->user);
-        if (!($ctag = $tagger->check($this->dtag, Tagger::NOVALUE | Tagger::ALLOWCONTACTID))) {
+        if (!($this->etag = $tagger->check($this->dtag, Tagger::NOVALUE | Tagger::ALLOWCONTACTID))) {
             return false;
         }
-        $this->ltag = strtolower($ctag);
-        $this->ctag = " {$this->ltag}#";
+        $this->ctag = " {$this->etag}#";
         if ($visible) {
             $pl->qopts["tags"] = 1;
         }
-        if ($this->ltag[0] == ":"
+        if ($this->etag[0] == ":"
             && !$this->is_value
             && ($dt = $pl->user->conf->tags()->check($this->dtag))
             && $dt->emoji !== null
             && count($dt->emoji) === 1) {
             $this->emoji = $dt->emoji[0];
         }
-        if ($this->editable && $visible > 0 && ($tid = $pl->table_id())) {
-            $sorter = get($pl->sorters, 0);
-            if ($this->sorts_my_tag($sorter, $pl->user)
-                && !$sorter->reverse
-                && (!$pl->search->thenmap || $pl->search->is_order_anno)
-                && $this->is_value) {
-                $this->editsort = true;
-                $pl->table_attr["data-drag-tag"] = $this->dtag;
-            }
+        if ($this->editable && $visible > 0 && $pl->table_id()) {
             $pl->has_editable_tags = true;
+            if (strcasecmp($this->etag, $pl->sort_etag()) === 0
+                && $this->is_value) {
+                $pl->table_attr["data-drag-tag"] = $this->dtag;
+                $this->editsort = true;
+            }
         }
         $this->className = ($this->editable ? "pl_edit" : "pl_")
             . ($this->is_value ? "tagval" : "tag");
-        $pl->need_tag_attr = true;
         return true;
     }
     function completion_name() {
         return "#$this->dtag";
     }
-    function sort_name(PaperList $pl, ListSorter $sorter = null) {
+    function sort_name() {
         return "#$this->dtag";
     }
-    function analyze_sort(PaperList $pl, &$rows, ListSorter $sorter) {
-        $k = $sorter->uid;
-        $unviewable = $empty = TAG_INDEXBOUND * ($sorter->reverse ? -1 : 1);
+    function prepare_sort(PaperList $pl, $sortindex) {
+        $k = $this->uid;
+        $unviewable = $empty = TAG_INDEXBOUND * ($this->sort_reverse ? -1 : 1);
         if ($this->editable) {
-            $empty = (TAG_INDEXBOUND - 1) * ($sorter->reverse ? -1 : 1);
+            $empty = (TAG_INDEXBOUND - 1) * ($this->sort_reverse ? -1 : 1);
         }
-        foreach ($rows as $row) {
-            if (!$pl->user->can_view_tag($row, $this->ltag)) {
+        foreach ($pl->rowset() as $row) {
+            if (!$pl->user->can_view_tag($row, $this->etag)) {
                 $row->$k = $unviewable;
-            } else if (($row->$k = $row->tag_value($this->ltag)) === false) {
+            } else if (($row->$k = $row->tag_value($this->etag)) === null) {
                 $row->$k = $empty;
             }
         }
     }
-    function compare(PaperInfo $a, PaperInfo $b, ListSorter $sorter) {
-        $k = $sorter->uid;
+    function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
+        $k = $this->uid;
         return $a->$k < $b->$k ? -1 : ($a->$k == $b->$k ? 0 : 1);
     }
-    function hexxxxader(PaperList $pl, $is_text) {
+    function header(PaperList $pl, $is_text) {
         if (($twiddle = strpos($this->dtag, "~")) > 0) {
             $cid = (int) substr($this->dtag, 0, $twiddle);
             if ($cid == $pl->user->contactId) {
@@ -101,30 +94,31 @@ class Tag_PaperColumn extends PaperColumn {
         return "#$this->dtag";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
-        return !$pl->user->can_view_tag($row, $this->ltag);
+        return !$pl->user->can_view_tag($row, $this->etag);
     }
     function content(PaperList $pl, PaperInfo $row) {
-        $v = $row->tag_value($this->ltag);
+        $v = $row->tag_value($this->etag);
         if ($this->editable
             && ($t = $this->edit_content($pl, $row, $v))) {
             return $t;
-        } else if ($v === false) {
+        } else if ($v === null) {
             return "";
         } else if ($v >= 0.0 && $this->emoji) {
             return Tagger::unparse_emoji_html($this->emoji, $v);
         } else if ($v === 0.0 && !$this->is_value) {
             return "✓";
         } else {
-            return $v;
+            return (string) $v;
         }
     }
+    /** @param ?float $v */
     private function edit_content($pl, $row, $v) {
         if (!$pl->user->can_change_tag($row, $this->dtag, 0, 0)) {
             return false;
         }
         if (!$this->is_value) {
             return "<input type=\"checkbox\" class=\"uic js-range-click edittag\" data-range-type=\"tag:{$this->dtag}\" name=\"tag:{$this->dtag} {$row->paperId}\" value=\"x\" tabindex=\"2\""
-                . ($v !== false ? ' checked="checked"' : '') . " />";
+                . ($v !== null ? ' checked="checked"' : '') . " />";
         }
         $t = '<input type="text" class="edittagval';
         if ($this->editsort) {
@@ -132,19 +126,19 @@ class Tag_PaperColumn extends PaperColumn {
             $pl->need_render = true;
         }
         return $t . '" size="4" name="tag:' . "$this->dtag $row->paperId" . '" value="'
-            . ($v !== false ? htmlspecialchars($v) : "") . '" tabindex="2" />';
+            . ($v !== null ? htmlspecialchars((string) $v) : "") . '" tabindex="2" />';
     }
     function text(PaperList $pl, PaperInfo $row) {
-        if (($v = $row->tag_value($this->ltag)) === false) {
+        if (($v = $row->tag_value($this->etag)) === null) {
             return "";
         } else if ($v === 0.0 && !$this->is_value) {
             return "Y";
         } else {
-            return $v;
+            return (string) $v;
         }
     }
 
-    static function expand($name, $user, $xfj, $m) {
+    static function expand($name, Contact $user, $xfj, $m) {
         $tsm = new TagSearchMatcher($user);
         $tsm->set_avoid_regex(true);
         $tsm->add_check_tag($m[2], true);
@@ -156,10 +150,12 @@ class Tag_PaperColumn extends PaperColumn {
             $fj["tag"] = $t;
             $fj["title"] = $dt->unparse($t, 0, $user, TagMap::UNPARSE_HASH | TagMap::UNPARSE_TEXT);
             $fj["title_html"] = $dt->unparse($t, 0, $user, TagMap::UNPARSE_HASH);
+            $fj["sort"] = $fj["sort"] ?? true;
+            $fj["callback"] = $fj["callback"] ?? "+Tag_PaperColumn";
             $rs[] = (object) $fj;
         }
-        foreach ($tsm->errors() as $e) {
-            $user->conf->xt_factory_error($e);
+        foreach ($tsm->error_texts() as $e) {
+            PaperColumn::column_error($user, $e);
         }
         return $rs;
     }

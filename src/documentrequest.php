@@ -2,12 +2,16 @@
 // documentrequest.php -- HotCRP document request parsing
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
-class DocumentRequest {
+class DocumentRequest implements JsonSerializable {
+    /** @var int */
     public $paperId;
+    /** @var ?PaperInfo */
     public $prow;
     public $dtype;
+    /** @var ?PaperOption */
     public $opt;
     public $linkid;
+    /** @var ?string */
     public $attachment;
     public $docid;
     public $filters = [];
@@ -21,7 +25,8 @@ class DocumentRequest {
         }
     }
 
-    function __construct($req, $path, Conf $conf) {
+    function __construct($req, $path, Contact $user) {
+        $conf = $user->conf;
         $want_path = false;
         if (isset($req["p"])) {
             $this->set_paperid($req["p"]);
@@ -31,7 +36,7 @@ class DocumentRequest {
             $want_path = true;
         }
 
-        $dtname = null;
+        $dtname = "";
         $base_dtname = "paper";
         if (isset($req["dt"])) {
             $dtname = $req["dt"];
@@ -44,16 +49,16 @@ class DocumentRequest {
         }
 
         if ($want_path) {
-            $s = $this->req_filename = preg_replace(',\A/*,', "", $path);
-            $dtname = null;
+            $s = $this->req_filename = preg_replace('/\A\/*/', "", $path);
+            $dtname = "";
             if (str_starts_with($s, $conf->download_prefix)) {
                 $s = substr($s, strlen($conf->download_prefix));
             }
-            if (preg_match(',\A(?:p|paper|sub|submission)(\d+)/+(.*)\z,', $s, $m)) {
+            if (preg_match('/\A(?:p|paper|sub|submission)(\d+)\/+(.*)\z/', $s, $m)) {
                 $this->paperId = intval($m[1]);
-                if (preg_match(',\A([^/]+)\.[^/]+\z,', $m[2], $mm)) {
+                if (preg_match('/\A([^\/]+)\.[^\/]+\z/', $m[2], $mm)) {
                     $dtname = urldecode($mm[1]);
-                } else if (preg_match(',\A([^/]+)/+(.*)\z,', $m[2], $mm)) {
+                } else if (preg_match('/\A([^\/]+)\/+(.*)\z/', $m[2], $mm)) {
                     $dtname = urldecode($mm[1]);
                     $this->attachment = urldecode($mm[2]);
                 } else if (isset($req["dt"])) {
@@ -90,7 +95,7 @@ class DocumentRequest {
 
         // parse options and filters
         $this->opt = $this->dtype = null;
-        while ((string) $dtname !== "" && $this->dtype === null) {
+        while ($dtname !== "" && $this->dtype === null) {
             if (str_starts_with($dtname, "comment-")
                 && preg_match('{\Acomment-(?:c[aAxX]?\d+|(?:|[a-zA-Z](?:|[-a-zA-Z0-9]*))response)\z}', $dtname)) {
                 $this->dtype = DTYPE_COMMENT;
@@ -103,11 +108,11 @@ class DocumentRequest {
                 break;
             }
             if (($dtnum = cvtint($dtname, null)) !== null) {
-                $this->opt = $conf->paper_opts->get($dtnum);
+                $this->opt = $conf->option_by_id($dtnum);
             } else if ($this->paperId >= 0) {
-                $this->opt = $conf->paper_opts->find($dtname);
+                $this->opt = $conf->options()->find($dtname);
             } else {
-                $this->opt = $conf->paper_opts->find_nonpaper($dtname);
+                $this->opt = $conf->options()->find_nonpaper($dtname);
             }
             if ($this->opt !== null) {
                 $this->dtype = $this->opt->id;
@@ -124,15 +129,15 @@ class DocumentRequest {
                 break;
             }
             array_unshift($this->filters, $filter);
-            $dtname = substr($dtname, 0, strlen($dtname) - strlen($ff->name));
+            $dtname = substr($dtname, 0, strlen($dtname) - strlen($filter->name));
             if (str_ends_with($dtname, "-")) {
                 $dtname = substr($dtname, 0, strlen($dtname) - 1);
             }
         }
 
         // if nothing found, use the base
-        if ($this->dtype === null && (string) $dtname === "") {
-            $this->opt = $conf->paper_opts->find($base_dtname);
+        if ($this->dtype === null && $dtname === "") {
+            $this->opt = $conf->options()->find($base_dtname);
             $this->dtype = $this->opt->id;
         } else if ($this->dtype === null) {
             throw new Exception("Document “{$dtname}” not found.");
@@ -152,10 +157,11 @@ class DocumentRequest {
         if (isset($req["filter"])) {
             foreach (explode(" ", $req["filter"]) as $filtername) {
                 if ($filtername !== "") {
-                    if (($filter = FileFilter::find_by_name($filtername)))
+                    if (($filter = FileFilter::find_by_name($conf, $filtername))) {
                         $this->filters[] = $filter;
-                    else
-                        throw new Exception("Document filter “{$filter}” not found.");
+                    } else {
+                        throw new Exception("Document filter “{$filtername}” not found.");
+                    }
                 }
             }
         }
@@ -165,13 +171,13 @@ class DocumentRequest {
                 $dtname = $this->opt->dtype_name();
             }
             if ($this->paperId < 0) {
-                $this->req_filename = "[$dtype_name";
+                $this->req_filename = "[$dtname";
             } else if ($this->dtype === DTYPE_SUBMISSION) {
                 $this->req_filename = "[submission #{$this->paperId}";
             } else if ($this->dtype === DTYPE_FINAL) {
                 $this->req_filename = "[submission #{$this->paperId} final version";
             } else {
-                $this->req_filename = "[#{$this->paperId} $dtype_name";
+                $this->req_filename = "[#{$this->paperId} $dtname";
             }
             if ($this->attachment) {
                 $this->req_filename .= " attachment " . $this->attachment;
@@ -183,21 +189,24 @@ class DocumentRequest {
             || ($this->opt && $this->opt->nonpaper) !== ($this->paperId < 0)) {
             throw new Exception("Document “{$this->req_filename}” not found.");
         }
+
+        // look up paper
+        if ($this->paperId < 0) {
+            $this->prow = new PaperInfo(["paperId" => -2], null, $user->conf);
+        } else {
+            $this->prow = $user->conf->paper_by_id($this->paperId, $user);
+        }
     }
 
     function perm_view_document(Contact $user) {
         if ($this->paperId < 0) {
-            $this->prow = new PaperInfo(["paperId" => -2], null, $user->conf);
             if (($this->opt->visibility === "admin" && !$user->privChair)
                 || ($this->opt->visibility !== "all" && !$user->isPC)) {
-                return $this->prow->make_whynot(["permission" => "view_option", "optionPermission" => $this->opt]);
+                return $this->prow->make_whynot(["permission" => "view_option", "option" => $this->opt]);
             } else {
                 return null;
             }
-        }
-
-        $this->prow = $user->conf->fetch_paper($this->paperId, $user);
-        if (($whynot = $user->perm_view_paper($this->prow, false, $this->paperId))) {
+        } else if (($whynot = $user->perm_view_paper($this->prow, false, $this->paperId))) {
             return $whynot;
         } else if ($this->dtype === DTYPE_COMMENT) {
             return $this->perm_view_comment_document($user);
@@ -220,20 +229,89 @@ class DocumentRequest {
                 break;
             }
         }
-        if (!$doc_crow) {
+        if ($doc_crow
+            && ($xdoc = $doc_crow->attachments()->document_by_filename($this->attachment))) {
+            $this->docid = $xdoc->paperStorageId;
+            return null;
+        } else {
             return $this->prow->make_whynot(["documentNotFound" => $this->req_filename]);
         }
+    }
 
-        foreach ($doc_crow->attachments() as $xdoc) {
-            if ($xdoc->unique_filename === $this->attachment) {
-                $this->docid = $xdoc->paperStorageId;
-                break;
+    function jsonSerialize() {
+        $j = ["req_filename" => $this->req_filename, "pid" => $this->paperId, "dtype" => $this->dtype];
+        foreach (["linkid", "attachment", "docid"] as $k) {
+            if ($this->$k !== null) {
+                $j[$k] = $this->$k;
             }
         }
-        if (!$this->docid) {
-            return $this->prow->make_whynot(["documentNotFound" => $this->req_filename]);
-        } else {
-            return null;
+        foreach ($this->filters as $f) {
+            $j["filters"][] = $f->name;
         }
+        return $j;
+    }
+
+
+    /** @param array $opts
+     * @return array */
+    static function add_connection_options($opts = []) {
+        $ifnonematch = $range = $ifrange = null;
+        if (function_exists("getallheaders")) {
+            foreach (getallheaders() as $k => $v) {
+                if (strcasecmp($k, "If-None-Match") === 0) {
+                    $ifnonematch = $v;
+                } else if (strcasecmp($k, "Range") === 0) {
+                    $range = $v;
+                } else if (strcasecmp($k, "If-Range") === 0) {
+                    $ifrange = $v;
+                }
+            }
+        } else {
+            $ifnonematch = $_SERVER["HTTP_IF_NONE_MATCH"] ?? null;
+            $range = $_SERVER["HTTP_RANGE"] ?? null;
+            $ifrange = $_SERVER["HTTP_IF_RANGE"] ?? null;
+        }
+        if ($ifnonematch !== null && !array_key_exists("if-none-match", $opts)) {
+            $opts["if-none-match"] = $ifnonematch;
+        }
+        if ($range !== null
+            && !array_key_exists("range", $opts)
+            && preg_match('/\Abytes\s*=\s*(?:(?:\d+-\d+|-\d+|\d+-)\s*,?\s*)+\z/', $range)) {
+            $opts["range"] = [];
+            $lastr = null;
+            preg_match_all('/\d+-\d+|-\d+|\d+-/', $range, $m);
+            foreach ($m[0] as $t) {
+                $dash = strpos($t, "-");
+                $r1 = $dash === 0 ? null : intval(substr($t, 0, $dash));
+                $r2 = $dash === strlen($t) - 1 ? null : intval(substr($t, $dash + 1));
+                if ($r1 === null && $r2 !== 0) {
+                    $opts["range"][] = $lastr = [$r1, $r2];
+                } else if ($r2 === null || ($r1 !== null && $r1 <= $r2)) {
+                    if ($lastr !== null
+                        && $lastr[0] !== null
+                        && $lastr[1] !== null
+                        && $r1 >= $lastr[0]
+                        && $r1 - $lastr[1] <= 500) {
+                        $nr = count($opts["range"]);
+                        $opts["range"][$nr - 1][1] = $lastr[1] = $r2;
+                    } else {
+                        $opts["range"][] = $lastr = [$r1, $r2];
+                    }
+                } else {
+                    unset($opts["range"]);
+                    break;
+                }
+            }
+            if (count($opts["range"] ?? []) > 1) {
+                error_log(Navigation::self() . ": multiple range request “{$range}”");
+            }
+        }
+        if ($ifrange !== null && !array_key_exists("if-range", $opts)) {
+            $opts["if-range"] = $ifrange;
+        }
+        if ($_SERVER["REQUEST_METHOD"] === "HEAD" && !array_key_exists("head", $opts)) {
+            $opts["head"] = true;
+        }
+        return $opts;
     }
 }

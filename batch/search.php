@@ -1,8 +1,7 @@
 <?php
-$ConfSitePATH = preg_replace(',/batch/[^/]+,', '', __FILE__);
-require_once("$ConfSitePATH/lib/getopt.php");
+require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
-$arg = getopt_rest($argv, "hn:t:f:N", ["help", "name:", "type:", "field:", "show:", "header", "no-header", "sitename"]);
+$arg = Getopt::rest($argv, "hn:t:f:N", ["help", "name:", "type:", "field:", "show:", "header", "no-header", "sitename"]);
 if (isset($arg["h"]) || isset($arg["help"])) {
     fwrite(STDOUT, "Usage: php batch/search.php [-n CONFID] [-t COLLECTION] [-f FIELD]+ [QUERY...]
 Output a CSV file containing the FIELDs for the papers matching QUERY.
@@ -20,9 +19,9 @@ if (isset($arg["type"]) && !isset($arg["t"])) {
     $arg["t"] = $arg["type"];
 }
 
-require_once("$ConfSitePATH/src/init.php");
+require_once(SiteLoader::find("src/init.php"));
 
-$user = $Conf->site_contact();
+$user = $Conf->root_user();
 $t = get($arg, "t", "s");
 $searchtypes = PaperSearch::search_types($user, $t);
 if (!isset($searchtypes[$t])) {
@@ -31,7 +30,7 @@ if (!isset($searchtypes[$t])) {
 }
 
 $search = new PaperSearch($user, ["q" => join(" ", $arg["_"]), "t" => $t]);
-$paperlist = new PaperList($search, ["report" => "empty"]);
+$paperlist = new PaperList("empty", $search);
 $paperlist->set_view("pid", true);
 $fields = array_merge(mkarray(get($arg, "f", [])),
                       mkarray(get($arg, "field", [])),
@@ -39,8 +38,8 @@ $fields = array_merge(mkarray(get($arg, "f", [])),
 foreach ($fields as $f) {
     $paperlist->set_view($f, true);
 }
-list($header, $body) = $paperlist->text_csv("empty");
-foreach ($search->warnings as $w) {
+list($header, $body) = $paperlist->text_csv();
+foreach ($search->problem_texts() as $w) {
     fwrite(STDERR, "$w\n");
 }
 if (!empty($body)) {
@@ -54,13 +53,13 @@ if (!empty($body)) {
         if ($sitename) {
             array_unshift($header, "sitename", "siteclass");
         }
-        $csv->add($header);
+        $csv->add_row($header);
     }
     foreach ($body as $row) {
         if ($sitename) {
             array_unshift($row, $siteid, $siteclass);
         }
-        $csv->add($row);
+        $csv->add_row($row);
     }
     fwrite(STDOUT, $csv->unparse());
 }

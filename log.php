@@ -3,16 +3,17 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
-if (!$Me->is_manager())
+if (!$Me->is_manager()) {
     $Me->escape();
+}
 
 unset($Qreq->forceShow, $_GET["forceShow"], $_POST["forceShow"]);
 $nlinks = 6;
 
 $page = $Qreq->page;
-if ($page === "earliest")
+if ($page === "earliest") {
     $page = false;
-else {
+} else {
     $page = cvtint($page, -1);
     if ($page <= 0)
         $page = 1;
@@ -30,8 +31,9 @@ $count = min($count, 200);
 
 $Qreq->q = trim((string) $Qreq->q);
 $Qreq->p = trim((string) $Qreq->p);
-if (isset($Qreq->acct) && !isset($Qreq->u))
+if (isset($Qreq->acct) && !isset($Qreq->u)) {
     $Qreq->u = $Qreq->acct;
+}
 $Qreq->u = trim((string) $Qreq->u);
 $Qreq->date = trim($Qreq->get("date", "now"));
 
@@ -42,8 +44,9 @@ if ($Qreq->p !== "") {
     $Search = new PaperSearch($Me, ["t" => "all", "q" => $Qreq->p]);
     $Search->set_allow_deleted(true);
     $include_pids = $Search->paper_ids();
-    foreach ($Search->warnings as $w)
+    foreach ($Search->problem_texts() as $w) {
         Ht::warning_at("p", $w);
+    }
     if (!empty($include_pids)) {
         $where = array();
         foreach ($include_pids as $p) {
@@ -54,8 +57,9 @@ if ($Qreq->p !== "") {
         $wheres[] = "(" . join(" or ", $where) . ")";
         $include_pids = array_flip($include_pids);
     } else {
-        if (empty($Search->warnings))
+        if (!$Search->has_problem()) {
             Ht::warning_at("p", "No papers match that search.");
+        }
         $wheres[] = "false";
     }
 }
@@ -70,21 +74,22 @@ if ($Qreq->u !== "") {
             $word = preg_replace(',(?:\A"|"\z),', "", $word);
         }
         $Search = new ContactSearch($flags, $word, $Me);
-        foreach ($Search->ids as $id)
+        foreach ($Search->user_ids() as $id) {
             $ids[$id] = $id;
+        }
     }
     $where = array();
     if (count($ids)) {
         $result = $Conf->qe("select contactId, email from ContactInfo where contactId?a union select contactId, email from DeletedContactInfo where contactId?a", $ids, $ids);
-        while (($row = edb_row($result))) {
+        while (($row = $result->fetch_row())) {
             $where[] = "contactId=$row[0]";
             $where[] = "destContactId=$row[0]";
             $where[] = "action like " . Dbl::utf8ci("'% " . sqlq_for_like($row[1]) . "%'");
         }
     }
-    if (count($where))
+    if (count($where)) {
         $wheres[] = "(" . join(" or ", $where) . ")";
-    else {
+    } else {
         Ht::warning_at("u", "No matching users.");
         $wheres[] = "false";
     }
@@ -118,7 +123,32 @@ if ($Qreq->date !== "now" && isset($Qreq->q)) {
     }
 }
 
+class LogRow {
+    /** @var non-empty-string */
+    public $logId;
+    /** @var non-empty-string */
+    public $timestamp;
+    /** @var non-empty-string */
+    public $contactId;
+    /** @var ?non-empty-string */
+    public $destContactId;
+    /** @var ?non-empty-string */
+    public $trueContactId;
+    /** @var string */
+    public $action;
+    /** @var ?non-empty-string */
+    public $paperId;
+    public $data;
+
+    public $cleanedAction;
+    /** @var ?list<int> */
+    public $paperIdArray;
+    /** @var ?list<int> */
+    public $destContactIdArray;
+}
+
 class LogRowGenerator {
+    /** @var Conf */
     private $conf;
     private $wheres;
     private $page_size;
@@ -127,13 +157,16 @@ class LogRowGenerator {
     private $upper_offset_bound;
     private $rows_offset;
     private $rows_max_offset;
-    private $rows;
+    /** @var list<LogRow> */
+    private $rows = [];
     private $filter;
     private $page_to_offset;
     private $log_url_base;
     private $explode_mail = false;
     private $mail_stash;
+    /** @var array<int,Contact> */
     private $users;
+    /** @var array<int,true> */
     private $need_users;
 
     function __construct(Conf $conf, $wheres, $page_size) {
@@ -141,13 +174,13 @@ class LogRowGenerator {
         $this->wheres = $wheres;
         $this->page_size = $page_size;
         $this->set_filter(null);
-        $this->users = $conf->pc_members_and_admins();
+        $this->users = $conf->pc_users();
         $this->need_users = [];
     }
 
     function set_filter($filter) {
         $this->filter = $filter;
-        $this->rows = null;
+        $this->rows = [];
         $this->lower_offset_bound = 0;
         $this->upper_offset_bound = INF;
         $this->page_to_offset = [];
@@ -218,16 +251,19 @@ class LogRowGenerator {
         while ($n < $limit && !$exhausted) {
             $result = $this->conf->qe_raw($q . " limit $db_offset,$limit");
             $first_db_offset = $db_offset;
-            while ($result && ($row = $result->fetch_object())) {
-                $destuid = $row->destContactId ? : $row->contactId;
-                $this->need_users[$row->contactId] = $this->need_users[$destuid] = true;
+            while (($row = $result->fetch_object("LogRow"))) {
+                '@phan-var LogRow $row';
+                $this->need_users[(int) $row->contactId] = true;
+                $destuid = (int) ($row->destContactId ? : $row->contactId);
+                $this->need_users[$destuid] = true;
                 ++$db_offset;
                 if (!$this->explode_mail
                     && $this->mail_stash
                     && $this->mail_stash->action === $row->action) {
                     $this->mail_stash->destContactIdArray[] = $destuid;
-                    if ($row->paperId)
-                        $this->mail_stash->paperIdArray[] = $row->paperId;
+                    if ($row->paperId) {
+                        $this->mail_stash->paperIdArray[] = (int) $row->paperId;
+                    }
                     continue;
                 }
                 if (!$this->filter || call_user_func($this->filter, $row)) {
@@ -243,7 +279,7 @@ class LogRowGenerator {
                             $row->destContactId = null;
                             $row->paperIdArray = [];
                             if ($row->paperId) {
-                                $row->paperIdArray[] = $row->paperId;
+                                $row->paperIdArray[] = (int) $row->paperId;
                                 $row->paperId = null;
                             }
                         } else {
@@ -265,11 +301,14 @@ class LogRowGenerator {
         $this->rows_max_offset = $exhausted ? INF : $this->rows_offset + $n;
     }
 
+    /** @param int $pageno
+     * @return bool */
     function has_page($pageno, $load_npages = null) {
         global $nlinks;
         assert(is_int($pageno) && $pageno >= 1);
         $offset = $this->page_offset($pageno);
-        if ($offset >= $this->lower_offset_bound && $offset < $this->upper_offset_bound) {
+        if ($offset >= $this->lower_offset_bound
+            && $offset < $this->upper_offset_bound) {
             if ($load_npages) {
                 $limit = $load_npages * $this->page_size;
             } else {
@@ -283,11 +322,16 @@ class LogRowGenerator {
         return $offset < $this->lower_offset_bound;
     }
 
+    /** @param int $pageno
+     * @param int $timestamp
+     * @return bool */
     function page_after($pageno, $timestamp, $load_npages = null) {
         $rows = $this->page_rows($pageno, $load_npages);
         return !empty($rows) && $rows[count($rows) - 1]->timestamp > $timestamp;
     }
 
+    /** @param int $pageno
+     * @return list<LogRow> */
     function page_rows($pageno, $load_npages = null) {
         assert(is_int($pageno) && $pageno >= 1);
         if (!$this->has_page($pageno, $load_npages)) {
@@ -317,7 +361,7 @@ class LogRowGenerator {
         unset($this->need_users[0]);
         $this->need_users = array_diff_key($this->need_users, $this->users);
         if (!empty($this->need_users)) {
-            $result = $this->conf->qe("select contactId, firstName, lastName, email, contactTags, roles from ContactInfo where contactId?a", array_keys($this->need_users));
+            $result = $this->conf->qe("select contactId, firstName, lastName, affiliation, email, contactTags, roles from ContactInfo where contactId?a", array_keys($this->need_users));
             while (($user = Contact::fetch($result, $this->conf))) {
                 $this->users[$user->contactId] = $user;
                 unset($this->need_users[$user->contactId]);
@@ -326,10 +370,10 @@ class LogRowGenerator {
         }
         if (!empty($this->need_users)) {
             foreach ($this->need_users as $cid => $x) {
-                $user = $this->users[$cid] = new Contact(["contactId" => $cid, "disabled" => true], $this->conf);
+                $user = $this->users[$cid] = new Contact(["contactId" => $cid, "disabled" => 1], $this->conf);
                 $user->disabled = "deleted";
             }
-            $result = $this->conf->qe("select contactId, firstName, lastName, email, 1 disabled from DeletedContactInfo where contactId?a", array_keys($this->need_users));
+            $result = $this->conf->qe("select contactId, firstName, lastName, '' affiliation, email, 1 disabled from DeletedContactInfo where contactId?a", array_keys($this->need_users));
             while (($user = Contact::fetch($result, $this->conf))) {
                 $this->users[$user->contactId] = $user;
                 $user->disabled = "deleted";
@@ -339,6 +383,9 @@ class LogRowGenerator {
         $this->need_users = [];
     }
 
+    /** @param LogRow $row
+     * @param 'contactId'|'destContactId'|'trueContactId' $key
+     * @return list<Contact> */
     function users_for($row, $key) {
         if (!empty($this->need_users)) {
             $this->_make_users();
@@ -356,6 +403,8 @@ class LogRowGenerator {
         return $u;
     }
 
+    /** @param LogRow $row
+     * @return list<int> */
     function paper_ids($row) {
         if (!isset($row->cleanedAction)) {
             if (!isset($row->paperIdArray)) {
@@ -373,7 +422,7 @@ class LogRowGenerator {
             if ($row->paperId) {
                 $row->paperIdArray[] = (int) $row->paperId;
             }
-            $row->paperIdArray = array_unique($row->paperIdArray);
+            $row->paperIdArray = array_values(array_unique($row->paperIdArray));
         }
         return $row->paperIdArray;
     }
@@ -468,7 +517,7 @@ if ($Qreq->download) {
     $csvg->select(["date", "email", "affected_email", "via",
                    $narrow ? "paper" : "papers", "action"]);
     foreach ($lrg->page_rows(1) as $row) {
-        $date = strftime("%Y-%m-%d %H:%M:%S %z", $row->timestamp);
+        $date = strftime("%Y-%m-%d %H:%M:%S %z", (int) $row->timestamp);
         $xusers = $xdest_users = [];
         foreach ($lrg->users_for($row, "contactId") as $u) {
             $xusers[] = $u->email;
@@ -499,12 +548,12 @@ if ($Qreq->download) {
             foreach ($xusers as $u1) {
                 foreach ($xdest_users as $u2) {
                     foreach ($pids as $p) {
-                        $csvg->add([$date, $u1, $u2, $via, $p, $action]);
+                        $csvg->add_row([$date, $u1, $u2, $via, $p, $action]);
                     }
                 }
             }
         } else {
-            $csvg->add([
+            $csvg->add_row([
                 $date, join(" ", $xusers), join(" ", $xdest_users),
                 $via, join(" ", $pids), $action
             ]);
@@ -550,9 +599,9 @@ function searchbar(LogRowGenerator $lrg, $page) {
     } else if ($page === 1) {
         $dplaceholder = "now";
     } else if (($rows = $lrg->page_rows($page))) {
-        $dplaceholder = $Conf->unparse_time($rows[0]->timestamp);
+        $dplaceholder = $Conf->unparse_time((int) $rows[0]->timestamp);
     } else if ($first_timestamp) {
-        $dplaceholder = $Conf->unparse_time($first_timestamp);
+        $dplaceholder = $Conf->unparse_time((int) $first_timestamp);
     }
 
     echo Ht::form(hoturl("log"), ["method" => "get", "id" => "searchform"]);
@@ -561,25 +610,25 @@ function searchbar(LogRowGenerator $lrg, $page) {
     echo '<div class="d-inline-block" style="padding-right:2rem">',
         '<div class="', Ht::control_class("q", "entryi medium"),
         '"><label for="q">Concerning action(s)</label><div class="entry">',
+        Ht::render_feedback_at("q"),
         Ht::entry("q", $Qreq->q, ["id" => "q", "size" => 40]),
-        Ht::render_messages_at("q"),
         '</div></div><div class="', Ht::control_class("p", "entryi medium"),
         '"><label for="p">Concerning paper(s)</label><div class="entry">',
+        Ht::render_feedback_at("p"),
         Ht::entry("p", $Qreq->p, ["id" => "p", "class" => "need-suggest papersearch", "autocomplete" => "off", "size" => 40]),
-        Ht::render_messages_at("p"),
         '</div></div><div class="', Ht::control_class("u", "entryi medium"),
         '"><label for="u">Concerning user(s)</label><div class="entry">',
+        Ht::render_feedback_at("u"),
         Ht::entry("u", $Qreq->u, ["id" => "u", "size" => 40]),
-        Ht::render_messages_at("u"),
         '</div></div><div class="', Ht::control_class("n", "entryi medium"),
         '"><label for="n">Show</label><div class="entry">',
         Ht::entry("n", $Qreq->n, ["id" => "n", "size" => 4, "placeholder" => 50]),
         '  records at a time',
-        Ht::render_messages_at("n"),
+        Ht::render_feedback_at("n"),
         '</div></div><div class="', Ht::control_class("date", "entryi medium"),
         '"><label for="date">Starting at</label><div class="entry">',
+        Ht::render_feedback_at("date"),
         Ht::entry("date", $date, ["id" => "date", "size" => 40, "placeholder" => $dplaceholder]),
-        Ht::render_messages_at("date"),
         '</div></div></div>',
         Ht::submit("Show"),
         Ht::submit("download", "Download", ["class" => "ml-3"]),
@@ -630,15 +679,18 @@ function searchbar(LogRowGenerator $lrg, $page) {
 // render rows
 $user_html = [];
 
+/** @param Contact $user */
 function set_user_html($user, $qreq_n) {
     global $Conf, $Me, $user_html;
     if (($pc = $Conf->pc_member_by_id($user->contactId))) {
         $user = $pc;
     }
-    $t = Text::name_html($user);
     if ($user->disabled === "deleted") {
-        $t = '<del>' . $t . ' &lt;' . htmlspecialchars($user->email) . '&gt;</del>';
+        $t = '<del>' . $user->name_h(NAME_E) . '</del>';
+    } else {
+        $t = $user->name_h(NAME_P);
     }
+    $dt = null;
     if (($viewable = $user->viewable_tags($Me))) {
         $dt = $Conf->tags();
         if (($colors = $dt->color_classes($viewable))) {
@@ -646,7 +698,7 @@ function set_user_html($user, $qreq_n) {
         }
     }
     $t = '<a href="' . $Conf->hoturl("log", ["q" => "", "u" => $user->email, "n" => $qreq_n]) . '">' . $t . '</a>';
-    if ($viewable && $dt->has_decoration) {
+    if ($dt && $dt->has_decoration) {
         $tagger = new Tagger($Me);
         $t .= $tagger->unparse_decoration_html($viewable, Tagger::DECOR_USER);
     }
@@ -664,6 +716,7 @@ function set_user_html($user, $qreq_n) {
     return $t;
 }
 
+/** @param list<Contact> $users */
 function render_users($users, $via) {
     global $Conf, $Qreq, $Me, $user_html;
     if (empty($users) && $via < 0) {
@@ -671,15 +724,19 @@ function render_users($users, $via) {
     }
     $all_pc = true;
     $ts = [];
-    usort($users, "Contact::compare");
+    $last_user = null;
+    usort($users, $Conf->user_comparator());
     foreach ($users as $user) {
+        if ($user === $last_user) {
+            continue;
+        }
         if ($all_pc
             && (!isset($user->roles) || !($user->roles & Contact::ROLE_PCLIKE))) {
             $all_pc = false;
         }
         if ($user->disabled === "deleted") {
             if ($user->email) {
-                $t = '<del>' . Text::name_html($user) . ' &lt;' . htmlspecialchars($user->email) . '&gt;</del>';
+                $t = '<del>' . $user->name_h(NAME_E) . '</del>';
             } else {
                 $t = '<del>[deleted user ' . $user->contactId . ']</del>';
             }
@@ -694,6 +751,7 @@ function render_users($users, $via) {
             }
         }
         $ts[] = $t;
+        $last_user = $user;
     }
     if (count($ts) <= 3) {
         return join(", ", $ts);
@@ -714,7 +772,7 @@ $Conf->header("Log", "actionlog");
 $trs = [];
 $has_dest_user = false;
 foreach ($lrg->page_rows($page) as $row) {
-    $t = ['<td class="pl pl_logtime">' . $Conf->unparse_time($row->timestamp) . '</td>'];
+    $t = ['<td class="pl pl_logtime">' . $Conf->unparse_time((int) $row->timestamp) . '</td>'];
 
     $xusers = $lrg->users_for($row, "contactId");
     $xdest_users = $lrg->users_for($row, "destContactId");

@@ -21,7 +21,7 @@ class ConflictMatch_PaperColumn extends PaperColumn {
     function header(PaperList $pl, $is_text) {
         $t = "Potential conflict";
         if ($this->show_user) {
-            $t .= " with " . Text::name_html($this->contact);
+            $t .= " with " . $this->contact->name_h(NAME_P);
         }
         if ($this->show_user && $this->contact->affiliation) {
             $t .= " (" . htmlspecialchars($this->contact->affiliation) . ")";
@@ -32,15 +32,17 @@ class ConflictMatch_PaperColumn extends PaperColumn {
         $this->nonempty = false;
         return !$pl->user->allow_administer($row);
     }
+    /** @param Contact $user
+     * @param AuthorMatcher $matcher
+     * @param Author $conflict
+     * @param int $aunum
+     * @param string $why */
     function _conflict_match($user, $matcher, $conflict, $aunum, $why) {
         $aumatcher = new AuthorMatcher($conflict);
         if ($aunum) {
             $pfx = "<em>author #$aunum</em> ";
             if ($matcher->nonauthor) {
-                $match = $aumatcher->highlight($matcher);
-                if (!$matcher->name())
-                    $match = "All " . $match;
-                $this->_potconf[$aunum][] = [$pfx . $matcher->highlight($conflict), "matches PC collaborator " . $match];
+                $this->_potconf[$aunum][] = [$pfx . $matcher->highlight($conflict), "matches PC collaborator " . $aumatcher->highlight($matcher)];
             } else if ($why == AuthorMatcher::MATCH_AFFILIATION) {
                 $this->_potconf[$aunum][] = [$pfx . htmlspecialchars($conflict->name()) . " (" . $matcher->highlight($conflict->affiliation) . ")", "matches PC affiliation " . $aumatcher->highlight($user->affiliation)];
             } else {
@@ -48,10 +50,7 @@ class ConflictMatch_PaperColumn extends PaperColumn {
             }
         } else {
             $num = "x" . count($this->_potconf);
-            $pfx = "<em>collaborator</em> ";
-            if (!$conflict->name())
-                $pfx .= "All ";
-            $pfx .= $matcher->highlight($conflict);
+            $pfx = "<em>collaborator</em> " . $matcher->highlight($conflict);
             if ($why == AuthorMatcher::MATCH_AFFILIATION) {
                 $this->_potconf[$num][] = [$pfx, "matches PC affiliation " . $aumatcher->highlight($user->affiliation)];
             } else {
@@ -98,19 +97,18 @@ class ConflictMatch_PaperColumn extends PaperColumn {
         }
     }
 
-    static function expand($name, $user, $xfj, $m) {
+    static function expand($name, Contact $user, $xfj, $m) {
         if (!($fj = (array) $user->conf->basic_paper_column("potentialconflict", $user))) {
             return null;
         }
         $rs = [];
-        foreach (ContactSearch::make_pc($m[1], $user)->ids as $cid) {
-            $u = $user->conf->cached_user_by_id($cid);
+        foreach (ContactSearch::make_pc($m[1], $user)->users() as $u) {
             $fj["name"] = "potentialconflict:" . $u->email;
             $fj["user"] = $u->email;
             $rs[] = (object) $fj;
         }
         if (empty($rs)) {
-            $user->conf->xt_factory_error("No PC member matches “" . htmlspecialchars($m[1]) . "”.");
+            PaperColumn::column_error($user, "No PC member matches “" . htmlspecialchars($m[1]) . "”.");
         }
         return $rs;
     }
