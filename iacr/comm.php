@@ -44,6 +44,29 @@ include "includes/header.inc";
         <strong>Once you have created the accounts of the program committee, you should <a href="coll.php">import
         their recent collaborators<a>.</strong>
       </p>
+      <p>
+      <strong>NOTE:</strong> if you have a PC list in a previous instance of HotCRP, you can download it from the "Users" view as an administrator.
+      </p>
+      <ol>
+      <li>Logout from this instance and login to the other HotCRP instance as an admin</li>
+      <li>navigate to "Users",</li>
+      <li>select the Program Committee instead of "All users",</li>
+      <li>at the bottom of the list you will see "Download". Select "PC Info" and click "Go".</li>
+      </ol>
+      <div class="d-flex align-items-start">
+      <figure class="figure">
+      <figcaption class="text-center figure-caption">Navigate to "Users"</figcaption>
+      <img class="figure-img img-fluid shadow-sm" src="../images/iacr_users.png">
+      </figure>
+      <figure class="ml-2 figure">
+      <figcaption class="text-center figure-caption">Select "Program committee"</figcaption>
+      <img class="figure-img shadow-sm img-fluid" src="../images/iacr_pc.png">
+      </figure>
+      <figure class="ml-2 figure">
+      <figcaption class="text-center figure-caption">Select Download -&gt; PC Info</figcaption>
+      <img class="figure-img ml-4 shadow-sm img-fluid" src="../images/iacr_download.png">
+      </figure>
+      </div>
     </div>
   </div>
 </div>
