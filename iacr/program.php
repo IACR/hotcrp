@@ -26,6 +26,19 @@ function progEdPath() {
         <strong>Submitting this form will require you to login with your IACR reference number and
         password</strong>.
       </p>
+      <?php
+      global $Opt;
+      if ($Opt['iacrType'] === 'tosc' or $Opt['iacrType'] === 'tches') {
+      echo <<<EOF
+      <p class="alert alert-warning">
+      Note: for FSE/ToSC or CHES/TCHES, the papers for the conference consist of multiple volumes.
+      You can import the papers for the other volumes in the program editor using
+      the menu item "Import -&gt; Import papers from ToSC and TCHES".
+      </p>
+EOF;
+}
+?>
+
       <form action="<?php echo progEdPath(); ?>/receiveFromHotCRP.php" method="post">
         <button id="submitAccepted" class="button button-primary" type="submit" disabled>Create program</button>
         <input type="hidden" name="name" value="<?php echo $Opt['longName']; ?>" />
