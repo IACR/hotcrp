@@ -49,9 +49,10 @@ include "includes/header.inc";
       </p>
       <ol>
       <li>Logout from this instance and login to the other HotCRP instance as an admin</li>
-      <li>navigate to "Users",</li>
-      <li>select the Program Committee instead of "All users",</li>
-      <li>at the bottom of the list you will see "Download". Select "PC Info" and click "Go".</li>
+      <li>Navigate to "Users",</li>
+      <li>Select the Program Committee instead of "All users",</li>
+      <li>At the bottom of the list you will see "Download". Select "PC Info" and click "Go".</li>
+      <li>you should be able to upload that file above if you login here again.</li>
       </ol>
       <div class="d-flex align-items-start">
       <figure class="figure">
