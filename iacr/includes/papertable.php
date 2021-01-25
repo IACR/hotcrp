@@ -49,7 +49,7 @@ function echo_iacr_button($val, Conf $conf, $paperId) {
                      'app' => 'hc');
   switch($val) {
     case 5:
-      $url = '/' . $conf->opt['shortName'] . '/iacrcopyright/' . strval($paperId);
+      $url = '/' . $conf->opt['dbName'] . '/iacrcopyright/' . strval($paperId);
       $msg = 'IACR copyright form';
       break;
     case 6:

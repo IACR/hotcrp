@@ -2,6 +2,7 @@
 include "../conf/options.php";
 include "../src/initweb.php";
 global $Opt;
+$dbName = $Opt['dbName'];
 $shortName = $Opt['shortName'];
 // include "includes/header.inc"; We don't use this because we need to insert things
 // in the <head> section
@@ -131,7 +132,7 @@ echo <<<EOH
     <script src="https://iacr.org/libs/js/handlebars/handlebars-v4.1.0.js"></script>
     <script src="https://iacr.org/tools/program/dependencies/dragula/dragula.js"></script>
   </head>
-<body><div id="top"><div id="header-site"><a class="qq" href="/$shortName/"><span class="header-site-name">$shortName</span></a></div>
+<body><div id="top"><div id="header-site"><a class="qq" href="/$dbName/"><span class="header-site-name">$shortName</span></a></div>
 <div class="mt-4 float-right align-items-center d-flex">
 <span id="save_status"></span>
 <div class="ml-4 dropdown">

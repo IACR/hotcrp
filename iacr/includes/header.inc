@@ -95,8 +95,8 @@
   <body>
     <div id="top">
       <div id="header-site">
-        <a class="qq" href="/<?php echo $Opt['shortName'];?>/"><span class="header-site-name"><?php echo $Opt['shortName'];?></span></a>
+        <a class="qq" href="/<?php echo $Opt['dbName'];?>/"><span class="header-site-name"><?php echo $Opt['shortName'];?></span></a>
       </div>
-    <h2 class="float-right mt-4 mr-4"><a href="/<?php echo $Opt['shortName'] . '/iacr/';?>">IACR HotCRP integration</a></h2>
+    <h2 class="float-right mt-4 mr-4"><a href="/<?php echo $Opt['dbName'] . '/iacr/';?>">IACR HotCRP integration</a></h2>
     </div>
     
