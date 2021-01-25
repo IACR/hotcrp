@@ -150,7 +150,7 @@ class Batch_CleanDocstore {
         $dry_run = isset($arg["dry-run"]);
         $keep_temp = isset($arg["keep-temp"]);
         $usage_threshold = null;
-        $hash_matcher = new DocumentHashMatcher(get($arg, "match"));
+        $hash_matcher = new DocumentHashMatcher($arg["match"] ?? null);
 
         if (isset($arg["max-usage"]) || isset($arg["min-usage"])) {
             $ts = disk_total_space($usage_directory);
@@ -158,8 +158,10 @@ class Batch_CleanDocstore {
             if ($ts === false || $fs === false) {
                 fwrite(STDERR, "$usage_directory: cannot evaluate free space\n");
                 return 1;
-            } else if ($fs >= (1 - ($arg["max-usage"] ?? $arg["min-usage"])) * $ts) {
-                fwrite(STDOUT, $usage_directory . ": free space above threshold\n");
+            } else if ($fs >= $ts * (1 - ($arg["max-usage"] ?? $arg["min-usage"]))) {
+                if (!isset($arg["quiet"])) {
+                    fwrite(STDOUT, $usage_directory . ": free space sufficient\n");
+                }
                 return 0;
             }
             $want_fs = $ts * (1 - ($arg["min-usage"] ?? $arg["max-usage"]));
@@ -167,7 +169,7 @@ class Batch_CleanDocstore {
             $count = $arg["count"] ?? 5000;
         }
 
-        foreach (array_merge([$confdp], get($arg, "_", [])) as $i => $dp) {
+        foreach (array_merge([$confdp], $arg["_"] ?? []) as $i => $dp) {
             if (!str_starts_with($dp, "/") || strpos($dp, "%") === false) {
                 fwrite(STDERR, "batch/cleandocstore.php: Bad docstore pattern.\n");
                 return 1;

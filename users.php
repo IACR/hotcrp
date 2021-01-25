@@ -58,7 +58,7 @@ if ($Viewer->privChair
 }
 if ($Viewer->privChair) {
     $tOpt["auuns"] = "Contact authors of non-submitted papers";
-    $tOpt["all"] = "All users";
+    $tOpt["all"] = "Active users";
 }
 if (empty($tOpt)) {
     $Viewer->escape();
@@ -254,18 +254,18 @@ if ($getaction == "pcinfo" && isset($papersel) && $Viewer->privChair) {
 // modifications
 function modify_confirm($j, $ok_message, $ok_message_optional) {
     global $Conf;
-    if (get($j, "ok") && get($j, "warnings")) {
+    if (($j->ok ?? false) && ($j->warnings ?? false)) {
         $Conf->warnMsg("<div>" . join('</div><div style="margin-top:0.5em">', $j->warnings) . "</div>");
     }
-    if (get($j, "ok")
+    if (($j->ok ?? false)
         && $ok_message
-        && (!$ok_message_optional || !get($j, "warnings"))
+        && (!$ok_message_optional || !($j->warnings ?? false))
         && (!isset($j->users) || !empty($j->users))) {
         $Conf->confirmMsg($ok_message);
     }
 }
 
-if ($Viewer->privChair && $Qreq->modifygo && $Qreq->post_ok() && isset($papersel)) {
+if ($Viewer->privChair && $Qreq->modifygo && $Qreq->valid_post() && isset($papersel)) {
     if ($Qreq->modifytype == "disableaccount") {
         modify_confirm(UserActions::disable($Viewer, $papersel), "Accounts disabled.", true);
     } else if ($Qreq->modifytype == "enableaccount") {
@@ -326,7 +326,7 @@ function do_tags($qreq) {
         $users[(int) $cid]->$key = array_merge($users[(int) $cid]->$key, $t1);
     }
     // apply modifications
-    $us = new UserStatus($Viewer, ["no_notify" => true]);
+    $us = new UserStatus($Viewer);
     foreach ($users as $cid => $cj) {
         $us->save($cj);
     }
@@ -343,7 +343,7 @@ function do_tags($qreq) {
     }
 }
 
-if ($Viewer->privChair && $Qreq->tagact && $Qreq->post_ok() && isset($papersel)
+if ($Viewer->privChair && $Qreq->tagact && $Qreq->valid_post() && isset($papersel)
     && preg_match('/\A[ads]\z/', (string) $Qreq->tagtype)) {
     do_tags($Qreq);
 }
@@ -408,7 +408,7 @@ if (count($tOpt) > 1) {
     foreach (array("tags" => "Tags",
                    "aff" => "Affiliations", "collab" => "Collaborators",
                    "topics" => "Topics") as $fold => $text) {
-        if (get($pl->have_folds, $fold) !== null) {
+        if (($pl->have_folds[$fold] ?? null) !== null) {
             $k = array_search($fold, ContactList::$folds) + 1;
             echo Ht::checkbox("show$fold", 1, $pl->have_folds[$fold],
                               ["data-fold-target" => "foldul#$k", "class" => "uich js-foldup"]),
@@ -471,7 +471,7 @@ if ($pl->any->sel) {
         echo Ht::hidden("sort", $Qreq->sort);
     }
 }
-echo $pl_text;
+echo Ht::unstash(), $pl_text;
 if ($pl->any->sel) {
     echo "</form>";
 }

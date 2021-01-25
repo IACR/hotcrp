@@ -3,13 +3,16 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class Tag_SearchTerm extends SearchTerm {
+    /** @var Contact */
+    private $user;
     /** @var TagSearchMatcher */
     private $tsm;
     private $tag1;
     private $tag1nz;
 
-    function __construct(TagSearchMatcher $tsm) {
+    function __construct(Contact $user, TagSearchMatcher $tsm) {
         parent::__construct("tag");
+        $this->user = $user;
         $this->tsm = $tsm;
     }
     static function parse($word, SearchWord $sword, PaperSearch $srch) {
@@ -49,7 +52,7 @@ class Tag_SearchTerm extends SearchTerm {
 
         // expand automatic tags if requested
         $allterms = [];
-        if (true
+        if ($srch->expand_automatic
             && ($dt = $srch->conf->tags())->has_automatic) {
             $nomatch = [];
             foreach ($dt->filter("automatic") as $t) {
@@ -57,7 +60,7 @@ class Tag_SearchTerm extends SearchTerm {
                     && $t->automatic_formula_expression() === "0") {
                     $nomatch[] = " " . preg_quote($t->tag) . "#";
                     if ($value->test_value(0.0)) {
-                        $asrch = new PaperSearch($srch->conf->site_contact(), ["q" => $t->automatic_search(), "t" => "all"]);
+                        $asrch = new PaperSearch($srch->conf->root_user(), ["q" => $t->automatic_search(), "t" => "all"]);
                         $allterms[] = $asrch->term();
                     }
                 }
@@ -69,7 +72,7 @@ class Tag_SearchTerm extends SearchTerm {
 
         // add value term
         if (!$value->is_empty_after_exclusion()) {
-            $allterms[] = $term = new Tag_SearchTerm($value);
+            $allterms[] = $term = new Tag_SearchTerm($srch->user, $value);
             if (!$negated && ($tagpat = $value->tag_patterns())) {
                 $term->set_float("tags", $tagpat);
                 if ($sword->kwdef->sorting) {
@@ -88,16 +91,39 @@ class Tag_SearchTerm extends SearchTerm {
         }
         return SearchTerm::combine("or", $allterms)->negate_if($negated);
     }
+    function is_sqlexpr_precise() {
+        return $this->tsm->is_sqlexpr_precise() && $this->user->is_site_contact;
+    }
+    const SQLEXPR_PREFIX = 'exists (select * from PaperTag where paperId=Paper.paperId';
     function sqlexpr(SearchQueryInfo $sqi) {
         if ($this->tsm->test_empty()) {
             return "true";
         } else {
             $sql = $this->tsm->sqlexpr("PaperTag");
-            return 'exists (select * from PaperTag where paperId=Paper.paperId' . ($sql ? " and $sql" : "") . ')';
+            return self::SQLEXPR_PREFIX . ($sql ? " and $sql" : "") . ')';
         }
     }
-    function exec(PaperInfo $row, PaperSearch $srch) {
-        $ok = $this->tsm->test($row->searchable_tags($srch->user));
+    /** @param non-empty-list<string> $ff
+     * @return string */
+    static function combine_sqlexpr($ff) {
+        if (count($ff) === 1) {
+            return $ff[0];
+        } else {
+            $x = [];
+            foreach ($ff as $f) {
+                if ($f === "true" || !str_starts_with($f, self::SQLEXPR_PREFIX)) {
+                    return "true";
+                } else if ($f === self::SQLEXPR_PREFIX . ")") {
+                    return $f;
+                } else {
+                    $x[] = substr($f, strlen(self::SQLEXPR_PREFIX) + 5, -1);
+                }
+            }
+            return self::SQLEXPR_PREFIX . " and (" . join(" or ", $x) . "))";
+        }
+    }
+    function test(PaperInfo $row, $rrow) {
+        $ok = $this->tsm->test($row->searchable_tags($this->user));
         if ($ok && $this->tag1 && !$this->tag1nz) {
             $this->tag1nz = $row->tag_value($this->tag1) != 0;
         }

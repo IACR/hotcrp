@@ -174,11 +174,11 @@ class ReviewInfo implements JsonSerializable {
     static public $rating_options = [
         1 => "good review", 2 => "needs work",
         4 => "too short", 8 => "too vague", 16 => "too narrow",
-        32 => "not constructive", 64 => "not correct"
+        32 => "disrespectful", 64 => "not correct"
     ];
     static public $rating_bits = [
         1 => "good", 2 => "bad", 4 => "short", 8 => "vague",
-        16 => "narrow", 32 => "not-constructive", 64 => "wrong"
+        16 => "narrow", 32 => "disrespectful", 64 => "wrong"
     ];
 
     static private $type_map = [
@@ -307,6 +307,17 @@ class ReviewInfo implements JsonSerializable {
             && $this->reviewViewScore == self::VIEWSCORE_RECOMPUTE) {
             assert($this->reviewViewScore != self::VIEWSCORE_RECOMPUTE);
             $conf->review_form()->compute_view_scores();
+        }
+    }
+
+    function upgrade_sversion() {
+        if ($this->conf->sversion < 175) {
+            foreach (self::$text_field_map as $kmain => $kjson) {
+                if (property_exists($this, $kmain) && !isset($this->$kjson)) {
+                    $this->$kjson = $this->$kmain;
+                    unset($this->$kmain);
+                }
+            }
         }
     }
 

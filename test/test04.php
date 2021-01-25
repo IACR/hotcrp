@@ -78,7 +78,7 @@ xassert(!user($marina)->check_password("ncurses"));
 save_password($marina, null, true);
 $info = user($marina)->check_password_info("ncurses");
 xassert(!$info["ok"]);
-xassert(get($info, "unset"));
+xassert($info["unset"] ?? null);
 
 // restore to "this is a cdb password"
 user($marina)->change_password("isdevitch");
@@ -109,7 +109,7 @@ xassert(!!$u);
 xassert_eqq($u->firstName, "Te");
 
 // inserting them should succeed and borrow their data
-$us = new UserStatus($Conf->root_user(), ["no_notify" => true]);
+$us = new UserStatus($Conf->root_user());
 $acct = $us->save((object) ["email" => "te@_.com"]);
 xassert(!!$acct);
 $te = user("te@_.com");
@@ -143,6 +143,14 @@ xassert_eqq($te2_cdb->affiliation, "Brandeis University or something");
 // site contact updates keep old value in cdb
 xassert_eqq($te2_cdb->firstName, "");
 xassert_eqq($te2_cdb->lastName, "Thamrongrattanarit 2");
+
+// simplify whitespace
+$acct = $us->save((object) ["lastName" => " Thamrongrattanarit  1  \t", "firstName" => "Te  1", "affiliation" => "  Brandeis   Friendiversity"], $te2);
+xassert(!!$acct);
+$te2 = user("te2@_.com");
+xassert_eqq($te2->firstName, "Te 1");
+xassert_eqq($te2->lastName, "Thamrongrattanarit 1");
+xassert_eqq($te2->affiliation, "Brandeis Friendiversity");
 
 // changes by the chair don't affect the cdb
 Contact::set_guser(user($marina));

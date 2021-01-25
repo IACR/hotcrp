@@ -31,8 +31,11 @@ class DocumentInfo implements JsonSerializable {
     public $infoJson = false;
     /** @var ?int */
     public $size;
+    /** @var ?int */
     public $filterType;
+    /** @var ?int */
     public $originalStorageId;
+    /** @var int */
     public $inactive = 0;
     private $_owner;
 
@@ -48,10 +51,16 @@ class DocumentInfo implements JsonSerializable {
     /** @var ?string */
     private $_member_filename;
     public $sourceHash;
+    /** @var bool */
     public $is_partial = false;
     public $filters_applied;
-    public $error;
+    /** @var bool */
+    public $error = false;
+    /** @var ?string */
     public $error_html;
+
+    const LINKTYPE_COMMENT_BEGIN = 0;
+    const LINKTYPE_COMMENT_END = 1024;
 
     function __construct($p, Conf $conf, PaperInfo $prow = null) {
         $this->merge($p, $conf, $prow);
@@ -268,6 +277,17 @@ class DocumentInfo implements JsonSerializable {
             $d->_member_filename = $fn;
             return $d;
         }
+    }
+
+    private function find_owner() {
+        if ($this->documentType == DTYPE_COMMENT) {
+            $this->prow = $this->prow ?? $this->conf->paper_by_id($this->paperId);
+            if ($this->prow
+                && ($cid = $this->prow->link_id_by_document_id($this->paperStorageId, self::LINKTYPE_COMMENT_BEGIN, self::LINKTYPE_COMMENT_END))) {
+                $this->_owner = $this->prow->comment_by_id($cid);
+            }
+        }
+        return !!$this->_owner;
     }
 
     /** @return false */
@@ -598,8 +618,8 @@ class DocumentInfo implements JsonSerializable {
         fclose($s3l->dstream);
         $unlink = true;
         if ($s3l->status === 200) {
-            if (self::filesize_expected($dspath . "~", $this->size) !== $this->size) {
-                error_log("Disk error: GET $s3l->skey: expected size {$this->size}, got " . filesize($dspath . "~"));
+            if (($sz = self::filesize_expected($dspath . "~", $this->size)) !== $this->size) {
+                error_log("Disk error: GET $s3l->skey: expected size {$this->size}, got " . json_encode($sz));
                 $s3l->status = 500;
             } else if (rename($dspath . "~", $dspath)) {
                 $this->filestore = $dspath;
@@ -1100,31 +1120,41 @@ class DocumentInfo implements JsonSerializable {
     }
 
 
+    const ANY_MEMBER_FILENAME = 1;
+
     /** @return ?string */
-    function member_filename() {
-        assert(($this->_member_filename ?? "") !== "");
-        return $this->_member_filename;
+    function member_filename($flags = 0) {
+        if (($this->_member_filename ?? "") !== "") {
+            return $this->_member_filename;
+        } else {
+            assert(($flags & self::ANY_MEMBER_FILENAME) !== 0);
+            return $this->filename;
+        }
     }
 
-    /** @return string */
-    function export_filename($filters = null) {
+    /** @param int $flags
+     * @return string */
+    function export_filename($filters = null, $flags = 0) {
         $fn = $this->conf->download_prefix;
         if ($this->documentType == DTYPE_SUBMISSION) {
             $fn .= "paper" . $this->paperId;
         } else if ($this->documentType == DTYPE_FINAL) {
             $fn .= "final" . $this->paperId;
         } else if ($this->documentType == DTYPE_COMMENT) {
-            if (!($this->_owner instanceof CommentInfo)) {
+            if (!$this->_owner) {
+                $this->find_owner();
+            } else if (!($this->_owner instanceof CommentInfo)) {
                 throw new Exception("bad DocumentInfo::export_filename for comment");
             }
             assert(!$filters);
-            $fn .= "paper" . $this->paperId;
-            if ($this->_owner->is_response()) {
-                $fn .= "/" . $this->_owner->unparse_html_id();
+            if (!$this->_owner) {
+                $cid = "commentX";
+            } else if ($this->_owner->is_response()) {
+                $cid = $this->_owner->unparse_html_id();
             } else {
-                $fn .= "/comment-" . $this->_owner->unparse_html_id();
+                $cid = "comment-" . $this->_owner->unparse_html_id();
             }
-            return $fn . "/" . $this->member_filename();
+            return "paper{$this->paperId}/{$cid}/" . $this->member_filename($flags);
         } else if ($this->documentType == DTYPE_EXPORT) {
             assert(!!$this->filename);
             return $this->filename;
@@ -1140,7 +1170,7 @@ class DocumentInfo implements JsonSerializable {
             if ($o && $o->has_attachments()) {
                 assert(!$filters);
                 // do not decorate with MIME type suffix
-                return $fn . $oabbr . "/" . $this->member_filename();
+                return "{$fn}{$oabbr}/" . $this->member_filename($flags);
             }
             $fn .= $oabbr;
         }
@@ -1191,10 +1221,11 @@ class DocumentInfo implements JsonSerializable {
             $f = "file=" . rawurlencode($this->export_filename($filters));
         } else {
             $f = "p=$this->paperId";
-            if ($this->documentType == DTYPE_FINAL)
+            if ($this->documentType == DTYPE_FINAL) {
                 $f .= "&amp;final=1";
-            else if ($this->documentType > 0)
+            } else if ($this->documentType > 0) {
                 $f .= "&amp;dt=$this->documentType";
+            }
         }
         return $this->conf->hoturl("doc", $f, $flags);
     }

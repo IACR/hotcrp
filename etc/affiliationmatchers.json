@@ -580,6 +580,9 @@
     "fernuniversitat": {
         "nameish": false
     },
+    "florida": {
+        "sync": ["state", "central", "international"]
+    },
     "france": {
         "weak": true
     },
@@ -703,6 +706,13 @@
         "weak": true,
         "alternate": [{"word": "ucl", "if": "university college"}]
     },
+    "louisiana": {
+        "alternate": [{"word": "lsu", "if": "university state"}],
+        "sync": "state"
+    },
+    "lsu": {
+        "alternate": ["louisiana state university"]
+    },
     "maryland": {
         "sync": ["loyola"]
     },
@@ -795,9 +805,12 @@
     "suny": {
         "nameish": false
     },
+    "technical": {
+        "weak": true
+    },
     "technische": {
         "weak": true,
-        "alternate": [{"word": "tu", "if": "universitat"}]
+        "alternate": [{"word": "tu", "if": "universitat"}, "technical"]
     },
     "technion": {
         "nameish": false
@@ -908,10 +921,12 @@
         ]
     },
     "washington": {
-        "weak": true, "nameish": true,
+        "weak": true,
+        "nameish": true,
         "alternate": [
             {"word": "uw", "if": "university"}
-        ]
+        ],
+        "sync": ["george", "lee"]
     },
     "wisconsin": {
         "alternate": [

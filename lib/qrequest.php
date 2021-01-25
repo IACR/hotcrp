@@ -13,10 +13,10 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     private $____post_ok = false;
     /** @var bool */
     private $____post_empty = false;
-    /** @var false|string */
-    private $____page = false;
-    /** @var false|string */
-    private $____path = false;
+    /** @var ?string */
+    private $____page;
+    /** @var ?string */
+    private $____path;
     function __construct($method, $data = null) {
         $this->____method = $method;
         if ($data) {
@@ -43,16 +43,20 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     function is_post() {
         return $this->____method === "POST";
     }
-    /** @return false|string */
+    /** @return bool */
+    function is_head() {
+        return $this->____method === "HEAD";
+    }
+    /** @return ?string */
     function page() {
         return $this->____page;
     }
-    /** @return false|string */
+    /** @return ?string */
     function path() {
         return $this->____path;
     }
     /** @param int $n
-     * @return false|string */
+     * @return ?string */
     function path_component($n, $decoded = false) {
         if ((string) $this->____path !== "") {
             $p = explode("/", substr($this->____path, 1));
@@ -61,7 +65,7 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
                 return $decoded ? urldecode($p[$n]) : $p[$n];
             }
         }
-        return false;
+        return null;
     }
     function offsetExists($offset) {
         return property_exists($this, $offset);
@@ -287,13 +291,30 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     function set_annex($name, $x) {
         $this->____x[$name] = $x;
     }
-    function approve_post() {
+    /** @return void */
+    function approve_token() {
         $this->____post_ok = true;
     }
     /** @return bool */
-    function post_ok() {
+    function valid_token() {
         return $this->____post_ok;
     }
+    /** @deprecated
+     * @return bool */
+    function post_ok() {
+        if ($this->____post_ok && $this->____method !== "POST") {
+            error_log("Qrequest::post_ok() on {$this->____method}");
+        }
+        return $this->____post_ok;
+    }
+    /** @return bool */
+    function valid_post() {
+        if ($this->____post_ok && $this->____method !== "POST") {
+            error_log("Qrequest::valid_post() on {$this->____method}");
+        }
+        return $this->____post_ok && $this->____method === "POST";
+    }
+    /** @return void */
     function set_post_empty() {
         $this->____post_empty = true;
     }
@@ -304,12 +325,11 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
 
     function xt_allow($e) {
         if ($e === "post") {
-            return $this->method() === "POST" && $this->post_ok();
+            return $this->____method === "POST" && $this->____post_ok;
         } else if ($e === "anypost") {
-            return $this->method() === "POST";
+            return $this->____method === "POST";
         } else if ($e === "getpost") {
-            return ($this->method() === "POST" || $this->method() === "GET")
-                && $this->post_ok();
+            return in_array($this->____method, ["POST", "GET", "HEAD"]) && $this->____post_ok;
         } else if (str_starts_with($e, "req.")) {
             foreach (explode(" ", $e) as $w) {
                 if (str_starts_with($w, "req.")

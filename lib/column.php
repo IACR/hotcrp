@@ -5,9 +5,6 @@
 class Column {
     /** @var string */
     public $name;
-    /** @var string
-     * @readonly */
-    protected $uid;
     /** @var ?string */
     public $title;
     /** @var ?string */
@@ -30,7 +27,9 @@ class Column {
     public $sort_reverse = false;
     /** @var int */
     public $sort_subset = -1;
+    /** @var null|int|float */
     public $position;
+    /** @var ?int */
     public $__subposition;
     /** @var bool */
     public $is_visible = false;
@@ -39,12 +38,9 @@ class Column {
     /** @var ?list<string> */
     protected $decorations;
 
-    static private $next_uid = 0;
-
     /** @param object $arg */
     function __construct($arg) {
         $this->name = $arg->name;
-        $this->uid = "__column" . (++self::$next_uid) . "__";
         if (isset($arg->title)) {
             $this->title = $arg->title;
         }

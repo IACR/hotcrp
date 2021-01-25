@@ -50,7 +50,7 @@ if ($users) {
 
     // read current db roles
     Contact::$allow_nonexistent_properties = true;
-    $result = Dbl::ql($Conf->dblink, "select ContactInfo.contactId, email, firstName, lastName, unaccentedName, disabled, roles, password, passwordTime, passwordUseTime, creationTime, lastLogin,
+    $result = Dbl::ql($Conf->dblink, "select ContactInfo.contactId, email, firstName, lastName, unaccentedName, disabled, roles, password, passwordTime, passwordUseTime, lastLogin,
         exists (select * from PaperConflict where contactId=ContactInfo.contactId and conflictType>=" . CONFLICT_AUTHOR . ") __isAuthor__,
         exists (select * from PaperReview where contactId=ContactInfo.contactId) __hasReview__
         from ContactInfo");
@@ -63,14 +63,14 @@ if ($users) {
                 && preg_match('/\Aanonymous\d*\z/', $u->email))) {
             continue;
         }
-        $cdbu = get($cdb_users, $u->email);
+        $cdbu = $cdb_users[$u->email] ?? null;
         $cdbid = $cdbu ? (int) $cdbu->contactDbId : 0;
         if ($cdbu
             && (int) $cdbu->roles === $cdb_roles
             && $cdbu->activity_at) {
             /* skip */;
         } else if ($cdbu && $cdbu->password !== null) {
-            $qv[] = [$cdbid, $confid, $cdb_roles, $u->creationTime];
+            $qv[] = [$cdbid, $confid, $cdb_roles, $u->activity_at];
         } else {
             $cdbid = $u->contactdb_update();
         }

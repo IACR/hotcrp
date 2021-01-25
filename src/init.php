@@ -3,7 +3,7 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 declare(strict_types=1);
-define("HOTCRP_VERSION", "2.102");
+define("HOTCRP_VERSION", "3.0b1");
 
 // All positive review types must be 1 digit
 define("REVIEW_META", 5);
@@ -84,7 +84,9 @@ setlocale(LC_COLLATE, "C");
 setlocale(LC_CTYPE, "C");
 
 // Don't want external entities parsed by default
-if (function_exists("libxml_disable_entity_loader")) {
+if (PHP_VERSION_ID < 80000
+    && function_exists("libxml_disable_entity_loader")) {
+    /** @phan-suppress-next-line PhanDeprecatedFunctionInternal */
     libxml_disable_entity_loader(true);
 }
 
@@ -155,7 +157,7 @@ function expand_json_includes_callback($includelist, $callback) {
 
 global $Opt;
 if (!$Opt) {
-    $Opt = array();
+    $Opt = [];
 }
 if (!($Opt["loaded"] ?? null)) {
     SiteLoader::read_main_options();

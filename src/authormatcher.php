@@ -35,7 +35,7 @@ class AuthorMatcher extends Author {
                 }
             }
             if (!empty($rr)) {
-                $this->firstName_matcher = Text::make_pregexes(
+                $this->firstName_matcher = new TextPregexes(
                     '\b(?:' . join("|", $rr) . ')\b',
                     Text::UTF8_INITIAL_NONLETTERDIGIT . '(?:' . join("|", $rr) . ')' . Text::UTF8_FINAL_NONLETTERDIGIT
                 );
@@ -50,7 +50,7 @@ class AuthorMatcher extends Author {
                 $ur[] = '(?=.*' . Text::UTF8_INITIAL_NONLETTERDIGIT . $w . Text::UTF8_FINAL_NONLETTERDIGIT . ')';
             }
             if (!empty($rr)) {
-                $this->lastName_matcher = Text::make_pregexes('\A' . join("", $rr), '\A' . join("", $ur));
+                $this->lastName_matcher = new TextPregexes('\A' . join("", $rr), '\A' . join("", $ur));
                 $this->lastName_matcher->simple = count($m[0]) === 1 && strlen($m[0][0]) === strlen($this->lastName) ? $m[0][0] : false;
             }
         }
@@ -62,7 +62,7 @@ class AuthorMatcher extends Author {
             $directs = $wstrong = $wweak = $alts = [];
             $any_strong_alternate = false;
             foreach ($m[0] as $w) {
-                $aw = get($wordinfo, $w);
+                $aw = $wordinfo[$w] ?? null;
                 if ($aw && isset($aw->stop) && $aw->stop) {
                     continue;
                 }
@@ -102,7 +102,7 @@ class AuthorMatcher extends Author {
                 foreach (explode(" ", $alt) as $altw) {
                     if ($altw !== "") {
                         if (!empty($wstrong)) {
-                            $aw = get($wordinfo, $altw);
+                            $aw = $wordinfo[$altw] ?? null;
                             if (!$aw || !isset($aw->weak) || !$aw->weak) {
                                 $wstrong[] = $altw;
                                 $have_strong = true;
@@ -131,7 +131,7 @@ class AuthorMatcher extends Author {
 
         $content = join("|", $any);
         if ($content !== "" && $content !== "none") {
-            $this->general_pregexes_ = Text::make_pregexes(
+            $this->general_pregexes_ = new TextPregexes(
                 '\b(?:' . $content . ')\b',
                 Text::UTF8_INITIAL_NONLETTER . '(?:' . $content . ')' . Text::UTF8_FINAL_NONLETTER
             );
@@ -141,7 +141,7 @@ class AuthorMatcher extends Author {
         if ($highlight_any !== false && $highlight_any !== $any[count($any) - 1]) {
             $any[count($any) - 1] = $highlight_any;
             $content = join("|", $any);
-            $this->highlight_pregexes_ = Text::make_pregexes(
+            $this->highlight_pregexes_ = new TextPregexes(
                 '\b(?:' . $content . ')\b',
                 Text::UTF8_INITIAL_NONLETTER . '(?:' . $content . ')' . Text::UTF8_FINAL_NONLETTER
             );
@@ -239,14 +239,14 @@ class AuthorMatcher extends Author {
         } else {
             $au = $aux;
         }
-        $pregexes = [];
+        $preg = null;
         foreach ($matchers as $matcher) {
-            if (($preg = $matcher->highlight_pregexes())) {
-                $pregexes[] = $preg;
+            if (($preg1 = $matcher->highlight_pregexes())) {
+                $preg = $preg1->merge($preg);
             }
         }
-        if (!empty($pregexes)) {
-            $au = Text::highlight($au, Text::merge_pregexes($pregexes));
+        if ($preg) {
+            $au = Text::highlight($au, $preg);
         }
         if ($aff_suffix !== null && str_ends_with($au, $aff_suffix)) {
             $au = substr($au, 0, -strlen($aff_suffix))
@@ -260,6 +260,7 @@ class AuthorMatcher extends Author {
         return self::highlight_all($au, [$this]);
     }
 
+    /** @return array<string,object> */
     static function wordinfo() {
         // XXX validate input JSON
         if (self::$wordinfo === null) {
@@ -277,7 +278,7 @@ class AuthorMatcher extends Author {
         $result = true;
         $wordinfo = self::wordinfo();
         foreach ($am_words as $w) { // $am_words contains no alternates
-            $aw = get($wordinfo, $w);
+            $aw = $wordinfo[$w] ?? null;
             $weak = $aw && isset($aw->weak) && $aw->weak;
             $saw_w = in_array($w, $m[0]);
             if (!$saw_w && $aw && isset($aw->alternate)) {
@@ -302,7 +303,7 @@ class AuthorMatcher extends Author {
                     // If all are found, exit; check if the found alternate is strong
                     if ($saw_w) {
                         if ($weak && count($altws) == 1) {
-                            $aw2 = get($wordinfo, $alt);
+                            $aw2 = $wordinfo[$alt] ?? null;
                             if (!$aw2 || !isset($aw2->weak) || !$aw2->weak)
                                 $weak = false;
                         }
@@ -375,7 +376,7 @@ class AuthorMatcher extends Author {
         $nc = 0;
         $ninit = 0;
         foreach ($m[0] as $i => $w) {
-            $aw = get($wordinfo, strtolower($w));
+            $aw = $wordinfo[strtolower($w)] ?? null;
             if ($aw) {
                 if (isset($aw->nameish)) {
                     if ($aw->nameish === false) {

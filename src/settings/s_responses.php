@@ -34,8 +34,7 @@ class Responses_SettingParser extends SettingParser {
     static function render(SettingValues $sv) {
         // Authors' response
         echo '<div class="form-g">';
-        $sv->echo_checkbox("resp_active", '<strong>Collect authors’ responses to the reviews<span class="if-response-active">:</span></strong>', ["group_open" => true]);
-        Ht::stash_script('$(function () { $("#resp_active").on("change", function () { var ch = $$("resp_active").checked; $(".if-response-active").toggleClass("hidden", !ch); }).trigger("change"); })');
+        $sv->echo_checkbox("resp_active", '<strong>Collect authors’ responses to the reviews<span class="if-response-active">:</span></strong>', ["group_open" => true, "class" => "uich js-settings-resp-active"]);
         echo '<div id="auresparea" class="if-response-active',
             $sv->curv("resp_active") ? "" : " hidden",
             '"><hr class="g">', Ht::hidden("has_resp_rounds", 1);
@@ -96,15 +95,16 @@ class Responses_SettingParser extends SettingParser {
 
         for ($i = 1; $sv->has_reqv("resp_roundname_$i"); ++$i) {
             $rname = trim($sv->reqv("resp_roundname_$i"));
-            if ($rname === "" && get($old_roundnames, $i))
+            if ($rname === "" && ($old_roundnames[$i] ?? null)) {
                 $rname = $old_roundnames[$i];
-            if ($rname === "")
+            }
+            if ($rname === "") {
                 continue;
-            else if (($rerror = Conf::resp_round_name_error($rname)))
+            } else if (($rerror = Conf::resp_round_name_error($rname))) {
                 $sv->error_at("resp_roundname_$i", $rerror);
-            else if (get($roundnames_set, strtolower($rname)) !== null)
+            } else if (($roundnames_set[strtolower($rname)] ?? null) !== null) {
                 $sv->error_at("resp_roundname_$i", "Response round name “" . htmlspecialchars($rname) . "” has already been used.");
-            else {
+            } else {
                 $roundnames[] = $rname;
                 $roundnames_set[strtolower($rname)] = $i;
             }

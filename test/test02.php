@@ -100,7 +100,7 @@ xassert_eqq(DocumentInfo::sanitize_filename(str_repeat("i", 1024) . ".txt"), str
 xassert_eqq(strlen(DocumentInfo::sanitize_filename(str_repeat("i", 1024) . ".txt")), 255);
 xassert_eqq(DocumentInfo::sanitize_filename(str_repeat("i", 1024)), str_repeat("i", 252) . "...");
 
-// Csv::split_lines tests
+// Csv tests
 xassert_array_eqq(CsvParser::split_lines(""),
                   array());
 xassert_array_eqq(CsvParser::split_lines("\r"),
@@ -115,6 +115,72 @@ xassert_array_eqq(CsvParser::split_lines("\r\naaa"),
                   array("\r\n", "aaa"));
 xassert_array_eqq(CsvParser::split_lines("\na\r\nb\rc\n"),
                   array("\n", "a\r\n", "b\r", "c\n"));
+
+$csv = new CsvParser("0,1,2\n3,4,5\n6,7\n8,9,10\n");
+xassert_array_eqq($csv->next_list(), ["0", "1", "2"]);
+xassert_array_eqq($csv->next_list(), ["3", "4", "5"]);
+xassert_array_eqq($csv->next_list(), ["6", "7"]);
+xassert_array_eqq($csv->next_list(), ["8", "9", "10"]);
+xassert_eqq($csv->next_list(), null);
+
+$csv = new CsvParser("0,1,2\n3,4,5\n6,7\n8,9,10\n");
+xassert_array_eqq($csv->next_map(), ["0", "1", "2"]);
+xassert_array_eqq($csv->next_map(), ["3", "4", "5"]);
+xassert_array_eqq($csv->next_map(), ["6", "7"]);
+xassert_array_eqq($csv->next_map(), ["8", "9", "10"]);
+xassert_eqq($csv->next_map(), null);
+
+$csv = new CsvParser("0,1,2\n3,4,5\n6,7\n8,9,10\n");
+$csv->set_header($csv->next_row());
+xassert_array_eqq($csv->next_list(), ["3", "4", "5"]);
+xassert_array_eqq($csv->next_list(), ["6", "7"]);
+xassert_array_eqq($csv->next_list(), ["8", "9", "10"]);
+xassert_eqq($csv->next_list(), null);
+
+$csv = new CsvParser("0,1,2\n3,4,5\n6,7\n8,9,10\n");
+$csv->set_header($csv->next_row());
+xassert_array_eqq($csv->next_map(), ["0" => "3", "1" => "4", "2" => "5"]);
+xassert_array_eqq($csv->next_map(), ["0" => "6", "1" => "7"]);
+xassert_array_eqq($csv->next_map(), ["0" => "8", "1" => "9", "2" => "10"]);
+xassert_eqq($csv->next_map(), null);
+
+$csv = new CsvParser("0,1,2\n3,4,5\n6,7\n8,9,10\n");
+$csv->set_header($csv->next_row());
+xassert_array_eqq(iterator_to_array($csv->next_row()), ["0" => "3", "1" => "4", "2" => "5"]);
+xassert_array_eqq(iterator_to_array($csv->next_row()), ["0" => "6", "1" => "7"]);
+xassert_array_eqq(iterator_to_array($csv->next_row()), ["0" => "8", "1" => "9", "2" => "10"]);
+xassert_eqq($csv->next_row(), null);
+
+$csv = new CsvParser("2,1,0\n3,4,5\n6,7\n8,9,10\n");
+$csv->set_header($csv->next_row());
+$csvr = $csv->next_row();
+xassert(isset($csvr[0]));
+xassert_eqq($csvr[0], "3");
+$k = "0"; // Work around PHP bug #63217 in PHP 7.2 and before
+xassert(isset($csvr[$k]));
+xassert_eqq($csvr[$k], "5");
+xassert(!isset($csvr[3]));
+$csvr[3] = "10";
+xassert_eqq($csvr[3], "10");
+$csvr["xxxx"] = "1010";
+xassert_eqq($csvr["xxxx"], "1010");
+xassert_eqq($csvr["xxxxajajaj"], null);
+
+$csv = new CsvParser("Butts,Butt and Money,Yes\n3,4,5\n6,7\n8,9,10\n");
+$csv->set_header($csv->next_row());
+$csvr = $csv->next_row();
+xassert(isset($csvr[0]));
+xassert_eqq($csvr[0], "3");
+xassert(isset($csvr["butts"]));
+xassert_eqq($csvr["butts"], "3");
+xassert(isset($csvr["Butts"]));
+xassert_eqq($csvr["Butts"], "3");
+xassert(isset($csvr["butt_and_money"]));
+xassert_eqq($csvr["butt_and_money"], "4");
+$csvr = $csv->next_row();
+xassert(!isset($csvr[2]));
+$csvr["Yes"] = "Hi";
+xassert_eqq($csvr[2], "Hi");
 
 // numrangejoin tests
 xassert_eqq(numrangejoin([1, 2, 3, 4, 6, 8]), "1–4, 6, and 8");
@@ -159,10 +225,10 @@ $x = Json::decode_landmarks('{
         "c": "d"
     }
 }', "x.txt");
-xassert_match($x->a[0], ",^x.txt:2(?::|\$),");
-xassert_match($x->a[1], ",^x.txt:2(?::|\$),");
-xassert_match($x->b->c, ",^x.txt:4(?::|\$),");
-xassert_match($x->b->__LANDMARK__, ",^x.txt:3(?::|\$),");
+xassert_match($x->a[0], "/^x.txt:2(?::|\$)/");
+xassert_match($x->a[1], "/^x.txt:2(?::|\$)/");
+xassert_match($x->b->c, "/^x.txt:4(?::|\$)/");
+xassert_match($x->b->__LANDMARK__, "/^x.txt:3(?::|\$)/");
 xassert_eqq(Json::decode("[1-2]"), null);
 xassert_eqq(json_decode("[1-2]"), null);
 xassert_eqq(Json::decode("[1,2,3-4,5,6-10,11]"), null);
@@ -219,6 +285,12 @@ for ($i = 0; $i < 1000; ++$i) {
     //file_put_contents("/tmp/x", "if (JSON.stringify(decode_ids(" . json_encode(SessionList::encode_ids($ids)) . ")) !== " . json_encode(json_encode($ids)) . ") throw new Error;\n", FILE_APPEND);
     xassert_eqq(SessionList::decode_ids(SessionList::encode_ids($ids)), $ids);
 }
+
+xassert_eqq(json_encode(SessionList::decode_ids("1z20zz34")), "[1,20,34]");
+xassert_eqq(json_encode(SessionList::decode_ids("10zjh")), "[10,9,8,7,6,5,4,3,2]");
+xassert_eqq(json_encode(SessionList::decode_ids("10Zh")), "[10,9,8,7,6,5,4,3,2]");
+xassert_eqq(SessionList::encode_ids([10,9,8,7]), "10Zc");
+xassert_eqq(SessionList::encode_ids([10,9,8,7,5,4,1]), "10ZCJa");
 
 // obscure_time tests
 $t = $Conf->parse_time("1 Sep 2010 00:00:01");
@@ -524,34 +596,34 @@ xassert_eqq(ini_get_bytes("", "1.2k"), 1229);
 xassert_eqq(ini_get_bytes("", "20G"), 20 * (1 << 30));
 
 // name splitting
-xassert_eqq(get(Text::split_name("Bob Kennedy"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy"), 1), "Kennedy");
-xassert_eqq(get(Text::split_name("Bob Kennedy (Butt Pants)"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy (Butt Pants)"), 1), "Kennedy (Butt Pants)");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Esq."), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Esq."), 1), "Kennedy, Esq.");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Esq. (Butt Pants)"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Esq. (Butt Pants)"), 1), "Kennedy, Esq. (Butt Pants)");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Jr., Esq."), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Jr., Esq."), 1), "Kennedy, Jr., Esq.");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Jr., Esq. (Butt Pants)"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Bob Kennedy, Jr., Esq. (Butt Pants)"), 1), "Kennedy, Jr., Esq. (Butt Pants)");
-xassert_eqq(get(Text::split_name("Kennedy, Bob, Jr., Esq."), 0), "Bob");
-xassert_eqq(get(Text::split_name("Kennedy, Bob, Jr., Esq."), 1), "Kennedy, Jr., Esq.");
-xassert_eqq(get(Text::split_name("Kennedy, Bob, Jr., Esq. (Butt Pants)"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Kennedy, Bob, Jr., Esq. (Butt Pants)"), 1), "Kennedy, Jr., Esq. (Butt Pants)");
-xassert_eqq(get(Text::split_name("Kennedy, Bob"), 0), "Bob");
-xassert_eqq(get(Text::split_name("Kennedy, Bob"), 1), "Kennedy");
-xassert_eqq(get(Text::split_name("Kennedy, Bob (Butt Pants)"), 0), "Bob (Butt Pants)");
-xassert_eqq(get(Text::split_name("Kennedy, Bob (Butt Pants)"), 1), "Kennedy");
-xassert_eqq(get(Text::split_name("Claire Le Goues"), 1), "Le Goues");
-xassert_eqq(get(Text::split_name("Claire Von La Le Goues"), 1), "Von La Le Goues");
-xassert_eqq(get(Text::split_name("CLAIRE VON LA LE GOUES"), 1), "VON LA LE GOUES");
-xassert_eqq(get(Text::split_name("C. Von La Le Goues"), 1), "Von La Le Goues");
+xassert_eqq((Text::split_name("Bob Kennedy"))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy"))[1], "Kennedy");
+xassert_eqq((Text::split_name("Bob Kennedy (Butt Pants)"))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy (Butt Pants)"))[1], "Kennedy (Butt Pants)");
+xassert_eqq((Text::split_name("Bob Kennedy, Esq."))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy, Esq."))[1], "Kennedy, Esq.");
+xassert_eqq((Text::split_name("Bob Kennedy, Esq. (Butt Pants)"))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy, Esq. (Butt Pants)"))[1], "Kennedy, Esq. (Butt Pants)");
+xassert_eqq((Text::split_name("Bob Kennedy, Jr., Esq."))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy, Jr., Esq."))[1], "Kennedy, Jr., Esq.");
+xassert_eqq((Text::split_name("Bob Kennedy, Jr., Esq. (Butt Pants)"))[0], "Bob");
+xassert_eqq((Text::split_name("Bob Kennedy, Jr., Esq. (Butt Pants)"))[1], "Kennedy, Jr., Esq. (Butt Pants)");
+xassert_eqq((Text::split_name("Kennedy, Bob, Jr., Esq."))[0], "Bob");
+xassert_eqq((Text::split_name("Kennedy, Bob, Jr., Esq."))[1], "Kennedy, Jr., Esq.");
+xassert_eqq((Text::split_name("Kennedy, Bob, Jr., Esq. (Butt Pants)"))[0], "Bob");
+xassert_eqq((Text::split_name("Kennedy, Bob, Jr., Esq. (Butt Pants)"))[1], "Kennedy, Jr., Esq. (Butt Pants)");
+xassert_eqq((Text::split_name("Kennedy, Bob"))[0], "Bob");
+xassert_eqq((Text::split_name("Kennedy, Bob"))[1], "Kennedy");
+xassert_eqq((Text::split_name("Kennedy, Bob (Butt Pants)"))[0], "Bob (Butt Pants)");
+xassert_eqq((Text::split_name("Kennedy, Bob (Butt Pants)"))[1], "Kennedy");
+xassert_eqq((Text::split_name("Claire Le Goues"))[1], "Le Goues");
+xassert_eqq((Text::split_name("Claire Von La Le Goues"))[1], "Von La Le Goues");
+xassert_eqq((Text::split_name("CLAIRE VON LA LE GOUES"))[1], "VON LA LE GOUES");
+xassert_eqq((Text::split_name("C. Von La Le Goues"))[1], "Von La Le Goues");
 xassert_eqq(Text::analyze_von("Von Le Goues"), null);
 xassert_eqq(Text::analyze_von("von le Goues"), ["von le", "Goues"]);
-xassert_eqq(get(Text::split_name("Brivaldo Junior"), 0), "Brivaldo");
-xassert_eqq(get(Text::split_name("Brivaldo Junior"), 1), "Junior");
+xassert_eqq((Text::split_name("Brivaldo Junior"))[0], "Brivaldo");
+xassert_eqq((Text::split_name("Brivaldo Junior"))[1], "Junior");
 xassert_array_eqq(Text::split_first_prefix("Dr."), ["Dr.", ""]);
 xassert_array_eqq(Text::split_first_prefix("Dr. John"), ["John", "Dr."]);
 xassert_array_eqq(Text::split_first_prefix("Dr. Prof."), ["Prof.", "Dr."]);
@@ -931,7 +1003,6 @@ xassert_eqq($am->find_all("ACMComp"), [2]);
 
 $am->add_phrase("One hundred things", 3);
 $am->add_phrase("One hundred things (Final)", 4);
-$am->add_deparenthesized();
 xassert_eqq($am->find_all("OneHunThi"), [3]);
 xassert_eqq($am->find_all("OneHunThiFin"), [4]);
 xassert_eqq($am->find_all("one-hundr-thi"), [3]);
@@ -1037,6 +1108,91 @@ $am->add_phrase("Yes - I confirm that I will speak.", 0);
 $am->add_phrase("No - I'm sorry, but I can't present my proposal.", 1);
 $am->add_keyword("none", 3);
 xassert_eqq($am->find_all("No"), [1]);
+
+$am = new AbbreviationMatcher;
+$am->add_phrase("Shit", 0);
+$am->add_phrase("Butt(s)", 110);
+$am->add_phrase("Wonder(ment)[2](maybe)", 110);
+$am->add_phrase("Wander (ment) [2](maybe)", 110);
+xassert_eqq($am->find_all("Butt(s)"), [110]);
+xassert_eqq($am->find_all("Butts"), [110]);
+
+$am = new AbbreviationMatcher;
+$names = ["Public Talk Title (required)",
+          "Short description (required)",
+          "Keyword-Hash Tags",
+          "Speaker Name(s) for Public Posting (required)",
+          "Bio for each presenter (required)",
+          "Speaker(s)' Slack Handle(s)",
+          "Speaker(s)' Twitter handles",
+          "Speaker(s)'s Headshot (required)",
+          "Long Presentation Video",
+          "Slides",
+          "Proposal Type",
+          "Proposal Length",
+          "Long Description for Program Committee",
+          "Session Outline",
+          "Audience Take-Aways",
+          "Other notes for the program committee",
+          "Agenda Items Complete?",
+          "Paper preparation"];
+foreach ($names as $i => $k) {
+    $am->add_phrase($k, $i);
+}
+foreach ($names as $i => $k) {
+    $e = new AbbreviationEntry($k, $i);
+    $am->ensure_entry_keyword($e, AbbreviationMatcher::KW_CAMEL);
+}
+xassert_eqq($am->find_all("PubTal"), [0]);
+xassert_eqq($am->find_all("ShoDes"), [1]);
+xassert_eqq($am->find_all("KeyHasTag"), [2]);
+xassert_eqq($am->find_all("SpeNam"), [3]);
+xassert_eqq($am->find_all("BioPre"), [4]);
+xassert_eqq($am->find_all("SpeSlaHan"), [5]);
+xassert_eqq($am->find_all("SpeTwiHan"), [6]);
+xassert_eqq($am->find_all("SpeHea"), [7]);
+xassert_eqq($am->find_all("LonPreVid"), [8]);
+
+$am = new AbbreviationMatcher;
+$names = ["Presentation Video (1-2 minutes)",
+          "Presentation Video (15-20 minutes)",
+          "Presentation Slides"];
+foreach ($names as $i => $k) {
+    $am->add_phrase($k, $i);
+}
+foreach ($names as $i => $k) {
+    $e = new AbbreviationEntry($k, $i);
+    $am->ensure_entry_keyword($e, AbbreviationMatcher::KW_CAMEL);
+}
+xassert_eqq($am->find_all("PreVid1"), [0]);
+xassert_eqq($am->find_all("PreVid15"), [1]);
+xassert_eqq($am->find_all("PreSli"), [2]);
+xassert_eqq($am->find_all("PreVid"), [0, 1]);
+
+$am = new AbbreviationMatcher;
+$names = ["Applications of cryptography",
+  "Applications of cryptography: Analysis of deployed cryptography and cryptographic protocols",
+  "Applications of cryptography: Cryptographic implementation analysis",
+  "Applications of cryptography: New cryptographic protocols with real-world applications",
+  "Data-driven security and measurement studies",
+  "Data-driven security and measurement studies: Measurements of fraud, malware, spam",
+  "Data-driven security and measurement studies: Measurements of human behavior and security",
+  "Hardware security",
+  "Hardware security: Embedded systems security",
+  "Hardware security: Methods for detection of malicious or counterfeit hardware",
+  "Hardware security: Secure computer architectures",
+  "Hardware security: Side channels"];
+foreach ($names as $i => $k) {
+    $am->add_phrase($k, $i, 1);
+}
+foreach ([[0, 1, 2, 3], [4, 5, 6], [7, 8, 9, 10, 11]] as $g) {
+    foreach ($g as $i) {
+        $am->add_phrase($names[$g[0]], $i, 2);
+    }
+}
+xassert_eqq($am->find_all("Applications of cryptography"), [0, 1, 2, 3]);
+xassert_eqq($am->find1("Applications of cryptography"), null);
+xassert_eqq($am->find1("Applications of cryptography", 1), 0);
 
 // Filer::docstore_fixed_prefix
 xassert_eqq(Filer::docstore_fixed_prefix(null), null);

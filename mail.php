@@ -53,17 +53,15 @@ if (!isset($Qreq->t) || !isset($tOpt[$Qreq->t])) {
 if (isset($Qreq->cc) && $Me->is_manager()) {
     // XXX should only apply to papers you administer
     $Qreq->cc = simplify_whitespace($Qreq->cc);
-} else if ($Conf->opt("emailCc")) {
-    $Qreq->cc = $Conf->opt("emailCc");
 } else {
-    $Qreq->cc = Text::nameo($Conf->site_contact(), NAME_MAILQUOTE|NAME_E);
+    $Qreq->cc = $Conf->opt("emailCc") ?? "";
 }
 
 if (isset($Qreq->replyto) && $Me->is_manager()) {
     // XXX should only apply to papers you administer
     $Qreq->replyto = simplify_whitespace($Qreq->replyto);
 } else {
-    $Qreq->replyto = $Conf->opt("emailReplyTo", "");
+    $Qreq->replyto = $Conf->opt("emailReplyTo") ?? "";
 }
 
 global $mailer_options;
@@ -128,7 +126,7 @@ if (isset($Qreq->loadtmpl)) {
         $template = (array) $Conf->mail_template("generic");
     }
     if (!isset($Qreq->to) || $Qreq->loadtmpl != -1) {
-        $Qreq->to = get($template, "default_recipients", "s");
+        $Qreq->to = $template["default_recipients"] ?? "s";
     }
     if (isset($template["default_search_type"])) {
         $Qreq->t = $template["default_search_type"];
@@ -313,7 +311,7 @@ class MailSender {
             echo '<div class="fn2 warning">Scroll down to send the prepared mail once the page finishes loading.</div>',
                 "</div>\n";
         }
-        echo Ht::unstash_script("fold('mail',0,2)");
+        echo Ht::unstash_script("hotcrp.fold('mail',0,2)");
         $this->started = true;
     }
 
@@ -321,7 +319,7 @@ class MailSender {
         if (!$this->started) {
             $this->echo_prologue();
         }
-        $s = "\$\$('mailcount').innerHTML=\"";
+        $s = "document.getElementById('mailcount').innerHTML=\"";
         if ($nrows_done >= $nrows_total) {
             $s .= "100";
         } else {
@@ -330,7 +328,7 @@ class MailSender {
         $s .= "% done.\";";
         $m = plural($this->mcount, "mail") . ", "
             . plural($this->mrecipients, "recipient");
-        $s .= "\$\$('mailinfo').innerHTML=\"<span class='barsep'>·</span>" . $m . "\";";
+        $s .= "document.getElementById('mailinfo').innerHTML=\"<span class='barsep'>·</span>" . $m . "\";";
         if (!$this->sending && $this->groupable) {
             $s .= "\$('.mail_groupable').show();";
         }
@@ -421,7 +419,7 @@ class MailSender {
                 $vh = '<div style="max-width:60em"><span class="nw">' . join(',</span> <span class="nw">', $vh) . '</span></div>';
             } else if ($k == "Subject") {
                 $vh = htmlspecialchars(MimeText::decode_header($show_prep->subject));
-            } else if (($line = get($show_prep->headers, $k))) {
+            } else if (($line = $show_prep->headers[$k] ?? null)) {
                 $k = substr($line, 0, strlen($k));
                 $vh = htmlspecialchars(MimeText::decode_header(substr($line, strlen($k) + 2)));
             } else {
@@ -533,7 +531,7 @@ class MailSender {
                 $this->echo_prologue();
                 $nwarnings = $mailer->warning_count();
                 echo "<div id=\"foldmailwarn$nwarnings\" class=\"hidden\"><div class=\"warning\">", join("<br>", $mailer->warning_htmls()), "</div></div>";
-                echo Ht::unstash_script("\$\$('mailwarnings').innerHTML = \$\$('foldmailwarn$nwarnings').innerHTML;");
+                echo Ht::unstash_script("document.getElementById('mailwarnings').innerHTML = document.getElementById('foldmailwarn$nwarnings').innerHTML;");
             }
 
             if ($this->sending && $revinform !== null && $prow) {
@@ -548,7 +546,7 @@ class MailSender {
             if (empty($preperrors)) {
                 Conf::msg_error("No users match “" . $this->recip->unparse() . "” for that search.");
             }
-            echo Ht::unstash_script("addClass(document.getElementById('foldmail'),'hidden');document.getElementById('mailform').action=" . json_encode_browser($this->conf->hoturl("mail", "check=1", Conf::HOTURL_RAW | Conf::HOTURL_POST)));
+            echo Ht::unstash_script("\$(\"#foldmail\").addClass('hidden');document.getElementById('mailform').action=" . json_encode_browser($this->conf->hoturl("mail", "check=1", Conf::HOTURL_RAW | Conf::HOTURL_POST)));
             return false;
         }
 
@@ -561,7 +559,7 @@ class MailSender {
             }
         }
         echo "</form>";
-        echo Ht::unstash_script("fold('mail', null);");
+        echo Ht::unstash_script("hotcrp.fold('mail', null);");
         $this->conf->footer();
         exit;
     }
@@ -582,24 +580,26 @@ if (!$Qreq->loadtmpl
     && !$Qreq->psearch
     && !$Qreq->again
     && !$recip->error
-    && $Qreq->post_ok()) {
-    if ($Qreq->send && $Qreq->mailid)
+    && $Qreq->valid_post()) {
+    if ($Qreq->send && $Qreq->mailid) {
         MailSender::send2($Me, $recip, $Qreq);
-    else if ($Qreq->send)
+    } else if ($Qreq->send) {
         MailSender::send1($Me, $recip, $Qreq);
-    else if ($Qreq->check || $Qreq->group || $Qreq->ungroup)
+    } else if ($Qreq->check || $Qreq->group || $Qreq->ungroup) {
         MailSender::check($Me, $recip, $Qreq);
+    }
 }
 
 
 if (isset($Qreq->monreq)) {
     $plist = new PaperList("reqrevs", new PaperSearch($Me, ["t" => "req", "q" => ""]));
     $plist->set_table_id_class("foldpl", "pltable-fullw");
-    $ptext = $plist->table_html(["list" => true]);
-    if ($plist->count == 0)
+    if ($plist->is_empty()) {
         $Conf->infoMsg('You have not requested any external reviews.  <a href="' . hoturl("index") . '">Return home</a>');
-    else {
-        echo "<h2>Requested reviews</h2>\n\n", $ptext, '<div class="info">';
+    } else {
+        echo "<h2>Requested reviews</h2>\n\n";
+        $plist->echo_table_html(["list" => true]);
+        echo '<div class="info">';
         if ($plist->has("need_review")) {
             echo "Some of your requested external reviewers have not completed their reviews.  To send them an email reminder, check the text below and then select &ldquo;Prepare mail.&rdquo;  You’ll get a chance to review the emails and select specific reviewers to remind.";
         } else {
@@ -623,7 +623,7 @@ foreach (array_keys($Conf->mail_template_map()) as $tname) {
     if (($template = $Conf->mail_template($tname))
         && (isset($template->title) && $template->title !== false)
         && (!isset($template->allow_template) || $template->allow_template)
-        && ($Me->privChair || get($template, "allow_pc")))
+        && ($Me->privChair || ($template->allow_pc ?? false)))
         $tmpl[] = $template;
 }
 usort($tmpl, "Conf::xt_position_compare");
@@ -661,22 +661,24 @@ echo Ht::entry("q", (string) $Qreq->q,
                array("id" => "q", "placeholder" => "(All)",
                      "class" => "papersearch need-suggest", "size" => 36)),
     " &nbsp;in&nbsp;";
-if (count($tOpt) == 1)
+if (count($tOpt) == 1) {
     echo htmlspecialchars($tOpt[$Qreq->t]);
-else
+} else {
     echo " ", Ht::select("t", $tOpt, $Qreq->t, array("id" => "t"));
+}
 echo " &nbsp;", Ht::submit("psearch", "Search");
 echo "</span>";
 if (isset($Qreq->plimit)
     && !isset($Qreq->monreq)
     && (isset($Qreq->loadtmpl) || isset($Qreq->psearch))) {
     $plist = new PaperList("reviewers", new PaperSearch($Me, ["t" => $Qreq->t, "q" => $Qreq->q]));
-    $ptext = $plist->table_html(["noheader" => true, "nofooter" => true]);
-    echo "<div class=\"fx8\">";
-    if ($plist->count == 0)
-        echo "No papers match that search.";
-    else
-        echo '<div class="g"></div>', $ptext;
+    echo "<div class=\"fx8";
+    if ($plist->is_empty()) {
+        echo "\">No papers match that search.";
+    } else {
+        echo " g\">";
+        $plist->echo_table_html(["noheader" => true, "nofooter" => true]);
+    }
     echo '</div>', Ht::hidden("prevt", $Qreq->t),
         Ht::hidden("prevq", $Qreq->q);
 }
@@ -693,11 +695,11 @@ echo 'Assignments since:&nbsp; ',
 echo '<div class="fx9 g"></div>';
 
 Ht::stash_script('function mail_recipients_fold(event) {
-    var plimit = $$("plimit");
-    foldup.call(this, null, {f: !!plimit && !plimit.checked, n: 8});
+    var plimit = document.getElementById("plimit");
+    hotcrp.foldup.call(this, null, {f: !!plimit && !plimit.checked, n: 8});
     var sopt = $(this).find("option[value=\'" + this.value + "\']");
-    foldup.call(this, null, {f: sopt.hasClass("mail-want-no-papers"), n: 9});
-    foldup.call(this, null, {f: !sopt.hasClass("mail-want-since"), n: 10});
+    hotcrp.foldup.call(this, null, {f: sopt.hasClass("mail-want-no-papers"), n: 9});
+    hotcrp.foldup.call(this, null, {f: !sopt.hasClass("mail-want-since"), n: 10});
 }
 $("#to, #plimit").on("change", mail_recipients_fold);
 $(function () { $("#to").trigger("change"); })');

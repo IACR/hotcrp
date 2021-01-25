@@ -59,7 +59,7 @@ class Reviews_SettingRenderer {
 
     static function render(SettingValues $sv) {
         echo '<div class="form-g">';
-        $sv->echo_checkbox("rev_open", "<b>Open site for reviewing</b>");
+        $sv->echo_checkbox("rev_open", "<b>Enable review editing</b>");
         $sv->echo_checkbox("cmt_always", "Allow comments even if reviewing is closed");
         echo "</div>\n";
 
@@ -84,7 +84,7 @@ class Reviews_SettingRenderer {
         $sv->set_oldv("rev_roundtag", "#" . $sv->conf->assignment_round(false));
         $round_value = $sv->oldv("rev_roundtag");
         if (preg_match('/\A\#(\d+)\z/', $sv->curv("rev_roundtag"), $m)
-            && get($rounds, intval($m[1]), ";") != ";") {
+            && ($rounds[intval($m[1])] ?? ";") !== ";") {
             $round_value = $m[0];
         }
 
@@ -94,7 +94,7 @@ class Reviews_SettingRenderer {
         }
         $extround_value = $sv->oldv("extrev_roundtag");
         if (preg_match('/\A\#(\d+)\z/', $sv->curv("extrev_roundtag"), $m)
-            && get($rounds, intval($m[1]), ";") != ";") {
+            && ($rounds[intval($m[1])] ?? ";") !== ";") {
             $extround_value = $m[0];
         }
 
@@ -129,11 +129,12 @@ class Reviews_SettingRenderer {
         }
 
         echo '<div id="roundtable">', Ht::hidden("has_tag_rounds", 1);
-        $round_map = Dbl::fetch_map($sv->conf->ql("select reviewRound, count(*) from PaperReview group by reviewRound"));
+        $round_map = Dbl::fetch_iimap($sv->conf->ql("select reviewRound, count(*) from PaperReview group by reviewRound"));
         $num_printed = 0;
         foreach ($roundorder as $i => $rname) {
             if ($i ? $rname !== ";" : $print_round0) {
-                self::echo_round($sv, $i, $i ? $rname : "", +get($round_map, $i), count($selector) !== 1);
+                self::echo_round($sv, $i, $i ? $rname : "", $round_map[$i] ?? 0,
+                                 $i !== 0 && count($selector) !== 1);
                 ++$num_printed;
             }
         }
@@ -149,7 +150,7 @@ class Reviews_SettingRenderer {
                 echo Ht::hidden("roundname_$i", "", array("id" => "roundname_$i")),
                     Ht::hidden("deleteround_$i", 1, ["data-default-value" => "1"]);
         }
-        Ht::stash_script('review_round_settings()');
+        Ht::stash_script('hotcrp.settings.review_round()');
 
         $extselector = array_merge(["#same" => "(same as PC)"], $selector);
         echo '<div id="round_container" style="margin-top:1em', (count($selector) == 1 ? ';display:none' : ''), '">',
@@ -282,7 +283,7 @@ class Reviews_SettingRenderer {
                     && $sv->newv($deadline . $suf) > Conf::$now
                     && $sv->newv("rev_open") <= 0
                     && !$errored) {
-                    $sv->warning_at("rev_open", "A review deadline is set in the future, but the site is not open for reviewing. This is sometimes unintentional.");
+                    $sv->warning_at("rev_open", "A review deadline is set in the future, but reviews cannot be edited now. This is sometimes unintentional.");
                     $errored = true;
                     break;
                 }
@@ -328,6 +329,7 @@ class Round_SettingParser extends SettingParser {
 
     function parse(SettingValues $sv, Si $si) {
         assert($si->name === "tag_rounds");
+        $this->rev_round_changes = [];
 
         // count number of requested rounds
         $nreqround = 1;
@@ -340,8 +342,11 @@ class Round_SettingParser extends SettingParser {
         $roundnames = array_fill(0, $nreqround, ";");
         $roundlnames = [];
         for ($i = 0; $i < $nreqround; ++$i) {
-            $name = $sv->reqv("roundname_$i");
-            if ($name !== null && !$sv->reqv("deleteround_$i")) {
+            if ($sv->reqv("deleteround_$i")) {
+                if ($i !== 0) {
+                    $this->rev_round_changes[$i] = 0;
+                }
+            } else if (($name = $sv->reqv("roundname_$i")) !== null) {
                 $name = self::clean_round_name($name);
                 $lname = strtolower($name);
                 if (isset($roundlnames[$lname])) {
@@ -358,7 +363,6 @@ class Round_SettingParser extends SettingParser {
         }
 
         // check for round transformations
-        $this->rev_round_changes = [];
         if ($roundnames[0] !== ";" && $roundnames[0] !== "") {
             $j = 1;
             while ($j < count($roundnames) && $roundnames[$j] !== ";") {
@@ -407,8 +411,9 @@ class Round_SettingParser extends SettingParser {
     function save(SettingValues $sv, Si $si) {
         if ($this->rev_round_changes) {
             $qx = "case";
-            foreach ($this->rev_round_changes as $old => $new)
+            foreach ($this->rev_round_changes as $old => $new) {
                 $qx .= " when reviewRound=$old then $new";
+            }
             $qx .= " else reviewRound end";
             $sv->conf->qe_raw("update PaperReview set reviewRound=" . $qx);
             $sv->conf->qe_raw("update ReviewRequest set reviewRound=" . $qx);

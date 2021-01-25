@@ -124,16 +124,18 @@ function pcAssignments($qreq) {
     }
 }
 
-if (isset($Qreq->update) && $Me->allow_administer($prow) && $Qreq->post_ok()) {
-    pcAssignments($Qreq);
-} else if (isset($Qreq->update) && $Qreq->ajax) {
-    json_exit(["ok" => false, "error" => "Only administrators can assign papers."]);
+if (isset($Qreq->update) && $Qreq->valid_post()) {
+    if ($Me->allow_administer($prow)) {
+        pcAssignments($Qreq);
+    } else if ($Qreq->ajax) {
+        json_exit(["ok" => false, "error" => "Only administrators can assign papers."]);
+    }
 }
 
 
 // add review requests
 if ((isset($Qreq->requestreview) || isset($Qreq->approvereview))
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     $result = RequestReview_API::requestreview($Me, $Qreq, $prow);
     $result = JsonResult::make($result);
     if ($result->content["ok"]) {
@@ -158,7 +160,7 @@ if ((isset($Qreq->requestreview) || isset($Qreq->approvereview))
 
 // deny review request
 if ((isset($Qreq->deny) || isset($Qreq->denyreview))
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     $result = RequestReview_API::denyreview($Me, $Qreq, $prow);
     $result = JsonResult::make($result);
     if ($result->content["ok"]) {
@@ -173,7 +175,7 @@ if ((isset($Qreq->deny) || isset($Qreq->denyreview))
 
 // retract review request
 if (isset($Qreq->retractreview)
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     $result = RequestReview_API::retractreview($Me, $Qreq, $prow);
     $result = JsonResult::make($result);
     if ($result->content["ok"]) {
@@ -190,9 +192,9 @@ if (isset($Qreq->retractreview)
     }
 }
 
-// retract review request
+// remove declined review
 if (isset($Qreq->undeclinereview)
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     $result = RequestReview_API::undeclinereview($Me, $Qreq, $prow);
     $result = JsonResult::make($result);
     if ($result->content["ok"]) {
@@ -449,24 +451,14 @@ if ($requests) {
 
 // PC assignments
 if ($Me->can_administer($prow)) {
-    $result = $Conf->qe("select ContactInfo.contactId, allReviews
-        from ContactInfo
-        left join (select contactId, group_concat(reviewType separator '') allReviews
-            from PaperReview join Paper using (paperId)
-            where reviewType>=" . REVIEW_PC . " and timeSubmitted>=0
-            group by contactId) A using (contactId)
-        where ContactInfo.roles!=0 and (ContactInfo.roles&" . Contact::ROLE_PC . ")!=0");
-    $pcx = [];
-    while (($row = $result->fetch_object())) {
-        $pcx[$row->contactId] = $row;
-    }
+    $acs = AssignmentCountSet::load($Me, AssignmentCountSet::HAS_REVIEW);
 
     // PC conflicts row
     echo '<div class="pcard revcard">',
         '<div class="revcard-head"><h2>PC assignments</h2></div>',
         '<div class="revcard-body">',
         Ht::form($Conf->hoturl_post("assign", "p=$prow->paperId"), array("id" => "ass", "class" => "need-unload-protection"));
-    Ht::stash_script('hiliter_children("#ass")');
+    Ht::stash_script('hotcrp.highlight_form_children("#ass")');
 
     if ($Conf->has_topics()) {
         echo "<p>Review preferences display as “P#”, topic scores as “T#”.</p>";
@@ -481,7 +473,6 @@ if ($Me->can_administer($prow)) {
     $tagger = new Tagger($Me);
 
     foreach ($Conf->full_pc_members() as $pc) {
-        $p = $pcx[$pc->contactId];
         if (!$pc->can_accept_review_assignment_ignore_conflict($prow)) {
             continue;
         }
@@ -540,18 +531,17 @@ if ($Me->can_administer($prow)) {
 
         // then, number of reviews
         echo '<div class="pctbnrev">';
-        $numReviews = strlen($p->allReviews);
-        $numPrimary = substr_count($p->allReviews, (string) REVIEW_PRIMARY);
-        if (!$numReviews) {
+        $ac = $acs->get($pc->contactId);
+        if ($ac->rev === 0) {
             echo "0 reviews";
         } else {
             echo '<a class="q" href="',
-                hoturl("search", "q=re:" . urlencode($pc->email)), '">',
-                plural($numReviews, "review"), "</a>";
-            if ($numPrimary && $numPrimary < $numReviews) {
+                $Conf->hoturl("search", "q=re:" . urlencode($pc->email)), '">',
+                plural($ac->rev, "review"), "</a>";
+            if ($ac->pri && $ac->pri < $ac->rev) {
                 echo '&nbsp; (<a class="q" href="',
-                    hoturl("search", "q=pri:" . urlencode($pc->email)),
-                    "\">$numPrimary primary</a>)";
+                    $Conf->hoturl("search", "q=pri:" . urlencode($pc->email)),
+                    "\">{$ac->pri} primary</a>)";
             }
         }
         echo "</div></div></div>\n"; // .pctbnrev .ctelti .ctelt

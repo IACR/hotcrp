@@ -1,11 +1,7 @@
 // script.js -- HotCRP JavaScript library
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
-var siteurl, siteurl_base_path,
-    siteurl_postvalue, siteurl_suffix, siteurl_defaults,
-    siteurl_absolute_base, siteurl_cookie_params, assetsurl,
-    hotcrp_paperid, hotcrp_status, hotcrp_user,
-    hotcrp_want_override_conflict;
+var siteinfo, hotcrp, hotcrp_status;
 
 function $$(id) {
     return document.getElementById(id);
@@ -231,8 +227,8 @@ $(document).ajaxError(function (event, jqxhr, settings, httperror) {
     }
     if (!data || !data.user_error) {
         var msg = url_absolute(settings.url) + " API failure: ";
-        if (hotcrp_user && hotcrp_user.email)
-            msg += "user " + hotcrp_user.email + ", ";
+        if (siteinfo.user && siteinfo.user.email)
+            msg += "user " + siteinfo.user.email + ", ";
         msg += jqxhr.status;
         if (httperror)
             msg += ", " + httperror;
@@ -252,32 +248,52 @@ $(document).ajaxComplete(function (event, jqxhr, settings) {
 $.ajaxPrefilter(function (options, originalOptions, jqxhr) {
     if (options.global === false)
         return;
-    var f = options.success;
-    function onerror(jqxhr, status, errormsg) {
-        if (f) {
-            var rjson;
-            if (/application\/json/.test(jqxhr.getResponseHeader("Content-Type") || "")
-                && jqxhr.responseText) {
-                try {
-                    rjson = JSON.parse(jqxhr.responseText);
-                } catch (e) {
+    function onsuccess(data, status, errormsg) {
+        if (typeof data === "object"
+            && data.sessioninfo
+            && siteinfo.user.cid == data.sessioninfo.cid
+            && options.url.startsWith(siteinfo.site_relative)
+            && (siteinfo.site_relative !== "" || !/^[a-z]+:|^\//.test(options.url))) {
+            siteinfo.postvalue = data.sessioninfo.postvalue;
+            $("form").each(function () {
+                var m = /^([^#]*[&?;]post=)([^&?;#]*)/.exec(this.action);
+                if (m) {
+                    this.action = m[1].concat(siteinfo.postvalue, this.action.substring(m[0].length));
                 }
-            }
-            if (!rjson
-                || typeof rjson !== "object"
-                || rjson.ok !== false)
-                rjson = {ok: false};
-            if (!rjson.error)
-                rjson.error = jqxhr_error_message(jqxhr, status, errormsg);
-            f(rjson, jqxhr, status);
+                if (this.elements.post) {
+                    this.elements.post.value = siteinfo.postvalue;
+                }
+            })
         }
     }
-    if (!options.error)
-        options.error = onerror;
-    else if ($.isArray(options.error))
-        options.error.push(onerror);
-    else
-        options.error = [options.error, onerror];
+    function onerror(jqxhr, status, errormsg) {
+        var rjson, i;
+        if (/application\/json/.test(jqxhr.getResponseHeader("Content-Type") || "")
+            && jqxhr.responseText) {
+            try {
+                rjson = JSON.parse(jqxhr.responseText);
+            } catch (e) {
+            }
+        }
+        if (!rjson
+            || typeof rjson !== "object"
+            || rjson.ok !== false)
+            rjson = {ok: false};
+        if (!rjson.error)
+            rjson.error = jqxhr_error_message(jqxhr, status, errormsg);
+        for (i = 0; i !== success.length; ++i)
+            success[i](rjson, jqxhr, status);
+    }
+    var success = options.success || [], error = options.error;
+    if (!$.isArray(success))
+        success = [success];
+    options.success = [onsuccess];
+    if (success.length)
+        Array.prototype.push.apply(options.success, success);
+    options.error = [];
+    if (error)
+        Array.prototype.push.apply(options.error, $.isArray(error) ? error : [error]);
+    options.error.push(onerror);
     if (options.timeout == null)
         options.timeout = 10000;
     if (options.dataType == null)
@@ -848,13 +864,13 @@ wstorage.json = function (is_session, key) {
     return x ? JSON.parse(x) : false;
 };
 wstorage.site = function (is_session, key, value) {
-    if (siteurl_base_path !== "/")
-        key = siteurl_base_path + key;
+    if (siteinfo.base !== "/")
+        key = siteinfo.base + key;
     return wstorage(is_session, key, value);
 };
 wstorage.site_json = function (is_session, key) {
-    if (siteurl_base_path !== "/")
-        key = siteurl_base_path + key;
+    if (siteinfo.base !== "/")
+        key = siteinfo.base + key;
     return wstorage.json(is_session, key);
 };
 
@@ -891,12 +907,12 @@ function hoturl_clean(x, page_component, allow_fail) {
 
 function hoturl(page, options) {
     var i, m, v, anchor = "", want_forceShow;
-    if (siteurl == null || siteurl_suffix == null) {
-        siteurl = siteurl_suffix = "";
-        log_jserror("missing siteurl");
+    if (siteinfo.site_relative == null || siteinfo.suffix == null) {
+        siteinfo.site_relative = siteinfo.suffix = "";
+        log_jserror("missing siteinfo");
     }
 
-    var x = {t: page + siteurl_suffix};
+    var x = {t: page};
     if (typeof options === "string") {
         if (options.charAt(0) === "?")
             options = options.substring(1);
@@ -918,7 +934,7 @@ function hoturl(page, options) {
         }
     }
     if (page.substring(0, 3) === "api" && !hoturl_find(x, /^base=/))
-        x.v.push("base=" + encodeURIComponent(siteurl));
+        x.v.push("base=" + encodeURIComponent(siteinfo.site_relative));
 
     if (page === "paper") {
         hoturl_clean(x, /^p=(\d+)$/);
@@ -933,7 +949,7 @@ function hoturl(page, options) {
         hoturl_clean(x, /^t=(\w+)$/);
     } else if (page.substring(0, 3) === "api") {
         if (page.length > 3) {
-            x.t = "api" + siteurl_suffix;
+            x.t = "api";
             x.v.push("fn=" + page.substring(4));
         }
         hoturl_clean(x, /^p=(\d+)$/, true);
@@ -943,22 +959,29 @@ function hoturl(page, options) {
         hoturl_clean(x, /^file=([^&]+)$/);
     }
 
-    if (hotcrp_want_override_conflict && want_forceShow
+    if (siteinfo.suffix !== "") {
+        if ((i = x.t.indexOf("/")) > 0) {
+            x.t = x.t.substring(0, i).concat(siteinfo.suffix, x.t.substring(i));
+        } else {
+            x.t += siteinfo.suffix;
+        }
+    }
+
+    if (siteinfo.want_override_conflict && want_forceShow
         && !hoturl_find(x, /^forceShow=/))
         x.v.push("forceShow=1");
-
-    if (siteurl_defaults)
-        x.v.push(serialize_object(siteurl_defaults));
+    if (siteinfo.defaults)
+        x.v.push(serialize_object(siteinfo.defaults));
     if (x.v.length)
         x.t += "?" + x.v.join("&");
-    return siteurl + x.t + anchor;
+    return siteinfo.site_relative + x.t + anchor;
 }
 
 function hoturl_post(page, options) {
     if (typeof options === "string")
-        options += (options ? "&" : "") + "post=" + siteurl_postvalue;
+        options += (options ? "&" : "") + "post=" + siteinfo.postvalue;
     else
-        options = $.extend({post: siteurl_postvalue}, options);
+        options = $.extend({post: siteinfo.postvalue}, options);
     return hoturl(page, options);
 }
 
@@ -991,13 +1014,9 @@ function url_absolute(url, loc) {
 }
 
 function hoturl_absolute_base() {
-    if (!siteurl_absolute_base)
-        siteurl_absolute_base = url_absolute(siteurl_base_path);
-    return siteurl_absolute_base;
-}
-
-function hoturl_go(page, options) {
-    window.location = hoturl(page, options);
+    if (!siteinfo.absolute_base)
+        siteinfo.absolute_base = url_absolute(siteinfo.base);
+    return siteinfo.absolute_base;
 }
 
 function hidden_input(name, value, attr) {
@@ -1071,24 +1090,48 @@ function render_feedback(msg, status) {
 // ui
 var handle_ui = (function ($) {
 var callbacks = {};
+function collect_callbacks(cbs, c, etype) {
+    for (var j = 0; j !== c.length; j += 2) {
+        if (!c[j] || c[j] === etype)
+            cbs.push(c[j + 1]);
+    }
+}
+function call_callbacks(cbs, element, event) {
+    for (var i = 1; i < cbs.length; ++i) {
+        var pi = typeof cbs[i] === "function" ? 0 : cbs[i].priority;
+        for (var j = 0; j !== i; ++j) {
+            var pj = typeof cbs[j] === "function" ? 0 : cbs[j].priority;
+            if (pi > pj) {
+                break;
+            }
+        }
+        if (j !== i) {
+            var del = cbs.splice(i, 1);
+            cbs.splice(j, 0, del[0]);
+        }
+    }
+    for (var i = 0; i !== cbs.length && !event.isImmediatePropagationStopped(); ++i) {
+        var f = typeof cbs[i] === "function" ? cbs[i] : cbs[i].callback;
+        f.call(element, event);
+    }
+}
 function handle_ui(event) {
     var e = event.target;
     if ((e && (hasClass(e, "ui") || hasClass(e, "uin")))
         || (this.tagName === "A" && hasClass(this, "ui"))) {
         event.preventDefault();
     }
-    var k = classList(this);
+    var k = classList(this), cbs = null;
     for (var i = 0; i < k.length; ++i) {
         var c = callbacks[k[i]];
         if (c) {
-            for (var j = 0; j !== c.length; j += 2) {
-                if (!c[j] || c[j] === event.type)
-                    c[j + 1].call(this, event);
-            }
+            cbs = cbs || [];
+            collect_callbacks(cbs, c, event.type);
         }
     }
+    cbs && cbs.length && call_callbacks(cbs, this, event);
 }
-handle_ui.on = function (className, callback) {
+handle_ui.on = function (className, callback, priority) {
     var dot = className.indexOf("."), type = null;
     if (dot >= 0) {
         type = className.substring(0, dot);
@@ -1096,17 +1139,16 @@ handle_ui.on = function (className, callback) {
     }
     callbacks[className] = callbacks[className] || [];
     callbacks[className].push(type);
-    callbacks[className].push(callback);
+    callbacks[className].push(priority == null ? callback : {callback: callback, priority: priority});
 };
 handle_ui.trigger = function (className, event) {
     var c = callbacks[className];
     if (c) {
         if (typeof event === "string")
             event = $.Event(event); // XXX IE8: `new Event` is not supported
-        for (var j = 0; j !== c.length; j += 2) {
-            if (!c[j] || c[j] === event.type)
-                c[j + 1].call(this, event);
-        }
+        var cbs = [];
+        collect_callbacks(cbs, c, event.type);
+        cbs.length && call_callbacks(cbs, this, event);
     }
 };
 return handle_ui;
@@ -2001,7 +2043,7 @@ function popup_skeleton(options) {
             if (f.getAttribute("method") === "post"
                 && !/post=/.test(f.getAttribute("action"))
                 && !/^(?:[a-z]*:|\/\/)/.test(f.getAttribute("action"))) {
-                $(f).prepend(hidden_input("post", siteurl_postvalue));
+                $(f).prepend(hidden_input("post", siteinfo.postvalue));
             }
         }
         for (var k in {minWidth: 1, maxWidth: 1, width: 1}) {
@@ -2283,7 +2325,7 @@ function tracker_html(tr) {
     if (wstorage.site(true, "hotcrp-tracking-hide-" + tr.trackerid))
         return "";
     t = '<div class="has-tracker tracker-holder tracker-'
-        + (tr.papers && tr.papers[tr.paper_offset].pid == hotcrp_paperid ? "match" : "nomatch")
+        + (tr.papers && tr.papers[tr.paper_offset].pid == siteinfo.paperid ? "match" : "nomatch")
         + (tr.tracker_here ? " tracker-active" : "");
     if (tr.listinfo || tr.listid)
         t += ' has-hotlist" data-hotlist="' + escape_entities(tr.listinfo || tr.listid);
@@ -2296,7 +2338,7 @@ function tracker_html(tr) {
         t += '<div class="' + logo_class + '">' + logo + '</div>';
     var rows = [], i, wwidth = $(window).width();
     if (!tr.papers || !tr.papers[0]) {
-        rows.push('<td><a href=\"' + siteurl + tr.url + '\">Discussion list</a></td>');
+        rows.push('<td><a href=\"' + text_to_html(siteinfo.site_relative + tr.url) + '\">Discussion list</a></td>');
     } else {
         for (i = tr.paper_offset; i < tr.papers.length; ++i)
             rows.push(tracker_paper_columns(tr, i, wwidth));
@@ -2396,8 +2438,8 @@ function tracker_refresh() {
     if (dl.tracker_here) {
         var ts = wstorage.site_json(true, "hotcrp-tracking"),
             req = "track=" + ts[1], reqdata = {};
-        if (hotcrp_paperid)
-            req += "%20" + hotcrp_paperid + "&p=" + hotcrp_paperid;
+        if (siteinfo.paperid)
+            req += "%20" + siteinfo.paperid + "&p=" + siteinfo.paperid;
         if (ts[2])
             req += "&tracker_start_at=" + ts[2];
         if (ts[3])
@@ -2417,8 +2459,8 @@ handle_ui.on("js-tracker", function (event) {
     function push_tracker(hc, tr) {
         hc.push('<div class="lg tracker-group" data-index="' + trno + '" data-trackerid="' + tr.trackerid + '">', '</div>');
         hc.push('<input type="hidden" name="tr' + trno + '-id" value="' + escape_entities(tr.trackerid) + '">');
-        if (tr.trackerid === "new" && hotcrp_paperid)
-            hc.push('<input type="hidden" name="tr' + trno + '-p" value="' + hotcrp_paperid + '">');
+        if (tr.trackerid === "new" && siteinfo.paperid)
+            hc.push('<input type="hidden" name="tr' + trno + '-p" value="' + siteinfo.paperid + '">');
         if (tr.listinfo)
             hc.push('<input type="hidden" name="tr' + trno + '-listinfo" value="' + escape_entities(tr.listinfo) + '">');
         hc.push('<div class="entryi"><label for="htctl-tr' + trno + '-name">Name</label><div class="entry"><input id="htctl-tr' + trno + '-name" type="text" name="tr' + trno + '-name" size="30" class="want-focus need-autogrow" value="' + escape_entities(tr.name || "") + (tr.is_new ? '" placeholder="New tracker' : '" placeholder="Unnamed') + '"></div></div>');
@@ -2478,8 +2520,8 @@ handle_ui.on("js-tracker", function (event) {
             visibility: wstorage.site(false, "hotcrp-tracking-visibility"),
             listinfo: document.body.getAttribute("data-hotlist")
         }, $myg = $(this).closest("div.lg"), hc = new HtmlCollector;
-        if (hotcrp_paperid)
-            tr.papers = [{pid: hotcrp_paperid}];
+        if (siteinfo.paperid)
+            tr.papers = [{pid: siteinfo.paperid}];
         push_tracker(hc, tr);
         focus_within($(hc.render()).insertBefore($myg));
         $myg.remove();
@@ -2588,7 +2630,7 @@ handle_ui.on("js-tracker", function (event) {
         start();
     } else {
         $.post(hoturl_post("api/trackerconfig"),
-               {"tr1-id": "new", "tr1-listinfo": document.body.getAttribute("data-hotlist"), "tr1-p": hotcrp_paperid, "tr1-vis": wstorage.site(false, "hotcrp-tracking-visibility")},
+               {"tr1-id": "new", "tr1-listinfo": document.body.getAttribute("data-hotlist"), "tr1-p": siteinfo.paperid, "tr1-vis": wstorage.site(false, "hotcrp-tracking-visibility")},
                make_submit_success({}, "new"));
     }
 });
@@ -2751,7 +2793,7 @@ function load(dlx, is_initial) {
         window.hotcrp_status = dl = dlx;
     dl.load = dl.load || now_sec();
     dl.perm = dl.perm || {};
-    dl.myperm = dl.perm[hotcrp_paperid] || {};
+    dl.myperm = dl.perm[siteinfo.paperid] || {};
     dl.rev = dl.rev || {};
     dl.tracker_status = dl.tracker_status || "off";
     if (dl.tracker
@@ -2816,7 +2858,7 @@ function reload() {
     reload_timeout = true;
     var options = hotcrp_deadlines.options || {};
     if (hotcrp_deadlines)
-        options.p = hotcrp_paperid;
+        options.p = siteinfo.paperid;
     options.fn = "status";
     $.ajax(hoturl("api", options), {
         method: "GET", timeout: 30000, success: load_success
@@ -2855,7 +2897,7 @@ var hotcrp_load = (function ($) {
 
 
 function fold_storage() {
-    if (!this || this === window) {
+    if (!this || this === window || this === hotcrp) {
         $(".need-fold-storage").each(fold_storage);
     } else {
         removeClass(this, "need-fold-storage");
@@ -3409,7 +3451,7 @@ handle_ui.on("input.js-email-populate", function (event) {
             var args = {email: v};
             if (hasClass(this, "want-potential-conflict")) {
                 args.potential_conflict = 1;
-                args.p = hotcrp_paperid;
+                args.p = siteinfo.paperid;
             }
             $.ajax(hoturl_post("api/user", args), {
                 method: "GET", success: success
@@ -3427,7 +3469,7 @@ handle_ui.on("input.js-email-populate", function (event) {
 
 handle_ui.on("js-request-review-preview-email", function (event) {
     var f = this.closest("form"),
-        a = {p: hotcrp_paperid, template: "requestreview"},
+        a = {p: siteinfo.paperid, template: "requestreview"},
         self = this;
     function fv(field, defaultv) {
         var x = f[field] && f[field].value.trim();
@@ -3460,6 +3502,99 @@ handle_ui.on("js-request-review-preview-email", function (event) {
     });
     event.stopPropagation();
 });
+
+// autoassignment
+(function () {
+function make_pcsel_members(tag) {
+    if (tag === "__flip__")
+        return function () { return !this.checked; };
+    else if (tag === "all")
+        return function () { return true; };
+    else if (tag === "none")
+        return function () { return false; };
+    else {
+        tag = " " + tag.toLowerCase() + "#";
+        return function () {
+            var tlist = hotcrp_pc_tags[this.name.substr(3)] || "";
+            return tlist.indexOf(tag) >= 0;
+        };
+    }
+}
+function pcsel_tag(event) {
+    var $g = $(this).closest(".js-radio-focus"), e;
+    if (this.tagName === "A") {
+        $g.find("input[type=radio]").first().click();
+        var tag = this.hash.substring(4),
+            f = make_pcsel_members(tag),
+            full = true;
+        if (tag !== "all" && tag !== "none" && tag !== "__flip__"
+            && !hasClass(this, "font-weight-bold")) {
+            $g.find("input").each(function () {
+                if (this.name.startsWith("pcc") && !this.checked)
+                    return (full = false);
+            });
+        }
+        $g.find("input").each(function () {
+            if (this.name.startsWith("pcc")) {
+                var on = f.call(this);
+                if (full || on)
+                    this.checked = on;
+            }
+        });
+        event.preventDefault();
+    }
+    var tags = [], functions = {}, isall = true;
+    $g.find("a.js-pcsel-tag").each(function () {
+        var tag = this.hash.substring(4);
+        if (tag !== "none") {
+            tags.push(tag);
+            functions[tag] = make_pcsel_members(tag);
+        }
+    });
+    $g.find("input").each(function () {
+        if (this.name.startsWith("pcc") && !this.checked) {
+            isall = false;
+            for (var i = 0; i < tags.length; ) {
+                if (functions[tags[i]].call(this))
+                    tags.splice(i, 1);
+                else
+                    ++i;
+            }
+            return isall || tags.length !== 0;
+        }
+    });
+    $g.find("a.js-pcsel-tag").each(function () {
+        var tag = this.hash.substring(4);
+        if ($.inArray(tag, tags) >= 0 && (tag === "all" || !isall))
+            addClass(this, "font-weight-bold");
+        else
+            removeClass(this, "font-weight-bold");
+    });
+}
+handle_ui.on("js-pcsel-tag", pcsel_tag);
+
+handle_ui.on("badpairs", function () {
+    if (this.value !== "none") {
+        var x = $$("badpairs");
+        x.checked || x.click();
+    }
+});
+
+handle_ui.on(".js-badpairs-row", function () {
+    var tbody = $("#bptable > tbody"), n = tbody.children().length;
+    if (hasClass(this, "more")) {
+        ++n;
+        tbody.append('<tr><td class="rentry nw">or &nbsp;</td><td class="lentry"><span class="select"><select name="bpa' + n + '" class="badpairs"></select></span> &nbsp;and&nbsp; <span class="select"><select name="bpb' + n + '" class="badpairs"></select></span></td></tr>');
+        var options = tbody.find("select").first().html();
+        tbody.find("select[name=bpa" + n + "], select[name=bpb" + n + "]").html(options).val("none");
+    } else if (n > 1) {
+        --n;
+        tbody.children().last().remove();
+    }
+    return false;
+});
+
+})();
 
 
 // author entry
@@ -3791,13 +3926,15 @@ return function (id, name, elt) {
         if (name === false) {
             observer && observer.unobserve($$(id));
             $(pslcard).find("a[href='#" + id + "']").remove();
-        } else {
+        } else if (typeof id === "string") {
             var $psli = $('<li class="pslitem ui js-click-child"><a href="#' + id + '" class="x hover-child">' + name + '</a></li>');
             $psli.appendTo(pslcard);
             elt = elt || $$(id);
             linkmap && linkmap.set(elt, $psli[0]);
             observer && observer.observe(elt);
             return $psli[0];
+        } else {
+            pslcard.appendChild(id);
         }
     }
 };
@@ -3985,7 +4122,7 @@ function unparse_ratings(ratings, user_rating, editable) {
     var ct = ratings_counts(ratings);
 
     var rating_names = ["Good review", "Needs work", "Too short", "Too vague",
-                        "Too narrow", "Not constructive", "Not correct"];
+                        "Too narrow", "Disrespectful", "Not correct"];
     var t = [];
     t.push('<span class="revrating-group flag fn">'
            + (editable ? '<a href="" class="qq ui js-revrating-unfold">' : '<a href="' + hoturl("help", {t: "revrate"}) + '" class="qq">')
@@ -4104,7 +4241,7 @@ function revrating_key(event) {
 function add_review(rrow) {
     var hc = new HtmlCollector,
         rid = rrow.ordinal ? rrow.pid + "" + rrow.ordinal : "" + rrow.rid,
-        rlink = "r=" + rid + (hotcrp_want_override_conflict ? "&forceShow=1" : ""),
+        rlink = "r=" + rid + (siteinfo.want_override_conflict ? "&forceShow=1" : ""),
         has_user_rating = false, i, ratekey, selected;
 
     i = rrow.ordinal ? '" data-review-ordinal="' + rrow.ordinal : '';
@@ -4220,7 +4357,7 @@ var vismap = {rev: "hidden from authors",
               pc: "hidden from authors and external reviewers",
               admin: "shown only to administrators"};
 var cmts = {}, newcmt, has_unload = false, resp_rounds = {},
-    twiddle_start = hotcrp_user && hotcrp_user.cid ? hotcrp_user.cid + "~" : "###";
+    twiddle_start = siteinfo.user && siteinfo.user.cid ? siteinfo.user.cid + "~" : "###";
 
 function unparse_tag(tag, strip_value) {
     var pos;
@@ -4325,7 +4462,7 @@ function render_editing(hc, cj) {
         msgx.push(resp_rounds[cj.response].instrux);
     }
     if (cj.response
-        && !hotcrp_status.myperm.act_author) {
+        && !hotcrp_status.myperm.is_author) {
         msgx.push('You aren’t a contact for this paper, but as an administrator you can edit the authors’ response.');
     } else if (cj.review_token
                && hotcrp_status.myperm.review_tokens
@@ -4333,9 +4470,9 @@ function render_editing(hc, cj) {
         msgx.push('You have a review token for this paper, so your comment will be anonymous.');
     } else if (!cj.response
                && cj.author_email
-               && hotcrp_user.email
-               && cj.author_email.toLowerCase() != hotcrp_user.email.toLowerCase()) {
-        if (hotcrp_status.myperm.act_author)
+               && siteinfo.user.email
+               && cj.author_email.toLowerCase() != siteinfo.user.email.toLowerCase()) {
+        if (hotcrp_status.myperm.is_author)
             msg = "You didn’t write this comment, but as a fellow author you can edit it.";
         else
             msg = "You didn’t write this comment, but as an administrator you can edit it.";
@@ -4541,11 +4678,11 @@ function render_edit_attachment(i, doc) {
 }
 
 function render_attachment_link(hc, doc) {
-    hc.push('<a href="' + text_to_html(siteurl + doc.siteurl) + '" class="q">', '</a>');
+    hc.push('<a href="' + text_to_html(siteinfo.site_relative + doc.siteurl) + '" class="q">', '</a>');
     if (doc.mimetype === "application/pdf") {
-        hc.push('<img src="' + assetsurl + 'images/pdf.png" alt="[PDF]" class="sdlimg">');
+        hc.push('<img src="' + siteinfo.assets + 'images/pdf.png" alt="[PDF]" class="sdlimg">');
     } else {
-        hc.push('<img src="' + assetsurl + 'images/generic.png" alt="[Attachment]" class="sdlimg">');
+        hc.push('<img src="' + siteinfo.assets + 'images/generic.png" alt="[Attachment]" class="sdlimg">');
     }
     hc.push(' ' + text_to_html(doc.unique_filename || doc.filename || "Attachment"));
     if (doc.size != null) {
@@ -4586,7 +4723,7 @@ function make_save_callback($c) {
                 has_unload = false;
                 var form = $c.find("form")[0];
                 form.method = "post";
-                var arg = {editcomment: 1, p: hotcrp_paperid};
+                var arg = {editcomment: 1, p: siteinfo.paperid};
                 if ($c.c.cid)
                     arg.c = $c.c.cid;
                 form.action = hoturl_post("paper", arg);
@@ -4653,14 +4790,14 @@ function save_editor(elt, action, really) {
         if (this.files.length === 0)
             this.disabled = true;
     });
-    var arg = {p: hotcrp_paperid};
+    var arg = {p: siteinfo.paperid};
     if ($c.c.cid) {
         arg.c = $c.c.cid;
     }
     if (really) {
         arg.override = 1;
     }
-    if (hotcrp_want_override_conflict) {
+    if (siteinfo.want_override_conflict) {
         arg.forceShow = 1;
     }
     if (action === "delete") {
@@ -4842,7 +4979,7 @@ function render_cmt_text(format, value, response, textj, chead) {
         if (wc > wlimit) {
             chead && chead.find(".words").addClass("wordsover");
             wc = count_words_split(value, wlimit);
-            textj.addClass("has-overlong").removeClass(fmt).prepend('<div class="overlong-underlay"><div class="overlong-allowed ' + fmt + '"></div><div class="overlong-mark"></div></div><div class="overlong-content ' + fmt + '"></div>');
+            textj.addClass("has-overlong overlong-collapsed").removeClass(fmt).prepend('<div class="overlong-divider"><div class="overlong-allowed ' + fmt + '"></div><div class="overlong-mark"><div class="overlong-expander"><button class="ui js-overlong-expand" aria-expanded="false">Show full-length response</button></div></div></div><div class="overlong-content ' + fmt + '"></div>');
             textj.find(".overlong-allowed").html(render_text(format, wc[0]).content);
             textj = textj.find(".overlong-content");
         }
@@ -4852,7 +4989,7 @@ function render_cmt_text(format, value, response, textj, chead) {
 
 handle_ui.on("js-submit-comment", function () {
     var $c = $cmt(this);
-    $.ajax(hoturl_post("api/comment", {p: hotcrp_paperid, c: $c.c.cid}), {
+    $.ajax(hoturl_post("api/comment", {p: siteinfo.paperid, c: $c.c.cid}), {
         method: "POST", data: {override: 1, response: $c.c.response, text: $c.c.text},
         success: make_save_callback($c)
     });
@@ -4922,7 +5059,7 @@ function add(cj, editing) {
         j = j.find(".cmtcard-body");
     }
     if (editing == null && cj.response && cj.draft && cj.editable
-        && hotcrp_status.myperm && hotcrp_status.myperm.act_author) {
+        && hotcrp_status.myperm && hotcrp_status.myperm.is_author) {
         editing = true;
     }
     if (!newcmt && cid === "cnew") {
@@ -4973,6 +5110,12 @@ return {
     }
 };
 })(jQuery);
+
+handle_ui.on("js-overlong-expand", function () {
+    var e = this.closest(".has-overlong");
+    addClass(e, "overlong-expanded");
+    removeClass(e, "overlong-collapsed");
+});
 
 
 // previewing
@@ -5207,7 +5350,7 @@ demand_load.make = function (executor) {
 };
 
 demand_load.pc = demand_load.make(function (resolve, reject) {
-    $.get(hoturl("api/pc", {p: hotcrp_paperid}), null, function (v) {
+    $.get(hoturl("api/pc", {p: siteinfo.paperid}), null, function (v) {
         var pc = v && v.ok && v.pc;
         (pc ? resolve : reject)(pc);
     });
@@ -5234,7 +5377,7 @@ demand_load.search_completion = demand_load.make(function (resolve, reject) {
 });
 
 demand_load.alltag_info = demand_load.make(function (resolve, reject) {
-    if (hotcrp_user.is_pclike)
+    if (siteinfo.user.is_pclike)
         $.get(hoturl("api/alltags"), null, function (v) {
             resolve(v && v.tags ? v : {tags: []});
         });
@@ -5272,8 +5415,8 @@ demand_load.tags = demand_load.make(function (resolve, reject) {
 })();
 
 demand_load.mentions = demand_load.make(function (resolve, reject) {
-    if (hotcrp_user.is_pclike)
-        $.get(hoturl("api/mentioncompletion", {p: hotcrp_paperid}), null, function (v) {
+    if (siteinfo.user.is_pclike)
+        $.get(hoturl("api/mentioncompletion", {p: siteinfo.paperid}), null, function (v) {
             var tlist = ((v && v.mentioncompletion) || []).map(completion_item);
             tlist.sort(function (a, b) { return strnatcmp(a.s, b.s); });
             resolve(tlist);
@@ -5283,7 +5426,7 @@ demand_load.mentions = demand_load.make(function (resolve, reject) {
 });
 
 demand_load.emoji_codes = demand_load.make(function (resolve, reject) {
-    $.get(assetsurl + "scripts/emojicodes.json", null, function (v) {
+    $.get(siteinfo.assets + "scripts/emojicodes.json", null, function (v) {
         if (!v || !v.emoji)
             v = {emoji: []};
         if (!v.lists)
@@ -5415,7 +5558,7 @@ demand_load.emoji_completion = function (start) {
 
 
 tooltip.add_builder("votereport", function (info) {
-    var pid = $(this).attr("data-pid") || hotcrp_paperid,
+    var pid = $(this).attr("data-pid") || siteinfo.paperid,
         tag = $(this).attr("data-tag");
     if (pid && tag)
         info.content = demand_load.make(function (resolve) {
@@ -5876,8 +6019,8 @@ function comment_completion_q(elt) {
 // review preferences
 function setfollow() {
     var $self = $(this);
-    $.post(hoturl_post("api/follow", {p: $self.attr("data-pid") || hotcrp_paperid}),
-           {following: this.checked, reviewer: $self.data("reviewer") || hotcrp_user.email},
+    $.post(hoturl_post("api/follow", {p: $self.attr("data-pid") || siteinfo.paperid}),
+           {following: this.checked, reviewer: $self.data("reviewer") || siteinfo.user.email},
            function (rv) {
                setajaxcheck($self[0], rv);
                rv.ok && ($self[0].checked = rv.following);
@@ -5948,7 +6091,7 @@ var add_revpref_ajax = (function () {
 window.paperlist_tag_ui = (function () {
 
 function tag_canonicalize(tag) {
-    return tag && /^~[^~]/.test(tag) ? hotcrp_user.cid + tag : tag;
+    return tag && /^~[^~]/.test(tag) ? siteinfo.user.cid + tag : tag;
 }
 
 function tagvalue_parse(s) {
@@ -6149,10 +6292,8 @@ function sorter_toggle_reverse(sorter, toggle) {
 
 function search_sort_success(tbl, data_href, data) {
     var ids = data.ids;
-    if (!ids && data.hotlist) {
-        var hotlist = JSON.parse(data.hotlist);
-        ids = decode_session_list_ids(hotlist.ids);
-    }
+    if (!ids && data.hotlist)
+        ids = new Hotlist(data.hotlist).ids();
     if (!ids)
         return;
     reorder(tbl, ids, data.groups, true);
@@ -6211,7 +6352,8 @@ function search_sort_url(self, href) {
     var hrefm = /^([^?#]*(?:search|reviewprefs|manualassign)(?:\.php)?)(\?[^#]*)/.exec(href),
         api = hrefm[2], e;
     if ((e = document.getElementById("showforce"))) {
-        api = api.replace(/&forceShow=[^&#;]*/, "") + "&forceShow=" + (e.checked ? 1 : 0);
+        var v = e.type === "checkbox" ? (e.checked ? 1 : 0) : e.value;
+        api = api.replace(/&forceShow=[^&#;]*/, "") + "&forceShow=" + v;
     }
     if (!/[&?]q=/.test(api)) {
         api += "&q=";
@@ -6937,7 +7079,7 @@ function check_version(url, versionstr) {
     }
     function updatecb(json) {
         if (json && json.updates && window.JSON)
-            jQuery.get(siteurl + "checkupdates.php",
+            jQuery.get(siteinfo.site_relative + "checkupdates.php",
                        {data: JSON.stringify(json)}, updateverifycb);
         else if (json && json.status)
             wstorage.site(false, "hotcrp_version_check", {at: now_msec(), version: versionstr});
@@ -6955,7 +7097,7 @@ function check_version(url, versionstr) {
     });
     handle_ui.on("js-check-version-ignore", function () {
         var id = $(this).data("versionId");
-        $.post(siteurl + "checkupdates.php", {ignore: id, post: siteurl_postvalue});
+        $.post(siteinfo.site_relative + "checkupdates.php", {ignore: id, post: siteinfo.postvalue});
         $("#softwareupdate_" + id).hide();
     });
 }
@@ -7186,7 +7328,7 @@ function make_tagmap() {
         for (i = 0; i !== tl.length; ++i) {
             t = tl[i].toLowerCase();
             if (t.charAt(0) === "~" && t.charAt(1) !== "~")
-                t = hotcrp_user.cid + t;
+                t = siteinfo.user.cid + t;
             p = t.indexOf("*");
             t = t.replace(/([^-A-Za-z_0-9])/g, "\\$1");
             if (p === 0)
@@ -7194,7 +7336,7 @@ function make_tagmap() {
             else if (p > 0)
                 x.push(t.replace('\\*', '.*'));
             else if (t === "any")
-                x.push('(?:' + (hotcrp_user.cid || 0) + '~.*|~~.*|(?!\\d+~).*)');
+                x.push('(?:' + (siteinfo.user.cid || 0) + '~.*|~~.*|(?!\\d+~).*)');
             else
                 x.push(t);
         }
@@ -7205,7 +7347,7 @@ function make_tagmap() {
         for (i = 0; i !== tl.length; ++i) {
             t = tl[i].toLowerCase();
             tagmap[t] = (tagmap[t] || 0) | 2;
-            t = hotcrp_user.cid + "~" + t;
+            t = siteinfo.user.cid + "~" + t;
             tagmap[t] = (tagmap[t] || 0) | 2;
         }
         if ($.isEmptyObject(tagmap))
@@ -7219,7 +7361,7 @@ function compute_row_tagset(tagstr, editable) {
     var t = [], tags = (tagstr || "").split(/ /);
     for (var i = 0; i !== tags.length; ++i) {
         var text = tags[i], twiddle = text.indexOf("~"), hash = text.indexOf("#");
-        if (text !== "" && (twiddle <= 0 || text.substr(0, twiddle) == hotcrp_user.cid)) {
+        if (text !== "" && (twiddle <= 0 || text.substr(0, twiddle) == siteinfo.user.cid)) {
             twiddle = Math.max(twiddle, 0);
             var tbase = text.substring(0, hash), tindex = text.substr(hash + 1),
                 tagx = tagmap ? tagmap[tbase.toLowerCase()] || 0 : 0, h, q;
@@ -7267,7 +7409,7 @@ function render_row_tags(div) {
 function make_tag_column_callback(f) {
     var tag = /^(?:#|tag:|tagval:)(\S+)/.exec(f.name)[1];
     if (/^~[^~]/.test(tag))
-        tag = hotcrp_user.cid + tag;
+        tag = siteinfo.user.cid + tag;
     return function (evt, rv) {
         var e = pidfield(rv.pid, f), tags = rv.tags, tagval = null;
         if (!e.length || f.missing)
@@ -7709,13 +7851,7 @@ function transfer_form_values($dst, $src, names) {
 handle_ui.on("js-signin", function (event) {
     var form = this, signin = document.getElementById("signin_signin");
     signin && (signin.disabled = true);
-    $.get(hoturl("api/session"), function (data) {
-        if (data && data.postvalue) {
-            siteurl_postvalue = data.postvalue;
-            form.elements.post && (form.elements.post.value = siteurl_postvalue);
-        }
-        form.submit();
-    });
+    $.get(hoturl("api/session"), function () { form.submit() });
 });
 
 handle_ui.on("js-no-signin", function (event) {
@@ -7740,7 +7876,7 @@ handle_ui.on("js-check-format", function () {
     var running = setTimeout(function () {
         $cf.html(render_xmsg(0, "Checking format (this can take a while)..."));
     }, 1000);
-    $.ajax(hoturl_post("api/formatcheck", {p: hotcrp_paperid}), {
+    $.ajax(hoturl_post("api/formatcheck", {p: siteinfo.paperid}), {
         timeout: 20000, data: {
             dt: $d[0].getAttribute("data-dtype"), docid: $d[0].getAttribute("data-docid")
         },
@@ -7799,12 +7935,17 @@ $(background_format_check);
 
 handle_ui.on("js-check-submittable", function (event) {
     var f = this.closest("form"),
-        readye = f.submitpaper,
-        was = f.getAttribute("data-submitted"), is = true;
-    if (this && this.tagName === "INPUT" && this.type === "file" && this.value)
+        readye = f.elements.submitpaper,
+        was = f.getAttribute("data-submitted"),
+        unfold = this && this.tagName === "INPUT" && this.type === "file" && this.value,
+        is = true;
+    if (unfold)
         fold($(f).find(".ready-container"), false);
-    if (readye && readye.type === "checkbox")
+    if (readye && readye.type === "checkbox") {
         is = readye.checked && $(readye).is(":visible");
+        if (readye.disabled && unfold)
+            readye.disabled = false;
+    }
     var t;
     if (f.hasAttribute("data-contacts-only")) {
         t = "Save contacts";
@@ -7856,7 +7997,7 @@ handle_ui.on("js-replace-document", function (event) {
         $u.trigger("hotcrp-change-document");
     } else {
         var docid = +doce.getAttribute("data-dtype"),
-            name = "opt" + docid,
+            name = doce.getAttribute("data-document-name") || "opt" + docid,
             t = '<div class="document-upload hidden"><input id="' + name + '" type="file" name="' + name + '"';
         if (doce.hasAttribute("data-document-accept"))
             t += ' accept="' + doce.getAttribute("data-document-accept") + '"';
@@ -7871,7 +8012,7 @@ handle_ui.on("js-replace-document", function (event) {
 
 handle_ui.on("document-uploader", function (event) {
     var doce = this.closest(".has-document"), $doc = $(doce);
-    if (hasClass(doce, "document-new-instance")) {
+    if (hasClass(doce, "document-new-instance") && hasClass(doce, "hidden")) {
         removeClass(doce, "hidden");
         var hea = doce.closest(".has-editable-attachments");
         hea && removeClass(hea, "hidden");
@@ -7960,7 +8101,7 @@ handle_ui.on("js-clickthrough", function (event) {
         $container = $(this).closest(".js-clickthrough-container");
     if (!$container.length)
         $container = $(this).closest(".pcontainer");
-    $.post(hoturl_post("api/clickthrough", {accept: 1, p: hotcrp_paperid}),
+    $.post(hoturl_post("api/clickthrough", {accept: 1, p: siteinfo.paperid}),
         $(this).closest("form").serialize(),
         function (data) {
             if (data && data.ok) {
@@ -7977,8 +8118,8 @@ handle_ui.on("js-clickthrough", function (event) {
 handle_ui.on("js-follow-change", function (event) {
     var self = this;
     $.post(hoturl_post("api/follow",
-        {p: $(self).attr("data-pid") || hotcrp_paperid}),
-        {following: this.checked, reviewer: $(self).data("reviewer") || hotcrp_user.email},
+        {p: $(self).attr("data-pid") || siteinfo.paperid}),
+        {following: this.checked, reviewer: $(self).data("reviewer") || siteinfo.user.email},
         function (rv) {
             setajaxcheck(self, rv);
             rv.ok && (self.checked = rv.following);
@@ -8035,7 +8176,7 @@ function prepare_paper_select() {
         if ((keyed && evt.type !== "blur" && now_msec() <= keyed + 1)
             || ctl.disabled) {
         } else if (saveval !== oldval) {
-            $.post(hoturl_post("api/" + ctl.name, {p: hotcrp_paperid}),
+            $.post(hoturl_post("api/" + ctl.name, {p: siteinfo.paperid}),
                    $(self).find("form").serialize(),
                    make_callback(evt.type !== "blur"));
             ctl.disabled = true;
@@ -8353,22 +8494,36 @@ function run_edit_conditions() {
     link && toggleClass(link, "hidden", off);
 }
 
+function header_text(hdr) {
+    var x = hdr.firstChild;
+    while (x && x.nodeType !== 3) {
+        x = x.nextSibling;
+    }
+    return x ? x.data.trim() : null;
+}
+
 function add_pslitem_header() {
     var l = this.firstChild, id;
     if (l.tagName === "LABEL") {
         id = this.id || l.getAttribute("for") || $(l).find("input").attr("id");
     }
     if (id) {
-        var x = l.firstChild;
-        while (x && x.nodeType !== 3) {
-            x = x.nextSibling;
-        }
-        var e = x ? add_pslitem(id, escape_entities(x.data.trim()), this.parentElement) : null;
+        var xt = header_text(l),
+            e = xt ? add_pslitem(id, escape_entities(xt), this.parentElement) : null;
         if (e) {
             hasClass(this, "has-error") && addClass(e.firstChild, "is-error");
             hasClass(this, "has-warning") && addClass(e.firstChild, "is-warning");
             hasClass(this.parentElement, "hidden") && addClass(e, "hidden");
         }
+    }
+}
+
+function add_pslitem_papeg() {
+    if (hasClass(this, "papeg-separator")) {
+        var $j = $('<li class="pslitem pslitem-separator"></li>');
+        add_pslitem($j[0], true);
+    } else if (hasClass(this.firstChild, "papet")) {
+        add_pslitem_header.call(this.firstChild);
     }
 }
 
@@ -8408,7 +8563,7 @@ return {
     load: function () {
         hiliter_children("#form-paper");
         $("#form-paper input.primary-document").trigger("change");
-        $(".papet").each(add_pslitem_header);
+        $(".papeg").each(add_pslitem_papeg);
         var h = $(".btn-savepaper").first(),
             k = $("#form-paper").hasClass("alert") ? "" : " hidden";
         $(".pslcard-nav").append('<div class="paper-alert mt-5' + k + '">'
@@ -8450,9 +8605,9 @@ return {
 })($);
 
 
-if (hotcrp_paperid) {
+if (siteinfo.paperid) {
     $(window).on("hotcrptags", function (event, data) {
-        if (data.pid != hotcrp_paperid)
+        if (data.pid != siteinfo.paperid)
             return;
         data.color_classes && make_pattern_fill(data.color_classes, "", true);
         $(".has-tag-classes").each(function () {
@@ -8465,7 +8620,7 @@ if (hotcrp_paperid) {
             var $j = $(this), res = "",
                 t = $j.data("tagBase") + "#", i;
             if (t.charAt(0) == "~" && t.charAt(1) != "~")
-                t = hotcrp_user.cid + t;
+                t = siteinfo.user.cid + t;
             for (i = 0; i != data.tags.length; ++i)
                 if (data.tags[i].substr(0, t.length) == t)
                     res = data.tags[i].substr(t.length);
@@ -8563,7 +8718,7 @@ handle_ui.on("js-approve-review", function (event) {
     }
     hc.push('<button type="button" name="approvesubreview" class="btn big' + subreviewClass + '">Approve subreview</button><p>Approve this review as a subreview. It will not be shown to authors and its scores will not be counted in statistics.</p>');
     if (hasClass(self, "can-approve-submit")) {
-        hc.push('<button type="button" name="submitreview" class="btn big">Submit as full review</button><p>Submit this review as a full review. It will be shown to authors and its scores will be counted in statistics.</p>');
+        hc.push('<button type="button" name="submitreview" class="btn big">Submit as full review</button><p>Submit this review as an independent review. It will be shown to authors and its scores will be counted in statistics.</p>');
     }
     hc.pop();
     hc.push_actions(['<button type="button" name="cancel">Cancel</button>']);
@@ -8907,12 +9062,6 @@ function decode_session_list_ids(str) {
             continue;
         }
 
-        while (ch === 122) {
-            sign = -sign;
-            ++i;
-            ch = i < l ? str.charCodeAt(i) : 0;
-        }
-
         var include = true, n = 0, skip = 0;
         if (ch >= 97 && ch <= 104)
             n = ch - 96;
@@ -8930,6 +9079,11 @@ function decode_session_list_ids(str) {
             skip = 1;
         } else if (ch >= 73 && ch <= 80) {
             n = ch - 72;
+            skip = 2;
+        } else if (ch === 122) {
+            sign = -sign;
+        } else if (ch === 90) {
+            sign = -sign;
             skip = 2;
         }
 
@@ -8972,83 +9126,107 @@ function update_digest(info) {
     else
         return false;
 }
-function make_digest(info, pid) {
-    var m = /^(.*)"ids":"([-0-9'a-zA-Z]+)"(.*)/.exec(info), digest;
-    if (m && wstorage() && (digest = update_digest(m[2]))) {
-        info = m[1] + '"digest":"listdigest' + digest + '"';
-        if (pid) {
-            var ids = decode_session_list_ids(m[2]), pos;
-            if (ids && (pos = $.inArray(pid, ids)) >= 0) {
-                info += ',"curid":' + pid
-                    + ',"previd":' + (pos > 0 ? ids[pos - 1] : 'false')
-                    + ',"nextid":' + (pos < ids.length - 1 ? ids[pos + 1] : 'false');
-            }
-        }
-        info += m[3];
+window.Hotlist = function (s) {
+    this.str = s || "";
+    this.obj = null;
+    if (this.str && this.str.charAt(0) === "{") {
+        try {
+            this.obj = JSON.parse(this.str);
+        } catch (e) {}
     }
-    return info;
-}
-function resolve_digest(info) {
+};
+Hotlist.at = function (elt) {
+    return new Hotlist(elt ? elt.getAttribute("data-hotlist") : "");
+};
+Hotlist.prototype.ids = function () {
+    return this.obj && this.obj.ids ? decode_session_list_ids(this.obj.ids) : null;
+};
+Hotlist.prototype.resolve = function () {
     var m, ids;
-    if (info.indexOf('"ids":') < 0
-        && (m = /^(.*)"digest":"listdigest([0-9]+)(".*)$/.exec(info))
-        && (ids = update_digest(+m[2])) !== false)
-        return m[1] + '"ids":"' + ids + m[3];
-    else
-        return info;
-}
-function set_cookie(info, pid) {
-    if (info) {
-        if (/"digest":/.test(info))
-            info = resolve_digest(info);
-        if (info.length > 1500)
-            info = make_digest(info, pid);
-        cookie_set_at = now_msec();
-        var p = "; max-age=20", m;
-        if (siteurl && (m = /^[a-z]+:\/\/[^\/]*(\/.*)/.exec(hoturl_absolute_base())))
-            p += "; path=" + m[1];
-        document.cookie = "hotlist-info-" + now_msec() + "=" + encodeURIComponent(info) + siteurl_cookie_params + p;
+    if (this.obj
+        && !this.obj.ids
+        && this.obj.digest
+        && /^listdigest[0-9]+$/.test(this.obj.digest)
+        && (ids = update_digest(+this.obj.digest.substring(10)))) {
+        delete this.obj.digest;
+        this.obj.ids = ids;
+        this.str = JSON.stringify(this.obj);
     }
+    return this;
+};
+Hotlist.prototype.cookie_at = function (pid) {
+    this.resolve();
+    var m, digest, ids, pos;
+    if (this.str.length > 1500
+        && this.obj
+        && this.obj.ids
+        && wstorage()
+        && (digest = update_digest(this.obj.ids))) {
+        var x = Object.assign({digest: "listdigest" + digest}, this.obj);
+        delete x.ids;
+        if (pid
+            && (ids = this.ids())
+            && (pos = $.inArray(pid, ids)) >= 0) {
+            x.curid = pid;
+            x.previd = pos > 0 ? ids[pos - 1] : false;
+            x.nextid = pos < ids.length - 1 ? ids[pos + 1] : false;
+        }
+        return JSON.stringify(x);
+    } else {
+        return this.str;
+    }
+};
+Hotlist.prototype.reorder = function (tbody) {
+    if (this.obj) {
+        this.resolve();
+        var p0 = -100, p1 = -100, pid, l = [];
+        for (var cur = tbody.firstChild; cur; cur = cur.nextSibling)
+            if (cur.nodeName === "TR" && /^pl(?:\s|\z)/.test(cur.className)
+                && (pid = +cur.getAttribute("data-pid"))) {
+                if (pid != p1 + 1) {
+                    if (p0 > 0)
+                        l.push(p0 == p1 ? p0 : p0 + "-" + p1);
+                    p0 = pid;
+                }
+                p1 = pid;
+            }
+        if (p0 > 0)
+            l.push(p0 == p1 ? p0 : p0 + "-" + p1);
+        this.obj.ids = l.join("'");
+        this.str = JSON.stringify(this.obj);
+    }
+};
+function set_cookie(info, pid) {
+    var cstr = info.cookie_at(pid);
+    cookie_set_at = now_msec();
+    var p = "; Max-Age=20", m;
+    if (siteinfo.site_relative && (m = /^[a-z]+:\/\/[^\/]*(\/.*)/.exec(hoturl_absolute_base())))
+        p += "; Path=" + m[1];
+    document.cookie = "hotlist-info-".concat(cookie_set_at, "=", encodeURIComponent(cstr), siteinfo.cookie_params, p);
 }
 function is_listable(sitehref) {
     return /^(?:paper|review|assign|profile)(?:|\.php)\//.test(sitehref);
 }
-function set_list_order(info, tbody) {
-    var p0 = -100, p1 = -100, pid, l = [];
-    for (var cur = tbody.firstChild; cur; cur = cur.nextSibling)
-        if (cur.nodeName === "TR" && /^pl(?:\s|\z)/.test(cur.className)
-            && (pid = +cur.getAttribute("data-pid"))) {
-            if (pid != p1 + 1) {
-                if (p0 > 0)
-                    l.push(p0 == p1 ? p0 : p0 + "-" + p1);
-                p0 = pid;
-            }
-            p1 = pid;
-        }
-    if (p0 > 0)
-        l.push(p0 == p1 ? p0 : p0 + "-" + p1);
-    return info.replace(/"ids":"[-0-9'a-zA-Z]+"/, '"ids":"' + l.join("'") + '"');
-}
 function handle_list(e, href) {
-    var hl, sitehref, m;
+    var hl, sitehref, info;
     if (href
-        && href.substring(0, siteurl.length) === siteurl
-        && is_listable((sitehref = href.substring(siteurl.length)))
-        && (hl = e.closest(".has-hotlist"))) {
-        var info = hl.getAttribute("data-hotlist");
+        && href.substring(0, siteinfo.site_relative.length) === siteinfo.site_relative
+        && is_listable((sitehref = href.substring(siteinfo.site_relative.length)))
+        && (hl = e.closest(".has-hotlist"))
+        && (info = Hotlist.at(hl)).str) {
         if (hl.tagName === "TABLE"
             && hasClass(hl, "pltable")
             && hl.hasAttribute("data-reordered")
             && document.getElementById("footer"))
             // Existence of `#footer` checks that the table is fully loaded
-            info = set_list_order(info, hl.tBodies[0]);
-        m = /^[^\/]*\/(\d+)(?:$|[a-zA-Z]*\/)/.exec(sitehref);
+            info.reorder(hl.tBodies[0]);
+        var m = /^[^\/]*\/(\d+)(?:$|[a-zA-Z]*\/)/.exec(sitehref);
         set_cookie(info, m ? +m[1] : null);
     }
 }
 function unload_list() {
-    var hl = document.body.getAttribute("data-hotlist");
-    if (hl && (!cookie_set_at || cookie_set_at + 3 < now_msec()))
+    var hl = Hotlist.at(document.body);
+    if (hl.str && (!cookie_set_at || cookie_set_at + 3 < now_msec()))
         set_cookie(hl);
 }
 function row_click(evt) {
@@ -9127,28 +9305,18 @@ $(document).on("click", "tr.pl", row_click);
 $(window).on("beforeunload", unload_list);
 
 $(function () {
-    var had_digests = false;
     // resolve list digests
-    $(".has-hotlist").each(function () {
-        var info = this.getAttribute("data-hotlist");
-        if (info && (info = resolve_digest(info))) {
-            this.setAttribute("data-hotlist", info);
-            had_digests = true;
-        }
-    });
+    if (document.body.hasAttribute("data-hotlist")) {
+        document.body.setAttribute("data-hotlist", Hotlist.at(document.body).resolve().str);
+    }
     // having resolved digests, insert quicklinks
-    if (had_digests
-        && hotcrp_paperid
+    if (siteinfo.paperid
         && !$$("quicklink-prev")
         && !$$("quicklink-next")) {
         $(".quicklinks").each(function () {
-            var $l = $(this).closest(".has-hotlist"),
-                info = JSON.parse($l.attr("data-hotlist") || "null"),
-                ids, pos;
-            if (info
-                && info.ids
-                && (ids = decode_session_list_ids(info.ids))
-                && (pos = $.inArray(hotcrp_paperid, ids)) >= 0) {
+            var info = Hotlist.at(this.closest(".has-hotlist")), ids, pos;
+            if ((ids = info.ids())
+                && (pos = $.inArray(siteinfo.paperid, ids)) >= 0) {
                 if (pos > 0)
                     $(this).prepend('<a id="quicklink-prev" class="x" href="' + hoturl_html("paper", {p: ids[pos - 1]}) + '">&lt; #' + ids[pos - 1] + '</a> ');
                 if (pos < ids.length - 1)
@@ -9161,14 +9329,22 @@ $(function () {
 
 
 function hotlist_search_params(x, ids) {
-    if (x instanceof HTMLElement)
-        x = x.getAttribute("data-hotlist");
-    if (x && typeof x === "string")
-        x = JSON.parse(x);
+    x = x instanceof HTMLElement ? Hotlist.at(x) : new Hotlist(x);
     var m;
-    if (!x || !x.ids || !(m = x.listid.match(/^p\/(.*?)\/(.*?)(?:$|\/)(.*)/)))
+    if (!x || !x.obj || !x.obj.ids || !(m = x.obj.listid.match(/^p\/(.*?)\/(.*?)(?:$|\/)(.*)/)))
         return false;
-    var q = {q: ids ? decode_session_list_ids(x.ids).join(" ") : urldecode(m[2]), t: m[1] || "s"};
+    var idv;
+    if (ids) {
+        if (x.obj.sorted_ids)
+            idv = "pidcode:" + x.obj.sorted_ids;
+        else if ($.isArray(x.obj.ids))
+            idv = x.obj.ids.join(" ");
+        else
+            idv = "pidcode:" + x.obj.ids;
+    } else {
+        idv = urldecode(m[2]);
+    }
+    var q = {q: idv, t: m[1] || "s"};
     if (m[3]) {
         var args = m[3].split(/[&;]/);
         for (var i = 0; i < args.length; ++i) {
@@ -9206,12 +9382,12 @@ function populate_pcselector(pcs) {
         if (cid === "" || cid === "*") {
             optids.splice.apply(optids, [i + 1, 0].concat(pcs.__order__));
         } else if (cid === "assignable") {
-            optids.splice.apply(optids, [i + 1, 0].concat(pcs.__assignable__[hotcrp_paperid] || []));
+            optids.splice.apply(optids, [i + 1, 0].concat(pcs.__assignable__[siteinfo.paperid] || []));
         } else if (cid === "selected") {
             if (selected != null)
                 optids.splice.apply(optids, [i + 1, 0, selected]);
         } else if (cid === "extrev") {
-            var extrevs = pcs.__extrev__ ? pcs.__extrev__[hotcrp_paperid] : null;
+            var extrevs = pcs.__extrev__ ? pcs.__extrev__[siteinfo.paperid] : null;
             if (extrevs && extrevs.length) {
                 optids.splice.apply(optids, [i + 1, 0].concat(extrevs));
                 optids.splice(i + 1 + extrevs.length, 0, "endgroup");
@@ -9731,3 +9907,35 @@ $.fn.unautogrow = function () {
 })(jQuery);
 
 $(function () { $(".need-autogrow").autogrow(); });
+
+
+window.hotcrp = {
+    add_comment: papercomment.add,
+    add_review: review_form.add_review,
+    add_preference_ajax: add_revpref_ajax,
+    check_version: check_version,
+    demand_load: demand_load,
+    edit_comment: papercomment.edit,
+    focus_within: focus_within,
+    fold: fold,
+    fold_storage: fold_storage,
+    foldup: foldup,
+    handle_ui: handle_ui,
+    highlight_form_children: hiliter_children,
+    hoturl: hoturl,
+    init_deadlines: hotcrp_deadlines.init,
+    load_editable_paper: edit_paper_ui.load,
+    load_editable_review: edit_paper_ui.load_review,
+    make_pattern_fill: make_pattern_fill,
+    onload: hotcrp_load,
+    paper_edit_conditions: edit_paper_ui.edit_condition,
+    prepare_editable_paper: edit_paper_ui.prepare,
+    profile_ui: profile_ui,
+    render_list: plinfo.render_needed,
+    render_text_page: render_text.on_page,
+    scorechart: scorechart,
+    set_default_format: render_text.set_default_format,
+    set_response_round: papercomment.set_resp_round,
+    set_review_form: review_form.set_form,
+    shortcut: shortcut
+};

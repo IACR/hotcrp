@@ -3,9 +3,11 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class PaperContactInfo {
-    /** @var int */
+    /** @var int
+     * @readonly */
     public $paperId;
-    /** @var int */
+    /** @var int
+     * @readonly */
     public $contactId;
     /** @var int */
     public $conflictType = 0;
@@ -41,9 +43,7 @@ class PaperContactInfo {
     /** @var bool */
     public $allow_review;
     /** @var bool */
-    public $act_author;
-    /** @var bool */
-    public $allow_author;
+    public $allow_author_edit;
     /** @var int */
     public $view_conflict_type;
     /** @var bool */
@@ -67,6 +67,8 @@ class PaperContactInfo {
     /** @var ?string */
     public $searchable_tags;
 
+    /** @param Contact $user
+     * @suppress PhanAccessReadOnlyProperty */
     static function make_empty(PaperInfo $prow, $user) {
         $ci = new PaperContactInfo;
         $ci->paperId = $prow->paperId;
@@ -80,6 +82,8 @@ class PaperContactInfo {
         return $ci;
     }
 
+    /** @param Contact $user
+     * @suppress PhanAccessReadOnlyProperty */
     static function make_my(PaperInfo $prow, $user, $object) {
         $ci = PaperContactInfo::make_empty($prow, $user);
         $ci->conflictType = (int) $object->conflictType;
@@ -356,8 +360,12 @@ class PaperInfo {
     public $conf;
 
     // Always available, even in "minimal" paper skeletons
-    /** @var int */
+    /** @var int
+     * @readonly */
     public $paperId;
+    /** @var int
+     * @readonly */
+    public $uid;           // unique among all PaperInfos
     /** @var int */
     public $timeSubmitted;
     /** @var int */
@@ -535,6 +543,7 @@ class PaperInfo {
     private $_pause_mark_inactive_documents;
 
     const SUBMITTED_AT_FOR_WITHDRAWN = 1000000000;
+    static private $next_uid = 0;
 
     /** @param ?array<string,null|string|int> $p
      * @param ?Contact $contact */
@@ -544,7 +553,8 @@ class PaperInfo {
 
     /** @param ?array<string,null|string|int> $p
      * @param ?Contact $contact
-     * @param ?Conf $conf */
+     * @param ?Conf $conf
+     * @suppress PhanAccessReadOnlyProperty */
     private function merge($p, $contact, $conf) {
         assert($contact === null ? $conf !== null : $contact instanceof Contact);
         $this->conf = $contact ? $contact->conf : $conf;
@@ -554,6 +564,7 @@ class PaperInfo {
             }
         }
         $this->paperId = (int) $this->paperId;
+        $this->uid = ++self::$next_uid;
         $this->timeSubmitted = (int) $this->timeSubmitted;
         $this->timeWithdrawn = (int) $this->timeWithdrawn;
         $this->outcome = (int) $this->outcome;
@@ -1734,6 +1745,17 @@ class PaperInfo {
         }
     }
 
+    /** @return array<int,PaperOption> */
+    function display_fields() {
+        return $this->conf->options()->display_fields($this);
+    }
+
+    /** @return array<int,PaperOption> */
+    function form_fields() {
+        return $this->conf->options()->form_fields($this);
+    }
+
+    /** @return string */
     static function document_sql() {
         return "paperId, paperStorageId, timestamp, mimetype, sha1, crc32, documentType, filename, infoJson, size, filterType, originalStorageId, inactive";
     }
@@ -1895,7 +1917,10 @@ class PaperInfo {
         return $this->_doclink_array;
     }
 
-    /** @return DocumentInfoSet */
+    /** @param int $linkid
+     * @param int $min
+     * @param int $max
+     * @return DocumentInfoSet */
     function linked_documents($linkid, $min, $max, $owner = null) {
         $docs = new DocumentInfoSet;
         foreach (($this->doclink_array())[$linkid] ?? [] as $lt => $docid) {
@@ -1906,6 +1931,23 @@ class PaperInfo {
             }
         }
         return $docs;
+    }
+
+    /** @param int $docid
+     * @param int $min
+     * @param int $max
+     * @return ?int */
+    function link_id_by_document_id($docid, $min, $max) {
+        foreach ($this->doclink_array() as $linkid => $links) {
+            foreach ($links as $lt => $did) {
+                if ($lt >= $min
+                    && $lt < $max
+                    && $did === $docid) {
+                    return $linkid;
+                }
+            }
+        }
+        return null;
     }
 
     function invalidate_linked_documents() {
@@ -2449,6 +2491,16 @@ class PaperInfo {
         return false;
     }
 
+    /** @param ?ReviewInfo $rrow
+     * @return array<string,ReviewField> */
+    function viewable_review_fields($rrow, Contact $user) {
+        $bound = $user->view_score_bound($this, $rrow);
+        return array_filter($this->conf->all_review_fields(), function ($f) use ($bound, $rrow) {
+            return $f->view_score > $bound
+                && (!$f->round_mask || $f->is_round_visible($rrow));
+        });
+    }
+
 
     function load_review_requests($always = false) {
         if ($this->_row_set && ($this->_request_array === null || $always)) {
@@ -2568,6 +2620,12 @@ class PaperInfo {
             $this->load_comments();
         }
         return $this->_comment_array;
+    }
+
+    /** @param int $cid
+     * @return ?CommentInfo */
+    function comment_by_id($cid) {
+        return ($this->all_comments())[$cid] ?? null;
     }
 
     /** @return array<int,CommentInfo> */

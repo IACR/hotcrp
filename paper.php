@@ -15,12 +15,12 @@ foreach (["emailNote", "reason"] as $x) {
 if (isset($Qreq->p)
     && ctype_digit($Qreq->p)
     && !$Qreq->path()
-    && !$Qreq->post_ok()) {
+    && $Qreq->is_get()) {
     $Conf->redirect_self($Qreq);
 }
 if (!isset($Qreq->p)
     && !isset($Qreq->paperId)
-    && ($x = $Qreq->path_component(0)) !== false) {
+    && ($x = $Qreq->path_component(0)) !== null) {
     if (preg_match('/\A(?:new|\d+)\z/i', $x)) {
         $Qreq->p = $x;
         if (!isset($Qreq->m) && ($x = $Qreq->path_component(1))) {
@@ -33,12 +33,16 @@ if (!isset($Qreq->p)
         }
     }
 }
+// Editing a new submission as chair should always succeed.
+if ($Qreq->p === "new" && $Me->privChair && !$Conf->timeStartPaper()) {
+    $Me->add_overrides(Contact::OVERRIDE_CONFLICT);
+}
 
 // prepare user
 if ($Me->is_empty()) {
     $Me->escape();
 }
-if ($Qreq->post_ok() && !$Me->has_account_here()) {
+if ($Qreq->valid_token() && !$Me->has_account_here()) {
     if (isset($Qreq->update) && $Me->can_start_paper()) {
         $Me->activate_database_account();
     } else {
@@ -61,7 +65,7 @@ function errorMsgExit($msg) {
         json_exit(["ok" => false]);
     } else {
         confHeader();
-        Ht::stash_script("shortcut().add()");
+        Ht::stash_script("hotcrp.shortcut().add()");
         $msg && Conf::msg_error($msg);
         Conf::$main->footer();
         exit;
@@ -96,8 +100,17 @@ if ($prow && $Qreq->m === "api" && isset($Qreq->fn) && $Conf->has_api($Qreq->fn)
 }
 
 
+// cancel action
+if ($Qreq->cancel) {
+    if ($prow && $prow->timeSubmitted && $Qreq->m === "edit") {
+        unset($Qreq->m);
+    }
+    $Conf->redirect_self($Qreq);
+}
+
+
 // withdraw and revive actions
-if (isset($Qreq->withdraw) && $prow && $Qreq->post_ok()) {
+if (isset($Qreq->withdraw) && $prow && $Qreq->valid_post()) {
     if (!($whyNot = $Me->perm_withdraw_paper($prow))) {
         $reason = (string) $Qreq->reason;
         if ($reason === ""
@@ -125,8 +138,9 @@ if (isset($Qreq->withdraw) && $prow && $Qreq->post_ok()) {
             $preps = [];
             $prow->notify_reviews(function ($prow, $minic) use ($reason, &$preps) {
                 if (($p = HotCRPMailer::prepare_to($minic, "@withdrawreviewer", ["prow" => $prow, "reason" => $reason]))) {
-                    if (!$minic->can_view_review_identity($prow, null))
+                    if (!$minic->can_view_review_identity($prow, null)) {
                         $p->unique_preparation = true;
+                    }
                     $preps[] = $p;
                 }
             }, $Me);
@@ -138,7 +152,8 @@ if (isset($Qreq->withdraw) && $prow && $Qreq->post_ok()) {
         Conf::msg_error(whyNotText($whyNot) . " The submission has not been withdrawn.");
     }
 }
-if (isset($Qreq->revive) && $prow && $Qreq->post_ok()) {
+
+if (isset($Qreq->revive) && $prow && $Qreq->valid_post()) {
     if (!($whyNot = $Me->perm_revive_paper($prow))) {
         $aset = new AssignmentSet($Me, true);
         $aset->enable_papers($prow);
@@ -165,7 +180,8 @@ function update_paper(Qrequest $qreq, $action) {
     global $Me, $prow, $ps;
     $Conf = Conf::$main;
     // XXX lock tables
-    $wasSubmitted = $prow && $prow->timeSubmitted > 0;
+    $is_new = !$prow;
+    $was_submitted = $prow && $prow->timeSubmitted > 0;
 
     $ps = new PaperStatus($Conf, $Me);
     $prepared = $ps->prepare_save_paper_web($qreq, $prow, $action);
@@ -188,7 +204,7 @@ function update_paper(Qrequest $qreq, $action) {
     } else {
         $whyNot = $Me->perm_edit_paper($prow);
         if ($whyNot
-            && $action === "submit"
+            && $action === "update"
             && !count(array_diff($ps->diffs, ["contacts", "status"])))
             $whyNot = $Me->perm_finalize_paper($prow);
     }
@@ -222,7 +238,7 @@ function update_paper(Qrequest $qreq, $action) {
         $submitkey = "timeSubmitted";
         $storekey = "paperStorageId";
     }
-    $newsubmit = $new_prow->timeSubmitted > 0 && !$wasSubmitted;
+    $newsubmit = $new_prow->timeSubmitted > 0 && !$was_submitted;
 
     // confirmation message
     if ($action === "final") {
@@ -351,20 +367,15 @@ function update_paper(Qrequest $qreq, $action) {
     }
 
     $Conf->paper = $prow = $new_prow;
-    return !$ps->has_error();
+    return !$ps->has_error() || ($is_new && $new_prow);
 }
 
 
-if (($Qreq->update || $Qreq->submitfinal) && $Qreq->post_ok()) {
+if (($Qreq->update || $Qreq->submitfinal) && $Qreq->valid_post()) {
     // choose action
     $action = "update";
     if ($Qreq->submitfinal && $prow) {
         $action = "final";
-    } else if ($Qreq->submitpaper
-               && (($prow && $prow->size > 0)
-                   || $Qreq->has_file("opt0")
-                   || $Conf->opt("noPapers"))) {
-        $action = "submit";
     }
 
     $whyNot = update_paper($Qreq, $action);
@@ -378,11 +389,11 @@ if (($Qreq->update || $Qreq->submitfinal) && $Qreq->post_ok()) {
     // Use the request unless the request failed because updates
     // aren't allowed.
     $useRequest = !$whyNot || !$prow
-        || !($action != "final" && !$Me->can_edit_paper($prow)
+        || !($action !== "final" && !$Me->can_edit_paper($prow)
              && $Me->can_finalize_paper($prow));
 }
 
-if ($Qreq->updatecontacts && $Qreq->post_ok() && $prow) {
+if ($Qreq->updatecontacts && $Qreq->valid_post() && $prow) {
     if ($Me->can_administer($prow) || $Me->act_author_view($prow)) {
         $ps = new PaperStatus($Conf, $Me);
         if ($ps->prepare_save_paper_web($Qreq, $prow, "updatecontacts")) {
@@ -404,13 +415,13 @@ if ($Qreq->updatecontacts && $Qreq->post_ok() && $prow) {
     $useRequest = true;
 }
 
-if ($Qreq->updateoverride && $Qreq->post_ok() && $prow) {
+if ($Qreq->updateoverride && $Qreq->valid_post() && $prow) {
     $Conf->redirect_self($Qreq, ["p" => $prow->paperId, "m" => "edit", "forceShow" => 1]);
 }
 
 
 // delete action
-if ($Qreq->delete && $Qreq->post_ok()) {
+if ($Qreq->delete && $Qreq->valid_post()) {
     if (!$prow) {
         $Conf->confirmMsg("Submission deleted.");
     } else if (!$Me->can_administer($prow)) {
@@ -426,12 +437,6 @@ if ($Qreq->delete && $Qreq->post_ok()) {
         $prow = null;
         errorMsgExit("");
     }
-}
-if ($Qreq->cancel && $Qreq->post_ok()) {
-    if ($prow && $prow->timeSubmitted && $Qreq->m === "edit") {
-        unset($Qreq->m);
-    }
-    $Conf->redirect_self($Qreq);
 }
 
 
@@ -470,7 +475,7 @@ if ($paperTable->mode === "edit" && !$ps) {
     }
     $ps = $ps ?? PaperStatus::make_prow($Me, $nnprow);
     $old_overrides = $Me->add_overrides(Contact::OVERRIDE_CONFLICT);
-    foreach ($Conf->options()->form_fields($nnprow) as $o) {
+    foreach ($nnprow->form_fields() as $o) {
         if ($Me->can_edit_option($nnprow, $o)) {
             $ov = $nnprow->force_option($o);
             $ov->set_message_set($ps);
@@ -536,7 +541,7 @@ if ($paperTable->mode === "edit") {
             $j->blind = !!$Qreq->blind;
             $j->draft = !!$Qreq->draft;
         }
-        Ht::stash_script("papercomment.edit(" . json_encode_browser($j) . ")");
+        Ht::stash_script("hotcrp.edit_comment(" . json_encode_browser($j) . ")");
     }
 }
 

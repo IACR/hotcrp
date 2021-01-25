@@ -104,10 +104,12 @@ function saveAssignments($qreq, $reviewer) {
 }
 
 
-if ($Qreq->update && $reviewer && $Qreq->post_ok()) {
-    saveAssignments($Qreq, $reviewer);
-} else if ($Qreq->update) {
-    Conf::msg_error("You need to select a reviewer.");
+if ($Qreq->update && $Qreq->valid_post()) {
+    if ($reviewer) {
+        saveAssignments($Qreq, $reviewer);
+    } else {
+        Conf::msg_error("You need to select a reviewer.");
+    }
 }
 
 
@@ -153,25 +155,16 @@ if ($reviewer) {
 // Change PC member
 echo "<table><tr><td><div class=\"assignpc_pcsel\">",
     Ht::form(hoturl("manualassign"), array("method" => "get", "id" => "selectreviewerform"));
-Ht::stash_script('hiliter_children("#selectreviewerform")');
+Ht::stash_script('hotcrp.highlight_form_children("#selectreviewerform")');
 
-$result = $Conf->qe_raw("select ContactInfo.contactId, count(reviewId)
-                from ContactInfo
-                left join PaperReview on (PaperReview.contactId=ContactInfo.contactId and PaperReview.reviewType>=" . REVIEW_SECONDARY . ")
-                where roles!=0 and (roles&" . Contact::ROLE_PC . ")!=0
-                group by ContactInfo.contactId");
-$rev_count = [];
-while (($row = $result->fetch_row())) {
-    $rev_count[$row[0]] = $row[1];
-}
-
+$acs = AssignmentCountSet::load($Me, AssignmentCountSet::HAS_REVIEW);
 $rev_opt = array();
 if (!$reviewer) {
     $rev_opt[0] = "(Select a PC member)";
 }
 foreach ($Conf->pc_members() as $pc) {
     $rev_opt[$pc->email] = htmlspecialchars($pc->name(NAME_P|NAME_S)) . " ("
-        . plural(get($rev_count, $pc->contactId, 0), "assignment") . ")";
+        . plural($acs->get($pc->contactId)->rev, "assignment") . ")";
 }
 
 echo "<table><tr><td><strong>PC member:</strong> &nbsp;</td>",
@@ -300,18 +293,19 @@ if ($reviewer) {
         echo '<div class="entryi"><label>Show</label>',
             '<ul class="entry inline">', join('', $show_data), '</ul></div>';
     }
+    echo Ht::hidden("forceShow", 1, ["id" => "showforce"]); // search API must override conflicts
     echo '<div class="entryi autosave-hidden hidden"><label></label><div class="entry">',
         Ht::submit("update", "Save assignments", ["class" => "btn-primary btn big"]), '</div></div>';
     echo '</div>';
 
     $pl->set_table_id_class("foldpl", "pltable-fullw");
-    echo $pl->table_html(["nofooter" => true, "list" => true, "live" => true]);
+    $pl->echo_table_html(["nofooter" => true, "list" => true, "live" => true]);
 
     echo '<div class="aab aabr aabig"><div class="aabut">',
         Ht::submit("update", "Save assignments", ["class" => "btn-primary"]),
         "</div></div></form>\n";
-    Ht::stash_script('hiliter_children("form.assignpc");$("#assrevimmediate").trigger("change");'
-        . "$(\"#showau\").on(\"change\", function () { foldup.call(this, null, {n:10}) })");
+    Ht::stash_script('hotcrp.highlight_form_children("form.assignpc");$("#assrevimmediate").trigger("change");'
+        . "$(\"#showau\").on(\"change\", function () { hotcrp.foldup.call(this, null, {n:10}) })");
 }
 
 echo '<hr class="c" />';

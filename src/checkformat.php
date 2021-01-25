@@ -22,8 +22,11 @@ class CheckFormat extends MessageSet implements FormatChecker {
     /** @var int */
     public $allow_run;
     private $checkers = [];
+    /** @var ?string */
     public $banal_stdout;
+    /** @var ?string */
     public $banal_stderr;
+    /** @var ?int */
     public $banal_status;
     /** @var ?int */
     public $npages;
@@ -31,6 +34,7 @@ class CheckFormat extends MessageSet implements FormatChecker {
     private $body_pages;
     /** @var int */
     public $run_flags = 0;
+    /** @var array<string,mixed> */
     public $metadata_updates = [];
 
     static private $banal_args;
@@ -144,14 +148,14 @@ class CheckFormat extends MessageSet implements FormatChecker {
                 $this->metadata_updates["banal"] = $bj;
                 $flags &= ~(CheckFormat::RUN_ALLOWED | CheckFormat::RUN_DESIRED);
             } else {
-                $this->msg_fail("Error processing file. The file may not be in PDF format or may be corrupted.");
+                $this->msg_fail(htmlspecialchars($doc->export_filename()) . " cannot be processed. The file may be corrupted or not in PDF format.");
             }
 
             if ($limit > 0) {
                 $doc->conf->q("update Settings set value=value-1 where name='__banal_count' and data='$t'");
             }
         } else {
-            $this->msg_fail($doc->error_html ?? "Paper cannot be loaded.");
+            $this->msg_fail(htmlspecialchars($doc->export_filename()) . ": " . ($doc->error_html ?? "File cannot be loaded."));
             $flags &= ~CheckFormat::RUN_ALLOWED;
         }
 
@@ -159,6 +163,7 @@ class CheckFormat extends MessageSet implements FormatChecker {
         return $bj;
     }
 
+    /** @return int */
     protected function body_error_status($error_pages) {
         if ($this->body_pages >= 0.5 * $this->npages
             && $error_pages >= 0.16 * $this->body_pages) {
@@ -168,6 +173,7 @@ class CheckFormat extends MessageSet implements FormatChecker {
         }
     }
 
+    /** @return bool */
     static function banal_page_is_body($pg) {
         return ($pg->pagetype ?? "body") === "body"
             && (isset($pg->c)
@@ -175,6 +181,7 @@ class CheckFormat extends MessageSet implements FormatChecker {
                 : (!isset($pg->d) || $pg->d >= 16000 || !isset($pg->columns) || $pg->columns <= 2));
     }
 
+    /** @return string */
     static function page_message($px) {
         if (empty($px)) {
             return "";

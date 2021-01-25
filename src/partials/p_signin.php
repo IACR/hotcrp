@@ -40,7 +40,7 @@ class Signin_Partial {
             Navigation::redirect();
         } else if ($user->conf->opt("httpAuthLogin")) {
             LoginHelper::check_http_auth($user, $qreq);
-        } else if ($qreq->post_ok()) {
+        } else if ($qreq->valid_post()) {
             if (!$user->is_empty() && strcasecmp($qreq->email, $user->email) === 0) {
                 Navigation::redirect();
             } else if (!$qreq->start) {
@@ -113,7 +113,7 @@ class Signin_Partial {
             Ht::form($conf->hoturl("signin"), ["class" => "compact-form ui-submit uin js-signin"]),
             Ht::hidden("post", post_value(true));
         if (!$unfolded) {
-            echo Ht::unstash_script('fold("homeacct",false)');
+            echo Ht::unstash_script('hotcrp.fold("homeacct",false)');
         }
 
         $gx->render_group("signin/form");
@@ -202,7 +202,7 @@ class Signin_Partial {
         assert($qreq->method() === "POST");
         if ($qreq->cancel) {
             Navigation::redirect();
-        } else if ($qreq->post_ok()) {
+        } else if ($qreq->valid_post()) {
             LoginHelper::logout($user, true);
             Navigation::redirect($user->conf->hoturl("index", "signedout=1"));
         } else if (!isset($_SESSION) || $user->is_empty()) {
@@ -249,7 +249,7 @@ class Signin_Partial {
             } else {
                 $conf->msg("The system cannot send email at this time. You’ll need help from the site administrator to sign in.", 2);
             }
-        } else if ($info["mailtemplate"] === "@newaccount") {
+        } else if (strpos($info["mailtemplate"], "@newaccount") !== false) {
             $conf->msg("Sent mail to " . htmlspecialchars($user->email) . ". When you receive that mail, follow the link to set a password and sign in to the site.", "xconfirm");
         } else {
             $conf->msg("Sent mail to " . htmlspecialchars($user->email) . ". When you receive that mail, follow the link to reset your password.", "xconfirm");
@@ -285,7 +285,7 @@ class Signin_Partial {
             Navigation::redirect();
         } else if (!$user->conf->allow_user_self_register()) {
             // do nothing
-        } else if ($qreq->post_ok()) {
+        } else if ($qreq->valid_post()) {
             $info = LoginHelper::new_account_info($user->conf, $qreq);
             if ($info["ok"]) {
                 $prep = self::mail_user($user->conf, $info);
@@ -304,7 +304,7 @@ class Signin_Partial {
             self::bad_post_error($user, $qreq, "newaccount");
         }
     }
-    static function render_create_head(Contact $user, Qrequest $qreq, $gx) {
+    static function render_newaccount_head(Contact $user, Qrequest $qreq, $gx) {
         ensure_session();
         $user->conf->header("New account", "newaccount", ["action_bar" => false]);
         $gx->push_render_cleanup("__footer");
@@ -314,20 +314,28 @@ class Signin_Partial {
             return false;
         }
     }
-    static function render_create_body(Contact $user, Qrequest $qreq, $gx, $gj) {
+    static function render_newaccount_body(Contact $user, Qrequest $qreq, $gx, $gj) {
         echo '<div class="homegrp" id="homeaccount">',
             Ht::form($user->conf->hoturl("newaccount"), ["class" => "compact-form ui-submit uin js-signin"]),
             Ht::hidden("post", post_value());
-        if (($m = self::_create_message($user->conf))) {
+        $gx->render_group("newaccount/form");
+        echo '</form></div>';
+        Ht::stash_script("hotcrp.focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
+    }
+    static function render_newaccount_form_description(Contact $user) {
+        $m = $user->conf->_("Enter your email and we’ll create an account and send you instructions for signing in.");
+        if ($m) {
             echo '<p class="mb-5">', $m, '</p>';
         }
+    }
+    static function render_newaccount_form_email(Contact $user, Qrequest $qreq) {
         self::_render_email_entry($user, $qreq, "email");
+    }
+    static function render_newaccount_form_actions(Contact $user, Qrequest $qreq) {
         echo '<div class="popup-actions">',
-            Ht::submit("Create account", ["class" => "btn-success"]),
+            Ht::submit("Create account", ["class" => "btn-primary"]),
             Ht::submit("cancel", "Cancel", ["class" => "uic js-no-signin", "formnovalidate" => true]),
             '</div>';
-        echo '</form></div>';
-        Ht::stash_script("focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
     }
 
 
@@ -341,7 +349,7 @@ class Signin_Partial {
         assert($qreq->method() === "POST");
         if ($qreq->cancel) {
             Navigation::redirect();
-        } else if ($qreq->post_ok()) {
+        } else if ($qreq->valid_post()) {
             $info = LoginHelper::forgot_password_info($user->conf, $qreq, false);
             if ($info["ok"]) {
                 self::mail_user($user->conf, $info);
@@ -367,7 +375,7 @@ class Signin_Partial {
             Ht::hidden("post", post_value());
         $gx->render_group("forgotpassword/form");
         echo '</form></div>';
-        Ht::stash_script("focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
+        Ht::stash_script("hotcrp.focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
     }
     static function render_forgot_form_description(Contact $user, Qrequest $qreq, $gx) {
         echo '<p class="mb-5">Enter your email and we’ll send you a link to reset your password.';
@@ -408,9 +416,9 @@ class Signin_Partial {
         if (preg_match('/\A\/?(U?[12][-\w]+)\/?\z/', $resetcap, $m)) {
             $this->_reset_cap = $m[1];
         } else if (strpos($resetcap, "@") !== false) {
-            if ($qreq->method() === "POST" && $qreq->post_ok()) {
+            if ($qreq->valid_post()) {
                 $nqreq = new Qrequest("POST", ["email" => $resetcap]);
-                $nqreq->approve_post();
+                $nqreq->approve_token();
                 $nqreq->set_annex("redirect", $user->conf->hoturl("resetpassword"));
                 self::forgot_request($user, $nqreq); // may redirect
                 if (Ht::problem_status_at("email")) {
@@ -431,8 +439,7 @@ class Signin_Partial {
 
         // check passwords
         if ($this->_reset_user
-            && $qreq->method() === "POST"
-            && $qreq->post_ok()) {
+            && $qreq->valid_post()) {
             $p1 = (string) $qreq->password;
             $p2 = (string) $qreq->password2;
             if ($p1 === "") {
@@ -489,7 +496,7 @@ class Signin_Partial {
             $gx->render_group("forgotpassword/form");
         }
         echo '</form></div>';
-        Ht::stash_script("focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
+        Ht::stash_script("hotcrp.focus_within(\$(\"#homeaccount\"));window.scroll(0,0)");
     }
     static function render_reset_form_description() {
         echo '<p class="mb-5">Use this form to set a new password. You may want to use the random password we’ve chosen.</p>';

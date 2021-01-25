@@ -21,8 +21,8 @@ class Basics_SettingParser extends SettingParser {
         $sv->echo_entry_group("opt.contactEmail", null, null, "The site contact is the contact point for users if something goes wrong. It defaults to the chair.");
     }
     static function render_email(SettingValues $sv) {
+        $sv->echo_entry_group("opt.emailCc", null);
         $sv->echo_entry_group("opt.emailReplyTo", null);
-        $sv->echo_entry_group("opt.emailCc", null, null, 'This applies to email sent to reviewers and email sent using the <a href="' . $sv->conf->hoturl("mail") . '">mail tool</a>. It doesn’t apply to account-related email or email sent to submitters.');
     }
 
     function validate(SettingValues $sv, Si $si) {
@@ -31,8 +31,8 @@ class Basics_SettingParser extends SettingParser {
             if ($default_contact
                 && $sv->newv("opt.contactName") === Text::name($default_contact->firstName, $default_contact->lastName, "", 0)
                 && $sv->newv("opt.contactEmail") === $default_contact->email
-                && get($sv->conf->opt_override, "contactName") === null
-                && get($sv->conf->opt_override, "contactEmail") === null) {
+                && ($sv->conf->opt_override["contactName"] ?? null) === null
+                && ($sv->conf->opt_override["contactEmail"] ?? null) === null) {
                 $sv->save("opt.contactName", null);
                 $sv->save("opt.contactEmail", null);
             }

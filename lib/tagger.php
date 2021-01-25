@@ -151,17 +151,17 @@ class TagInfo {
     function has_order_anno() {
         return count($this->order_anno_list()) > 1;
     }
-    /** @return string|false */
+    /** @return ?string */
     function automatic_search() {
         if ($this->autosearch) {
             return $this->autosearch;
         } else if ($this->votish) {
             return "#*~" . $this->tag;
         } else {
-            return false;
+            return null;
         }
     }
-    /** @return string|false */
+    /** @return ?string */
     function automatic_formula_expression() {
         if ($this->autosearch) {
             return $this->autosearch_value ?? "0";
@@ -170,7 +170,7 @@ class TagInfo {
         } else if ($this->allotment) {
             return "sum.pc(#_~{$this->tag}) || null";
         } else {
-            return false;
+            return null;
         }
     }
 }
@@ -679,7 +679,7 @@ class TagMap implements IteratorAggregate {
     static function mark_pattern_fill($classes) {
         $key = is_array($classes) ? join(" ", $classes) : $classes;
         if (!isset(self::$multicolor_map[$key]) && strpos($key, " ") !== false) {
-            Ht::stash_script("make_pattern_fill(" . json_encode_browser($key) . ")");
+            Ht::stash_script("hotcrp.make_pattern_fill(" . json_encode_browser($key) . ")");
             self::$multicolor_map[$key] = true;
         }
     }
@@ -1191,22 +1191,9 @@ class Tagger {
         }
     }
 
-    function view_score($tag) {
-        if ($tag === false) {
-            return VIEWSCORE_EMPTY;
-        } else if (($pos = strpos($tag, "~")) !== false) {
-            if (($pos == 0 && $tag[1] === "~")
-                || substr($tag, 0, $pos) != $this->_contactId) {
-                return VIEWSCORE_ADMINONLY;
-            } else {
-                return VIEWSCORE_REVIEWERONLY;
-            }
-        } else {
-            return VIEWSCORE_PC;
-        }
-    }
 
-
+    /** @param list<string>|string $tags
+     * @return string */
     function unparse($tags) {
         if ($tags === "" || (is_array($tags) && count($tags) == 0)) {
             return "";
@@ -1221,6 +1208,8 @@ class Tagger {
         return trim($tags);
     }
 
+    /** @param list<string>|string $tags
+     * @return string */
     function unparse_hashed($tags) {
         if (($tags = $this->unparse($tags)) !== "") {
             $tags = str_replace(" ", " #", "#" . $tags);
@@ -1228,6 +1217,9 @@ class Tagger {
         return $tags;
     }
 
+    /** @param string $e
+     * @param float $count
+     * @return string */
     static function unparse_emoji_html($e, $count) {
         $b = '<span class="tagemoji">';
         if ($count == 0 || $count == 1) {
@@ -1247,6 +1239,9 @@ class Tagger {
 
     const DECOR_PAPER = 0;
     const DECOR_USER = 1;
+    /** @param list<string>|string $tags
+     * @param int $type
+     * @return string */
     function unparse_decoration_html($tags, $type = 0) {
         if (is_array($tags)) {
             $tags = join(" ", $tags);
@@ -1305,6 +1300,8 @@ class Tagger {
         return $x === "" ? "" : '<span class="tagdecoration">' . $x . '</span>';
     }
 
+    /** @param string $tag
+     * @return string|false */
     function link_base($tag) {
         if (ctype_digit($tag[0])) {
             $p = strlen((string) $this->_contactId);
@@ -1316,6 +1313,8 @@ class Tagger {
         return Tagger::base($tag);
     }
 
+    /** @param string $tag
+     * @return string|false */
     function link($tag) {
         if (ctype_digit($tag[0])) {
             $p = strlen((string) $this->_contactId);
@@ -1338,6 +1337,8 @@ class Tagger {
         return $this->conf->hoturl("search", ["q" => $q]);
     }
 
+    /** @param list<string>|string $viewable
+     * @return string */
     function unparse_link($viewable) {
         $tags = $this->unparse($viewable);
         if ($tags === "") {

@@ -76,7 +76,7 @@ form also can include:</p>
 
         } else if ($gj->itemid === 6) {
             echo "<li><p><strong>", $hth->setting_link("Open the site for submissions.", "sub"),
-  "</strong> Submissions will be accepted only until the listed deadline.</p></li>\n";
+  "</strong> Submissions are allowed up to the listed deadline.</p></li>\n";
         }
     }
 
@@ -155,7 +155,7 @@ form also can include:</p>
   ".</p></li>\n";
 
         } else if ($gj->itemid === 9) {
-            echo "<li><p><strong>", $hth->setting_link("Open the site for reviewing.", "rev_open"), "</strong></p></li>\n";
+            echo "<li><p><strong>", $hth->setting_link("Enable review editing.", "rev_open"), "</strong></p></li>\n";
         }
     }
 

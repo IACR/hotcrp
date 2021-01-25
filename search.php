@@ -92,7 +92,7 @@ if ($Qreq->redisplay) {
 function savesearch() {
     global $Conf, $Me, $Qreq;
 
-    $name = simplify_whitespace(get($Qreq, "ssname", ""));
+    $name = simplify_whitespace($Qreq->ssname ?? "");
     $tagger = new Tagger($Me);
     if (!$tagger->check($name, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE)) {
         if ($name == "") {
@@ -133,7 +133,7 @@ function savesearch() {
     }
 }
 
-if (($Qreq->savesearch || $Qreq->deletesearch) && $Me->isPC && $Qreq->post_ok()) {
+if (($Qreq->savesearch || $Qreq->deletesearch) && $Me->isPC && $Qreq->valid_post()) {
     savesearch();
 }
 
@@ -183,17 +183,27 @@ $tselect = PaperSearch::searchTypeSelector($tOpt, $Qreq->t, ["tabindex" => 1]);
 $display_options_extra = "";
 
 class Search_DisplayOptions {
+    /** @var array<int,string> */
     public $headers = [];
+    /** @var array<int,list<string>> */
     public $items = [];
 
+    /** @param int $column
+     * @param string $header */
     function set_header($column, $header) {
         $this->headers[$column] = $header;
     }
+    /** @param int $column
+     * @param string $item */
     function item($column, $item) {
-        if (!isset($this->headers[$column]))
+        if (!isset($this->headers[$column])) {
             $this->headers[$column] = "";
+        }
         $this->items[$column][] = $item;
     }
+    /** @param int $column
+     * @param string $type
+     * @param string $title */
     function checkbox_item($column, $type, $title, $options = []) {
         global $pl;
         $options["class"] = "uich js-plinfo";
@@ -240,8 +250,8 @@ if ($pl_text) {
 
     // Options
     foreach ($Conf->options() as $ox) {
-        if ($pl->has("opt$ox->id")
-            && $ox->supports_list_display(PaperOption::LIST_DISPLAY_SUGGEST)) {
+        if ($ox->supports_list_display(PaperOption::LIST_DISPLAY_SUGGEST)
+            && $pl->has("opt$ox->id")) {
             $display_options->checkbox_item(10, $ox->search_keyword(), $ox->name);
         }
     }
@@ -275,7 +285,7 @@ if ($pl_text) {
     }
 
     // Scores group
-    foreach ($Conf->review_form()->user_visible_fields($Me) as $f) {
+    foreach ($Conf->review_form()->viewable_fields($Me) as $f) {
         if ($f->has_options)
             $display_options->checkbox_item(30, $f->search_keyword(), $f->name_html);
     }
@@ -366,15 +376,17 @@ echo Ht::form(hoturl("search"), ["method" => "get"]),
 
 echo "</div>";
 
-function echo_request_as_hidden_inputs($specialscore = false) {
+function echo_request_as_hidden_inputs($specialscore) {
     global $pl, $pl_text, $Qreq;
-    foreach (array("q", "qa", "qo", "qx", "qt", "t", "sort") as $x)
+    foreach (array("q", "qa", "qo", "qx", "qt", "t", "sort") as $x) {
         if (isset($Qreq[$x])
             && ($x !== "q" || !isset($Qreq->qa))
             && ($x !== "sort" || !$specialscore || !$pl_text))
             echo Ht::hidden($x, $Qreq[$x]);
-    if ($specialscore && $pl_text)
+    }
+    if ($specialscore && $pl_text) {
         echo Ht::hidden("sort", $pl->sortdef(true));
+    }
 }
 
 // Saved searches
@@ -397,9 +409,9 @@ if ($Me->isPC || $Me->privChair) {
                     }
                 }
                 echo "<a href=\"", hoturl("search", "q=ss%3A" . urlencode($sn) . $arest), "\">", htmlspecialchars($sn), '</a><div class="fx" style="padding-bottom:0.5ex;font-size:smaller">',
-                    "Definition: “<a href=\"", hoturl("search", "q=" . urlencode(get($sv, "q", "")) . $arest), "\">", htmlspecialchars($sv->q), "</a>”";
+                    "Definition: “<a href=\"", hoturl("search", "q=" . urlencode($sv->q ?? "") . $arest), "\">", htmlspecialchars($sv->q), "</a>”";
                 if ($Me->privChair
-                    || !get($sv, "owner")
+                    || !($sv->owner ?? false)
                     || $sv->owner == $Me->contactId) {
                     echo ' <span class="barsep">·</span> ',
                         "<a href=\"", $Conf->selfurl($Qreq, ["deletesearch" => 1, "ssname" => $sn, "post" => post_value()]), "\">Delete</a>";
@@ -427,26 +439,28 @@ if ($Me->isPC || $Me->privChair) {
 
         echo "</div>";
         $ss = true;
-    } else
+    } else {
         $ss = false;
+    }
 }
 
 // Display options
-if ($pl->count > 0) {
+if (!$pl->is_empty()) {
     echo '<div class="tld is-tla" id="tla-view" style="padding-bottom:1ex">';
 
     echo Ht::form($Conf->hoturl_post("search", "redisplay=1"), ["id" => "foldredisplay", "class" => "fn3 fold5c"]);
-    echo_request_as_hidden_inputs();
+    echo_request_as_hidden_inputs(false);
 
     echo '<div class="search-ctable">';
     ksort($display_options->items);
     foreach ($display_options->items as $column => $items) {
-        if (empty($items))
+        if (empty($items)) {
             continue;
-        $h = get($display_options->headers, $column);
+        }
         echo '<div class="ctelt">';
-        if ((string) $h !== "")
+        if (($h = $display_options->headers[$column] ?? "") !== "") {
             echo '<div class="dispopt-hdr">', $h, '</div>';
+        }
         echo join("", $items), '</div>';
     }
     echo "</div>\n";
@@ -481,13 +495,15 @@ echo "</div>";
 echo '<div class="tllx"><table><tr>',
   '<td><div class="tll active"><a class="ui tla" href="">Search</a></div></td>
   <td><div class="tll"><a class="ui tla nw" href="#advanced">Advanced search</a></div></td>', "\n";
-if ($ss)
+if ($ss) {
     echo '  <td><div class="tll"><a class="ui tla nw" href="#saved-searches">Saved searches</a></div></td>', "\n";
-if ($pl->count > 0)
+}
+if (!$pl->is_empty()) {
     echo '  <td><div class="tll"><a class="ui tla nw" href="#view">View options</a></div></td>', "\n";
+}
 echo "</tr></table></div></div>\n\n";
-if ($pl->count == 0) {
-    Ht::stash_script("addClass(document.body,\"want-hash-focus\")");
+if (!$pl->is_empty()) {
+    Ht::stash_script("\$(document.body).addClass(\"want-hash-focus\")");
 }
 echo Ht::unstash();
 
@@ -514,7 +530,7 @@ if ($pl_text) {
     }
 
     echo $pl_text;
-    if ($pl->count == 0 && $Qreq->t != "s") {
+    if ($pl->is_empty() && $Qreq->t != "s") {
         $a = [];
         foreach (["q", "qa", "qo", "qx", "qt", "sort", "showtags"] as $xa) {
             if (isset($Qreq[$xa])

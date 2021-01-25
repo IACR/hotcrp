@@ -3,9 +3,17 @@
 // Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class Session_API {
+    static private function session_result(Contact $user, $ok) {
+        $si = ["postvalue" => post_value()];
+        if ($user->contactId) {
+            $si["cid"] = $user->contactId;
+        }
+        return ["ok" => $ok, "postvalue" => post_value(), "sessioninfo" => $si];
+    }
+
     static function getsession(Contact $user) {
         ensure_session();
-        return ["ok" => true, "postvalue" => post_value()];
+        return self::session_result($user, true);
     }
 
     /** @param string|Qrequest $qreq
@@ -74,8 +82,7 @@ class Session_API {
                 $error = true;
             }
         }
-
-        return ["ok" => !$error, "postvalue" => post_value()];
+        return self::session_result($user, !$error);
     }
 
     static function change_display(Contact $user, $report, $settings) {

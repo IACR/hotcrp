@@ -55,7 +55,6 @@ CREATE TABLE `ContactInfo` (
   `passwordTime` bigint(11) NOT NULL DEFAULT '0',
   `passwordUseTime` bigint(11) NOT NULL DEFAULT '0',
   `collaborators` varbinary(8192) DEFAULT NULL,
-  `creationTime` bigint(11) NOT NULL DEFAULT '0',
   `updateTime` bigint(11) NOT NULL DEFAULT '0',
   `lastLogin` bigint(11) NOT NULL DEFAULT '0',
   `defaultWatch` int(11) NOT NULL DEFAULT '2',
@@ -340,12 +339,13 @@ CREATE TABLE `PaperReviewRefused` (
   `lastName` varbinary(120) DEFAULT NULL,
   `affiliation` varbinary(2048) DEFAULT NULL,
   `contactId` int(11) NOT NULL,
+  `refusedReviewId` int(11) DEFAULT NULL,
+  `refusedReviewType` tinyint(1) NOT NULL DEFAULT '0',
+  `reviewRound` int(1) DEFAULT NULL,
   `requestedBy` int(11) NOT NULL,
   `timeRequested` bigint(11) DEFAULT NULL,
   `refusedBy` int(11) DEFAULT NULL,
   `timeRefused` bigint(11) DEFAULT NULL,
-  `refusedReviewType` tinyint(1) NOT NULL DEFAULT '0',
-  `reviewRound` int(1) DEFAULT NULL,
   `data` varbinary(8192) DEFAULT NULL,
   `reason` varbinary(32767) DEFAULT NULL,
   PRIMARY KEY (`paperId`,`email`)
@@ -515,7 +515,7 @@ CREATE TABLE `TopicInterest` (
 
 
 
-insert into Settings (name, value) values ('allowPaperOption', 240);
+insert into Settings (name, value) values ('allowPaperOption', 244);
 insert into Settings (name, value) values ('setupPhase', 1);
 -- there are no submissions yet
 insert into Settings (name, value) values ('no_papersub', 1);

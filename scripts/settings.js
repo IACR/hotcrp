@@ -12,6 +12,24 @@ function next_lexicographic_permutation(i, size) {
     return i;
 }
 
+handle_ui.on("js-settings-resp-active", function (event) {
+    $(".if-response-active").toggleClass("hidden", !this.checked);
+});
+
+$(function () { $(".js-settings-resp-active").trigger("change"); });
+
+handle_ui.on("js-settings-au-seerev-tag", function (event) {
+    $("#au_seerev_3").click(); // AUSEEREV_TAGS
+});
+
+handle_ui.on("js-settings-sub-nopapers", function (event) {
+    var v = $(this).val();
+    hotcrp.fold("pdfupload", v == 1, 2);
+    hotcrp.fold("pdfupload", v != 0, 3);
+});
+
+$(function () { $(".js-settings-sub-nopapers").trigger("change"); });
+
 
 handle_ui.on("js-settings-option-type", function (event) {
     var issel = /^(?:selector|radio)/.test(this.value);
@@ -50,7 +68,7 @@ handle_ui.on("js-settings-option-move", function (event) {
                 $odiv.append('<div class="f-i"><em>This field will be deleted from the submission form.</em></div>');
         }
     }
-    settings_option_move_enable();
+    settings_option_positions();
 });
 
 handle_ui.on("js-settings-option-new", function (event) {
@@ -63,22 +81,26 @@ handle_ui.on("js-settings-option-new", function (event) {
     odiv.find(".need-autogrow").autogrow();
     odiv.find(".need-tooltip").each(tooltip);
     $("#optn_" + next)[0].focus();
-    settings_option_move_enable();
+    settings_option_positions();
 });
 
-function settings_option_move_enable() {
-    $(".settings-opt .moveup, .settings-opt .movedown").prop("disabled", false);
-    $(".settings-opt:first-child .moveup").prop("disabled", true);
-    $(".settings-opt:last-child .movedown").prop("disabled", true);
-    var index = 0;
-    $(".settings-opt-fp").each(function () {
-        if (this.value !== "deleted" && this.name !== "optfp_0") {
-            ++index;
-            if (this.value != index)
-                $(this).val(index).change();
-        }
-    });
+function settings_option_positions() {
+    if ($(".settings-opt").length) {
+        $(".settings-opt .moveup, .settings-opt .movedown").prop("disabled", false);
+        $(".settings-opt:first-child .moveup").prop("disabled", true);
+        $(".settings-opt:last-child .movedown").prop("disabled", true);
+        var index = 0;
+        $(".settings-opt-fp").each(function () {
+            if (this.value !== "deleted" && this.name !== "optfp_0") {
+                ++index;
+                if (this.value != index)
+                    $(this).val(index).change();
+            }
+        });
+    }
 }
+
+$(settings_option_positions);
 
 
 handle_ui.on("js-settings-banal-pagelimit", function (evt) {
@@ -241,10 +263,10 @@ function option_class_prefix(fieldj) {
 function fill_order() {
     var i, c = $("#reviewform_container")[0], n;
     for (i = 1, n = c.firstChild; n; ++i, n = n.nextSibling)
-        $(n).find(".revfield_order").val(i);
+        $(n).find(".rf_position").val(i);
     c = $("#reviewform_removedcontainer")[0];
     for (n = c.firstChild; n; n = n.nextSibling)
-        $(n).find(".revfield_order").val(0);
+        $(n).find(".rf_position").val(0);
     form_highlight("#settingsform");
 }
 
@@ -255,16 +277,16 @@ function fill_field1(sel, value, order) {
 
 function fill_field(fid, fieldj, order) {
     fieldj = fieldj || original[fid] || {};
-    fill_field1("#shortName_" + fid, fieldj.name || "", order);
-    order && fill_field1("#order_" + fid, fieldj.position || 0, order);
-    fill_field1("#description_" + fid, fieldj.description || "", order);
-    fill_field1("#authorView_" + fid, fieldj.visibility || "pc", order);
-    fill_field1("#options_" + fid, options_to_text(fieldj), order);
-    fill_field1("#option_class_prefix_flipped_" + fid, fieldj.option_letter ? "1" : "", order);
-    fill_field1("#option_class_prefix_" + fid, option_class_prefix(fieldj), order);
-    fill_field1("#round_list_" + fid, (fieldj.round_list || ["all"]).join(" "), order);
-    $("#revfield_" + fid + " textarea").trigger("change");
-    $("#revfieldview_" + fid).html("").append(create_field_view(fid, fieldj));
+    fill_field1("#rf_" + fid + "_name", fieldj.name || "", order);
+    order && fill_field1("#rf_" + fid + "_position", fieldj.position || 0, order);
+    fill_field1("#rf_" + fid + "_description", fieldj.description || "", order);
+    fill_field1("#rf_" + fid + "_visibility", fieldj.visibility || "pc", order);
+    fill_field1("#rf_" + fid + "_options", options_to_text(fieldj), order);
+    fill_field1("#rf_" + fid + "_colorsflipped", fieldj.option_letter ? "1" : "", order);
+    fill_field1("#rf_" + fid + "_colors", option_class_prefix(fieldj), order);
+    fill_field1("#rf_" + fid + "_rounds", (fieldj.round_list || ["all"]).join(" "), order);
+    $("#rf_" + fid + " textarea").trigger("change");
+    $("#rf_" + fid + "_view").html("").append(create_field_view(fid, fieldj));
     $("#remove_" + fid).html(fieldj.has_any_nonempty ? "Delete from form and current reviews" : "Delete from form");
     return false;
 }
@@ -272,25 +294,25 @@ function fill_field(fid, fieldj, order) {
 function remove() {
     var $f = $(this).closest(".settings-revfield"),
         fid = $f.attr("data-revfield");
-    $f.find(".revfield_order").val(0);
+    $f.find(".rf_position").val(0);
     $f.detach().hide().appendTo("#reviewform_removedcontainer");
-    $("#reviewform_removedcontainer").append('<div id="revfieldremoved_' + fid + '" class="settings-revfieldremoved"><span class="settings-revfn" style="text-decoration:line-through">' + escape_entities($f.find("#shortName_" + fid).val()) + '</span>&nbsp; (field removed)</div>');
+    $("#reviewform_removedcontainer").append('<div id="revfieldremoved_' + fid + '" class="settings-revfieldremoved"><span class="settings-revfn" style="text-decoration:line-through">' + escape_entities($f.find("#rf_" + fid + "_name").val()) + '</span>&nbsp; (field removed)</div>');
     fill_order();
 }
 
-var revfield_template = '<div id="revfield_$" class="settings-revfield f-contain has-fold fold2c errloc_$" data-revfield="$">\
+var revfield_template = '<div id="rf_$" class="settings-revfield f-contain has-fold fold2c errloc_$" data-revfield="$">\
 <a href="" class="q settings-field-folder">\
 <span class="expander"><span class="in0 fx2">▼</span><span class="in1 fn2 need-tooltip" data-tooltip="Edit field" data-tooltip-dir="r">▶</span></span>\
 </a>\
-<div id="revfieldview_$" class="settings-revfieldview fn2 ui js-foldup"></div>\
-<div id="revfieldedit_$" class="settings-revfieldedit fx2">\
+<div id="rf_$_view" class="settings-revfieldview fn2 ui js-foldup"></div>\
+<div id="rf_$_edit" class="settings-revfieldedit fx2">\
   <div class="f-i">\
-    <input name="shortName_$" id="shortName_$" type="text" size="50" style="font-weight:bold" placeholder="Field name" />\
+    <input name="rf_$_name" id="rf_$_name" type="text" size="50" style="font-weight:bold" placeholder="Field name" />\
   </div>\
   <div class="f-horizontal">\
     <div class="f-i">\
-      <label for="authorView_$">Visibility</label>\
-      <span class="select"><select name="authorView_$" id="authorView_$" class="reviewfield_authorView">\
+      <label for="rf_$_visibility">Visibility</label>\
+      <span class="select"><select name="rf_$_visibility" id="rf_$_visibility" class="rf_visibility">\
         <option value="au">Visible to authors</option>\
         <option value="pc">Hidden from authors</option>\
         <option value="audec">Hidden from authors until decision</option>\
@@ -298,26 +320,26 @@ var revfield_template = '<div id="revfield_$" class="settings-revfield f-contain
       </select></span>\
     </div>\
     <div class="f-i reviewrow_options">\
-      <label for="option_class_prefix_$">Colors</label>\
-      <span class="select"><select name="option_class_prefix_$" id="option_class_prefix_$" class="reviewfield_option_class_prefix"></select></span>\
-<input type="hidden" name="option_class_prefix_flipped_$" id="option_class_prefix_flipped_$" value="" />\
+      <label for="rf_$_colors">Colors</label>\
+      <span class="select"><select name="rf_$_colors" id="rf_$_colors" class="rf_colors"></select></span>\
+<input type="hidden" name="rf_$_colorsflipped" id="rf_$_colorsflipped" value="" />\
     </div>\
     <div class="f-i reviewrow_rounds">\
-      <label for="round_list_$">Rounds</label>\
-      <span class="select"><select name="round_list_$" id="round_list_$" class="reviewfield_round_list"></select></span>\
+      <label for="rf_$_rounds">Rounds</label>\
+      <span class="select"><select name="rf_$_rounds" id="rf_$_rounds" class="rf_rounds"></select></span>\
     </div>\
   </div>\
   <div class="f-i">\
-    <label for="description_$">Description</label>\
-    <textarea name="description_$" id="description_$" class="w-text need-tooltip" rows="2" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
+    <label for="rf_$_description">Description</label>\
+    <textarea name="rf_$_description" id="rf_$_description" class="w-text need-tooltip" rows="2" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
   <div class="f-i reviewrow_options">\
-    <label for="options_$">Choices</label>\
-    <textarea name="options_$" id="options_$" class="w-text need-tooltip" rows="6" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
+    <label for="rf_$_options">Choices</label>\
+    <textarea name="rf_$_options" id="rf_$_options" class="w-text need-tooltip" rows="6" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
   <div class="f-i">\
-    <button id="moveup_$" class="btn-sm revfield_moveup" type="button">Move up</button><span class="sep"></span>\
-<button id="movedown_$" class="btn-sm revfield_movedown" type="button">Move down</button><span class="sep"></span>\
-<button id="remove_$" class="btn-sm revfield_remove" type="button">Delete from form</button><span class="sep"></span>\
-<input type="hidden" name="order_$" id="order_$" class="revfield_order" value="0" />\
+    <button id="rf_$_moveup" class="btn-sm rf_moveup" type="button">Move up</button><span class="sep"></span>\
+<button id="rf_$_movedown" class="btn-sm rf_movedown" type="button">Move down</button><span class="sep"></span>\
+<button id="rf_$_remove" class="btn-sm rf_remove" type="button">Delete from form</button><span class="sep"></span>\
+<input type="hidden" name="rf_$_position" id="rf_$_position" class="rf_position" value="0" />\
   </div>\
 </div></div>';
 
@@ -407,10 +429,10 @@ function create_field_view(fid, fieldj) {
 }
 
 function move_field(event) {
-    var isup = $(this).hasClass("revfield_moveup"),
+    var isup = $(this).hasClass("rf_moveup"),
         $f = $(this).closest(".settings-revfield").detach(),
         fid = $f.attr("data-revfield"),
-        pos = $f.find(".revfield_order").val() | 0,
+        pos = $f.find(".rf_position").val() | 0,
         $c = $("#reviewform_container")[0], $n, i;
     for (i = 1, $n = $c.firstChild;
          $n && i < (isup ? pos - 1 : pos + 1);
@@ -421,7 +443,7 @@ function move_field(event) {
 }
 
 function append_field(fid, pos) {
-    var $f = $("#revfield_" + fid), i, $j;
+    var $f = $("#rf_" + fid), i, $j;
     $("#revfieldremoved_" + fid).remove();
 
     if ($f.length) {
@@ -433,7 +455,7 @@ function append_field(fid, pos) {
     $f = $(revfield_template.replace(/\$/g, fid));
 
     if (fid.charAt(0) === "s") {
-        $j = $f.find(".reviewfield_option_class_prefix");
+        $j = $f.find(".rf_colors");
         for (i = 0; i < colors.length; i += 2)
             $j.append("<option value=\"" + colors[i] + "\">" + colors[i+1] + "</option>");
     } else
@@ -444,7 +466,7 @@ function append_field(fid, pos) {
         rnames.push(i);
     if (rnames.length > 1) {
         var v, j, text;
-        $j = $f.find(".reviewfield_round_list");
+        $j = $f.find(".rf_rounds");
         for (i = 0; i < (1 << rnames.length) - 1;
              i = next_lexicographic_permutation(i, rnames.length)) {
             text = [];
@@ -462,8 +484,8 @@ function append_field(fid, pos) {
         $f.find(".reviewrow_rounds").remove();
     }
 
-    $f.find(".revfield_remove").on("click", remove);
-    $f.find(".revfield_moveup, .revfield_movedown").on("click", move_field);
+    $f.find(".rf_remove").on("click", remove);
+    $f.find(".rf_moveup, .rf_movedown").on("click", move_field);
     $f.appendTo("#reviewform_container");
 
     fill_field(fid, original[fid], true);
@@ -471,7 +493,7 @@ function append_field(fid, pos) {
 }
 
 function rfs(data) {
-    var i, fid, $j;
+    var i, fid, $j, m;
     original = data.fields;
     samples = data.samples;
     stemplate = data.stemplate;
@@ -496,8 +518,10 @@ function rfs(data) {
 
     // highlight errors, apply request
     for (i in data.req || {}) {
-        if (!$("#" + i).length)
-            rfs.add(false, i.replace(/^.*_/, ""));
+        if (!$("#" + i).length
+            && (m = i.match(/^(?:rf_|)([st]\d+)(?:|_.*)$/))) {
+            add_field(m[1]);
+        }
         $j = $("#" + i);
         if (!text_eq($j.val(), data.req[i])) {
             $j.val(data.req[i]);
@@ -519,8 +543,8 @@ function add_field(fid) {
     original[fid] = original[fid] || {};
     original[fid].position = fieldorder.length;
     append_field(fid, fieldorder.length);
-    foldup.call($("#revfield_" + fid)[0], null, {n: 2, f: false});
-    $("#order_" + fid).attr("data-default-value", "0");
+    foldup.call($("#rf_" + fid)[0], null, {n: 2, f: false});
+    $("#rf_" + fid + "_position").attr("data-default-value", "0");
     form_highlight("#settingsform");
     return true;
 }
@@ -566,7 +590,7 @@ function add_dialog(fid, focus) {
     function submit(event) {
         add_field(fid);
         template && fill_field(fid, samples[template - 1], false);
-        $("#shortName_" + fid)[0].focus();
+        $("#rf_" + fid + "_name")[0].focus();
         $d.close();
         event.preventDefault();
     }
@@ -610,9 +634,8 @@ function add_dialog(fid, focus) {
     create();
 }
 
-rfs.add = function (has_options, fid) {
-    if (fid)
-        return add_field(fid);
+handle_ui.on("js-settings-add-review-field", function () {
+    var has_options = hasClass(this, "score"), fid;
     // prefer recently removed fields
     var i = 0, x = [];
     for (var $n = $("#reviewform_removedcontainer")[0].firstChild;
@@ -640,7 +663,7 @@ rfs.add = function (has_options, fid) {
     }
     original[fid] = has_options ? stemplate : ttemplate;
     return add_dialog(fid);
-};
+});
 
 return rfs;
 })();
@@ -657,3 +680,9 @@ handle_ui.on("js-settings-resp-round-new", function () {
     j.find(".need-suggest").each(suggest);
     return false;
 });
+
+
+hotcrp.settings = {
+    review_form: review_form_settings,
+    review_round: review_round_settings
+};

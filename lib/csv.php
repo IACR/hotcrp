@@ -18,14 +18,16 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         $this->csvp = $csvp;
     }
     function offsetExists($offset) {
-        if (!array_key_exists($offset, $this->a)) {
-            $offset = $this->csvp->column($offset);
+        if (is_string($offset)
+            && ($i = $this->csvp->column($offset)) >= 0) {
+            $offset = $i;
         }
         return isset($this->a[$offset]);
     }
     function& offsetGet($offset) {
-        if (!array_key_exists($offset, $this->a)) {
-            $offset = $this->csvp->column($offset, true);
+        if (is_string($offset)
+            && ($i = $this->csvp->column($offset, true)) >= 0) {
+            $offset = $i;
         }
         $x = null;
         if (isset($this->a[$offset])) {
@@ -34,20 +36,24 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         return $x;
     }
     function offsetSet($offset, $value) {
-        if (!array_key_exists($offset, $this->a)
+        if (is_string($offset)
             && ($i = $this->csvp->column($offset, true)) >= 0) {
             $offset = $i;
         }
         $this->a[$offset] = $value;
     }
     function offsetUnset($offset) {
-        if (!array_key_exists($offset, $this->a)) {
-            $offset = $this->csvp->column($offset);
+        if (is_string($offset)
+            && ($i = $this->csvp->column($offset)) >= 0) {
+            $offset = $i;
         }
         unset($this->a[$offset]);
     }
     function getIterator() {
-        return new ArrayIterator($this->as_map());
+        foreach ($this->a as $i => $v) {
+            $offset = is_int($i) ? $this->csvp->column_at($i) : $i;
+            yield $offset => $v;
+        }
     }
     /** @return int */
     function count() {
@@ -57,6 +63,11 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
         return $this->as_map();
     }
     /** @return list<string> */
+    function as_list() {
+        return $this->a;
+    }
+    /** @return list<string>
+     * @deprecated */
     function as_array() {
         return $this->a;
     }
@@ -67,6 +78,8 @@ class CsvRow implements ArrayAccess, IteratorAggregate, Countable, JsonSerializa
 }
 
 class CsvParser implements Iterator {
+    /** @var ?string */
+    private $filename;
     /** @var list<string|list<string>> */
     private $lines;
     /** @var int */
@@ -74,12 +87,14 @@ class CsvParser implements Iterator {
     /** @var int */
     private $type;
     private $typefn;
-    /** @var false|list<string> */
-    private $header = false;
+    /** @var list<string> */
+    private $header = [];
+    /** @var list<string|int> */
+    private $xheader = [];
     /** @var array<string,int> */
     private $hmap = [];
-    /** @var false|string */
-    private $comment_chars = false;
+    /** @var ?string */
+    private $comment_chars;
     private $comment_function;
     /** @var GMP */
     private $used;
@@ -103,7 +118,7 @@ class CsvParser implements Iterator {
     /** @param string $str
      * @return list<string> */
     static public function split_lines($str) {
-        $b = array();
+        $b = [];
         foreach (preg_split('/([^\r\n]*(?:\z|\r\n?|\n))/', $str, 0, PREG_SPLIT_DELIM_CAPTURE) as $line) {
             if ($line !== "")
                 $b[] = $line;
@@ -138,6 +153,11 @@ class CsvParser implements Iterator {
         }
     }
 
+    /** @param ?string $fn */
+    function set_filename($fn) {
+        $this->filename = $fn;
+    }
+
     /** @param string $s */
     function set_comment_chars($s) {
         $this->comment_chars = $s;
@@ -147,7 +167,7 @@ class CsvParser implements Iterator {
         $this->comment_function = $f;
     }
 
-    /** @return false|list<string> */
+    /** @return list<string> */
     function header() {
         return $this->header;
     }
@@ -155,15 +175,13 @@ class CsvParser implements Iterator {
     /** @param list<string>|CsvRow $header */
     function set_header($header) {
         if ($header && $header instanceof CsvRow) {
-            $header = $header->as_array();
+            $header = $header->as_list();
         }
         $this->header = $header;
-        $this->_rewind_pos = $this->lpos;
 
         // The column map defaults to mapping header field names to field indexes.
         // Exceptions:
-        // - Field names that could be mistaken for field indexes are ignored
-        //   (so “0” will never be used as a field name; “2019” might be).
+        // - Empty field names are ignored.
         // - If all field names are case-insensitive, then lower-case versions
         //   are also available (“PaperID” -> “paperid”).
         // - Field names that contain spaces are also available with underscores
@@ -173,10 +191,8 @@ class CsvParser implements Iterator {
             $has_lchmap = true;
             foreach ($header as $i => $s) {
                 $s = (string) $s;
-                if ($s !== ""
-                    && (!ctype_digit($s)
-                        || ($s[0] === "0" && $s !== "0")
-                        || (int) $s > count($header))) {
+                if ($s !== "") {
+                    $hmap[$s] = $i;
                     if ($has_lchmap) {
                         $lcs = strtolower($s);
                         if (!isset($lchmap[$lcs])) {
@@ -185,11 +201,6 @@ class CsvParser implements Iterator {
                             $has_lchmap = false;
                         }
                     }
-                    $hmap[$s] = $i;
-                }
-                $hmap[$i] = $i;
-                if ($has_lchmap) {
-                    $lchmap[$i] = $i;
                 }
             }
             if ($has_lchmap) {
@@ -199,9 +210,7 @@ class CsvParser implements Iterator {
             foreach ($hmap as $s => $i) {
                 if (strpos($s, " ") !== false) {
                     $s = str_replace(" ", "_", simplify_whitespace($s));
-                    if ($s !== ""
-                        && !ctype_digit($s)
-                        && !isset($this->hmap[$s])) {
+                    if ($s !== "" && !isset($this->hmap[$s])) {
                         $this->hmap[$s] = $i;
                     }
                 }
@@ -210,13 +219,22 @@ class CsvParser implements Iterator {
         } else {
             $this->hmap = [];
         }
+
+        $this->xheader = [];
+        foreach ($this->header ?? [] as $i => $v) {
+            $this->xheader[] = $v !== "" ? $v : $i;
+        }
+
+        $this->_rewind_pos = $this->lpos;
     }
 
     /** @param string $dst
-     * @param string $src */
+     * @param int|string $src
+     * @return bool */
     function add_synonym($dst, $src) {
-        if (!isset($this->hmap[$dst]) && isset($this->hmap[$src])) {
-            $this->hmap[$dst] = $this->hmap[$src];
+        if (!isset($this->hmap[$dst])
+            && (is_int($src) || isset($this->hmap[$src]))) {
+            $this->hmap[$dst] = is_int($src) ? $src : $this->hmap[$src];
             return true;
         } else {
             return false;
@@ -226,12 +244,10 @@ class CsvParser implements Iterator {
     /** @param int|string $offset
      * @return int */
     function column($offset, $mark_use = false) {
-        if (isset($this->hmap[$offset])) {
-            $offset = $this->hmap[$offset];
-        } else if (!is_int($offset) && $offset >= 0) {
-            $offset = -1;
+        if (is_string($offset)) {
+            $offset = $this->hmap[$offset] ?? -1;
         }
-        if ($offset !== -1 && $mark_use) {
+        if ($offset >= 0 && $mark_use) {
             gmp_setbit($this->used, $offset);
         }
         return $offset;
@@ -240,31 +256,34 @@ class CsvParser implements Iterator {
     /** @param int|string $offset
      * @return bool */
     function has_column($offset) {
-        $c = $this->column($offset);
+        $c = is_int($offset) ? $offset : ($this->hmap[$offset] ?? -1);
         return $c >= 0 && $c < count($this->header);
     }
 
     /** @param int|string $offset
      * @return bool */
     function column_used($offset) {
-        $c = $this->column($offset);
+        $c = is_int($offset) ? $offset : ($this->hmap[$offset] ?? -1);
         return $c >= 0 && gmp_testbit($this->used, $c);
     }
 
     /** @param int|string $offset
      * @return int|string */
     function column_name($offset) {
-        $c = $this->column($offset);
-        if ($c >= 0 && $c < count($this->header)) {
-            $h = $this->header[$c];
-            if ((string) $h !== "") {
-                return (string) $h;
-            } else {
-                return (string) $c;
-            }
+        if (is_string($offset)) {
+            $offset = $this->hmap[$offset] ?? -1;
+        }
+        if ($offset >= 0 && ($h = $this->header[$offset] ?? "") !== "") {
+            return $h;
         } else {
             return $offset;
         }
+    }
+
+    /** @param int $offset
+     * @return int|string */
+    function column_at($offset) {
+        return $this->xheader[$offset] ?? $offset;
     }
 
     /** @return int */
@@ -272,12 +291,13 @@ class CsvParser implements Iterator {
         return $this->nused;
     }
 
-    /** @return array|false */
+    /** @param ?array $a
+     * @return ?array */
     function as_map($a) {
-        if ($this->header && is_array($a)) {
+        if (!empty($this->header) && is_array($a)) {
             $b = [];
             foreach ($a as $i => $v) {
-                $offset = get_s($this->header, $i);
+                $offset = $this->header[$i] ?? "";
                 $b[$offset === "" ? $i : $offset] = $v;
             }
             return $b;
@@ -299,15 +319,28 @@ class CsvParser implements Iterator {
         return $len;
     }
 
+    /** @return ?string */
+    function filename() {
+        return $this->filename;
+    }
+
     /** @return int */
     function lineno() {
         return $this->lpos;
     }
 
-    /** @deprecated
-     * @return list<string>|false */
-    function next_array() {
-        return $this->next_list();
+    /** @return string */
+    function landmark() {
+        if (($this->filename ?? "") !== "") {
+            return "line {$this->lpos}";
+        } else {
+            return "{$this->filename}:{$this->lpos}";
+        }
+    }
+
+    /** @return string */
+    function landmark_html() {
+        return htmlspecialchars($this->landmark());
     }
 
     /** @return bool */
@@ -319,7 +352,7 @@ class CsvParser implements Iterator {
                 return true;
             } else if ($line === "" || $line[0] === "\n" || $line[0] === "\r") {
                 // skip
-            } else if ($this->comment_chars !== false
+            } else if ($this->comment_chars !== null
                        && strpos($this->comment_chars, $line[0]) !== false) {
                 if ($this->comment_function) {
                     call_user_func($this->comment_function, $line, $this);
@@ -332,7 +365,7 @@ class CsvParser implements Iterator {
         return false;
     }
 
-    /** @return list<string>|false */
+    /** @return ?list<string> */
     function next_list() {
         if ($this->skip_empty()) {
             $line = $this->lines[$this->lpos];
@@ -341,17 +374,17 @@ class CsvParser implements Iterator {
             $this->nused = max($this->nused, count($a));
             return $a;
         } else {
-            return false;
+            return null;
         }
     }
 
-    /** @return CsvRow|false */
+    /** @return ?CsvRow */
     function next_row() {
         $a = $this->next_list();
-        return $a === false ? false : new CsvRow($this, $a);
+        return $a !== null ? new CsvRow($this, $a) : null;
     }
 
-    /** @return array|false */
+    /** @return ?array */
     function next_map() {
         return $this->as_map($this->next_list());
     }
@@ -524,7 +557,7 @@ class CsvParser implements Iterator {
 
     /** @return bool */
     function valid() {
-        return $this->lpos != count($this->lines);
+        return $this->lpos !== count($this->lines);
     }
 }
 

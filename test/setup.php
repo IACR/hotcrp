@@ -145,7 +145,7 @@ function setup_assignments($assignments, Contact $user) {
         $assignments = join("\n", $assignments);
     }
     $assignset = new AssignmentSet($user, true);
-    $assignset->parse($assignments, "", null);
+    $assignset->parse($assignments);
     if (!$assignset->execute()) {
         die_hard("* Failed to run assignments:\n" . join("\n", $assignset->message_texts(true)) . "\n");
     }
@@ -196,6 +196,7 @@ function setup_initialize_database() {
     $us = new UserStatus($Conf->root_user());
     $ok = true;
     foreach ($json->contacts as $c) {
+        $us->notify = in_array("pc", $c->roles ?? []);
         $user = $us->save($c);
         if ($user) {
             MailChecker::check_db("create-{$c->email}");
@@ -266,6 +267,7 @@ function xassert($x, $description = "") {
     return !!$x;
 }
 
+/** @return void */
 function xassert_exit() {
     $ok = Xassert::$nsuccess
         && Xassert::$nsuccess == Xassert::$n
@@ -393,19 +395,24 @@ function xassert_match($a, $b) {
 }
 
 /** @param Contact $user
+ * @param string|array $query
+ * @param string $cols
  * @return array<int,object> */
-function search_json($user, $text, $cols = "id") {
-    $pl = new PaperList("empty", new PaperSearch($user, $text));
-    return $pl->text_json($cols);
+function search_json($user, $query, $cols = "id") {
+    $pl = new PaperList("empty", new PaperSearch($user, $query));
+    $pl->parse_view($cols);
+    return $pl->text_json();
 }
 
 /** @param Contact $user
+ * @param string|array $query
  * @param string $col
  * @return string */
-function search_text_col($user, $text, $col = "id") {
-    $pl = new PaperList("empty", new PaperSearch($user, $text));
+function search_text_col($user, $query, $col = "id") {
+    $pl = new PaperList("empty", new PaperSearch($user, $query));
+    $pl->parse_view($col);
     $x = [];
-    foreach ($pl->text_json($col) as $pid => $p) {
+    foreach ($pl->text_json() as $pid => $p) {
         $x[] = $pid . " " . $p->$col . "\n";
     }
     return join("", $x);
@@ -450,7 +457,7 @@ function paper_tag_normalize($prow) {
     $pcm = $prow->conf->pc_members();
     foreach (explode(" ", $prow->all_tags_text()) as $tag) {
         if (($twiddle = strpos($tag, "~")) > 0
-            && ($c = get($pcm, substr($tag, 0, $twiddle)))) {
+            && ($c = $pcm[(int) substr($tag, 0, $twiddle)] ?? null)) {
             $at = strpos($c->email, "@");
             $tag = ($at ? substr($c->email, 0, $at) : $c->email) . substr($tag, $twiddle);
         }
@@ -538,10 +545,11 @@ function maybe_user($email) {
     return Conf::$main->user_by_email($email);
 }
 
-function xassert_paper_status(PaperStatus $ps) {
-    xassert(!$ps->has_error());
-    foreach ($ps->error_list() as $mx) {
-        error_log("! " . $mx->field . ($mx->message ? ": " . $mx->message : ""));
+function xassert_paper_status(PaperStatus $ps, $maxstatus = MessageSet::INFO) {
+    if (!xassert($ps->problem_status() <= $maxstatus)) {
+        foreach ($ps->problem_list() as $mx) {
+            error_log("! " . $mx->field . ($mx->message ? ": " . $mx->message : ""));
+        }
     }
 }
 

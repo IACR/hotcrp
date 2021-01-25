@@ -23,13 +23,14 @@ if ($Qreq->reviewer
     && $Qreq->reviewer !== $Me->email
     && $Qreq->reviewer !== $Me->contactId) {
     $incorrect_reviewer = true;
-    foreach ($Conf->full_pc_members() as $pcm)
+    foreach ($Conf->full_pc_members() as $pcm) {
         if (strcasecmp($Qreq->reviewer, $pcm->email) == 0
             || $Qreq->reviewer === (string) $pcm->contactId) {
             $reviewer = $pcm;
             $incorrect_reviewer = false;
             $Qreq->reviewer = $pcm->email;
         }
+    }
 } else if (!$Qreq->reviewer && !($Me->roles & Contact::ROLE_PC)) {
     foreach ($Conf->pc_members() as $pcm) {
         $Conf->redirect_self($Qreq, ["reviewer" => $pcm->email]);
@@ -40,6 +41,12 @@ if ($Qreq->reviewer
 }
 if ($incorrect_reviewer) {
     Conf::msg_error("Reviewer " . htmlspecialchars($Qreq->reviewer) . " is not on the PC.");
+}
+
+
+// cancel action
+if ($Qreq->cancel) {
+    $Conf->redirect_self($Qreq);
 }
 
 
@@ -101,7 +108,7 @@ function savePreferences($Qreq, $reset_p) {
         Conf::msg_error(join("<br />", $aset->messages_html()));
     }
 }
-if ($Qreq->fn === "saveprefs" && $Qreq->post_ok()) {
+if ($Qreq->fn === "saveprefs" && $Qreq->valid_post()) {
     savePreferences($Qreq, true);
 }
 
@@ -113,7 +120,7 @@ SearchSelectioN::clear_request($Qreq);
 
 
 // Set multiple paper preferences
-if ($Qreq->fn === "setpref" && $Qreq->post_ok()) {
+if ($Qreq->fn === "setpref" && $Qreq->valid_post()) {
     if (!$SSel->is_empty()) {
         $new_qreq = new Qrequest($Qreq->method());
         foreach ($SSel->selection() as $p) {
@@ -134,20 +141,23 @@ function parseUploadedPreferences($text, $filename, $apply) {
     $text = preg_replace('/^==-== /m', '#', $text);
     $csv = new CsvParser($text, CsvParser::TYPE_GUESS);
     $csv->set_comment_chars("#");
+    $csv->set_filename($filename);
     $line = $csv->next_list();
 
     // Parse header
-    if ($line && preg_grep('{\A(?:paper|pid|paper[\s_]*id|id)\z}i', $line)) {
-        $csv->set_header($line);
-    } else {
-        if (count($line) >= 2 && ctype_digit($line[0])) {
-            if (preg_match('/\A\s*\d+\s*[XYZ]?\s*\z/i', $line[1])) {
-                $csv->set_header(["paper", "preference"]);
-            } else {
-                $csv->set_header(["paper", "title", "preference"]);
+    if ($line !== null) {
+        if (preg_grep('/\A(?:paper|pid|paper[\s_]*id|id)\z/i', $line)) {
+            $csv->set_header($line);
+        } else {
+            if (count($line) >= 2 && ctype_digit($line[0])) {
+                if (preg_match('/\A\s*\d+\s*[XYZ]?\s*\z/i', $line[1])) {
+                    $csv->set_header(["paper", "preference"]);
+                } else {
+                    $csv->set_header(["paper", "title", "preference"]);
+                }
             }
+            $csv->unshift($line);
         }
-        $csv->unshift($line);
     }
 
     $assignset = new AssignmentSet($Me, true);
@@ -196,13 +206,15 @@ function parseUploadedPreferences($text, $filename, $apply) {
         exit;
     }
 }
-if ($Qreq->fn === "saveuploadpref" && $Qreq->post_ok() && !$Qreq->cancel) {
+if ($Qreq->fn === "saveuploadpref" && $Qreq->valid_post()) {
     parseUploadedPreferences($Qreq->file, $Qreq->filename, true);
-} else if ($Qreq->fn === "uploadpref" && $Qreq->post_ok() && $Qreq->has_file("uploadedFile")) {
-    parseUploadedPreferences($Qreq->file_contents("uploadedFile"),
+} else if ($Qreq->fn === "uploadpref" && $Qreq->valid_post()) {
+    if ($Qreq->has_file("uploadedFile")) {
+        parseUploadedPreferences($Qreq->file_contents("uploadedFile"),
                              $Qreq->file_filename("uploadedFile"), false);
-} else if ($Qreq->fn === "uploadpref") {
-    Conf::msg_error("Select a preferences file to upload.");
+    } else {
+        Conf::msg_error("Select a preferences file to upload.");
+    }
 }
 
 
@@ -240,9 +252,6 @@ $pl->apply_view_report_default();
 $pl->apply_view_session();
 $pl->apply_view_qreq();
 $pl->set_table_id_class("foldpl", "pltable-fullw", "p#");
-$pl_text = $pl->table_html(["fold_session_prefix" => "pfdisplay.",
-                      "footer_extra" => "<div id=\"plactr\">" . Ht::submit("fn", "Save changes", ["data-default-submit-all" => 1, "value" => "saveprefs"]) . "</div>",
-                      "list" => true, "live" => true]);
 
 
 // DISPLAY OPTIONS
@@ -269,7 +278,7 @@ if ($Me->privChair) {
     }
 
     echo Ht::select("reviewer", $sel, $reviewer->email, ["id" => "htctl-prefs-user"]), '</div>';
-    Ht::stash_script('$("#searchform select[name=reviewer]").on("change", function () { $$("searchform").submit() })');
+    Ht::stash_script('$("#searchform select[name=reviewer]").on("change", function () { $("#searchform")[0].submit() })');
 }
 
 echo '<div class="entryi"><label for="htctl-prefs-q">Search</label><div class="entry">',
@@ -303,12 +312,12 @@ if (($vat = $pl->viewable_author_types()) !== 0) {
 if ($Conf->has_topics()) {
     $show_data[] = show_pref_element($pl, "topics", "Topics");
 }
-if (!empty($show_data) && $pl->count) {
+if (!empty($show_data) && !$pl->is_empty()) {
     echo '<div class="entryi"><label>Show</label>',
         '<ul class="entry inline">', join('', $show_data), '</ul></div>';
 }
 echo "</form>";
-Ht::stash_script("$(\"#showau\").on(\"change\", function () { foldup.call(this, null, {n:10}) })");
+Ht::stash_script("$(\"#showau\").on(\"change\", function () { hotcrp.foldup.call(this, null, {n:10}) })");
 
 
 // main form
@@ -323,8 +332,10 @@ echo Ht::form($Conf->hoturl_post("reviewprefs", $hoturl_args), ["id" => "sel", "
     Ht::hidden("defaultact", "", array("id" => "defaultact")),
     Ht::hidden_default_submit("default", 1);
 echo "<div class=\"pltable-fullw-container\">\n",
-    '<noscript><div style="text-align:center">', Ht::submit("fn", "Save changes", ["value" => "saveprefs"]), '</div></noscript>',
-    $pl_text,
-    "</div></form>\n";
+    '<noscript><div style="text-align:center">', Ht::submit("fn", "Save changes", ["value" => "saveprefs"]), '</div></noscript>';
+$pl->echo_table_html(["fold_session_prefix" => "pfdisplay.",
+                      "footer_extra" => "<div id=\"plactr\">" . Ht::submit("fn", "Save changes", ["data-default-submit-all" => 1, "value" => "saveprefs"]) . "</div>",
+                      "list" => true, "live" => true]);
+echo "</div></form>\n";
 
 $Conf->footer();

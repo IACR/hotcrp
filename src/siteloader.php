@@ -5,7 +5,6 @@
 class SiteLoader {
     static $map = [
         "AbbreviationEntry" => "lib/abbreviationmatcher.php",
-        "AssignmentCountSet" => "src/assignmentset.php",
         "AssignmentParser" => "src/assignmentset.php",
         "AutoassignerCosts" => "src/autoassigner.php",
         "BanalSettings" => "src/settings/s_subform.php",
@@ -38,12 +37,14 @@ class SiteLoader {
         "TagAnno" => "lib/tagger.php",
         "TagInfo" => "lib/tagger.php",
         "TagMap" => "lib/tagger.php",
+        "TextPregexes" => "lib/text.php",
         "Text_PaperOption" => "src/paperoption.php",
         "XlsxGenerator" => "lib/xlsx.php"
     ];
 
     static $suffix_map = [
         "_api.php" => ["api_", "api"],
+        "_assignable.php" => ["a_", "assigners"],
         "_assigner.php" => ["a_", "assigners"],
         "_assignmentparser.php" => ["a_", "assigners"],
         "_capability.php" => ["cap_", "capabilities"],
@@ -161,7 +162,7 @@ class SiteLoader {
                 $ignore_not_found = true;
                 $f = substr($f, 1);
             }
-            if (preg_match(',[\[\]\*\?\{\}],', $f)) {
+            if (preg_match('/[\[\]\*\?\{\}]/', $f)) {
                 $ignore_not_found = $globby = true;
             }
             $matches = self::expand_includes_once($f, $includepath, $globby);

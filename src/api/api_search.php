@@ -54,13 +54,14 @@ class Search_API {
         if (isset($qreq->aufull)) {
             $pl->set_view("aufull", (bool) $qreq->aufull);
         }
-        $response = $pl->column_json($qreq->f);
+        $pl->parse_view($qreq->f, null);
+        $response = $pl->table_html_json();
 
         $j = ["ok" => !empty($response["fields"])] + $response;
         foreach ($pl->message_set()->message_texts() as $m) {
             $j["errors"][] = $m;
         }
-        if ($j["ok"] && $qreq->session && $qreq->post_ok()) {
+        if ($j["ok"] && $qreq->session && $qreq->valid_token() && !$qreq->is_head()) {
             Session_API::setsession($user, $qreq->session);
         }
         return $j;
@@ -79,7 +80,8 @@ class Search_API {
         }
         $search = new PaperSearch($user, $qreq);
         $pl = new PaperList("empty", $search);
-        $response = $pl->text_json($qreq->f);
+        $pl->parse_view($qreq->f, null);
+        $response = $pl->text_json();
 
         $j = ["ok" => !empty($response), "data" => $response];
         foreach ($pl->message_set()->message_texts() as $m) {

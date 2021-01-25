@@ -1,7 +1,7 @@
 <?php
 require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
-$arg = Getopt::rest($argv, "hn:e:u:r:", ["help", "name:", "no-email", "no-notify", "modify-only", "create-only", "no-modify", "no-create", "expression:", "expr:", "user:", "roles:", "uname:"]);
+$arg = Getopt::rest($argv, "hn:e:u:r:", ["help", "name:", "no-email", "no-notify", "notify", "modify-only", "create-only", "no-modify", "no-create", "expression:", "expr:", "user:", "roles:", "uname:"]);
 foreach (["expr" => "e", "expression" => "e", "no-email" => "no-notify",
           "no-create" => "modify-only", "no-modify" => "create-only",
           "user" => "u", "roles" => "r", "help" => "h"] as $long => $short) {
@@ -17,8 +17,8 @@ if (isset($arg["h"])
     $status = isset($arg["h"]) || isset($arg["help"]) ? 0 : 1;
     fwrite($status ? STDERR : STDOUT,
            "Usage: php batch/saveusers.php [OPTION]... [JSONFILE | CSVFILE | -e JSON]
-Or:    php batch/saveusers.php [OPTION]... -u EMAIL [--roles ROLES]
-                              [--uname NAME]
+Or:    php batch/saveusers.php [OPTION]... -u EMAIL [--roles ROLES] \\
+                               [--uname NAME]
 
 Options: -n CONFID, --no-modify, --no-create, --no-notify\n");
     exit($status);
@@ -68,11 +68,10 @@ if ($content === false) {
     exit(1);
 }
 
-$ustatus = new UserStatus($Conf->root_user(), [
-    "no_notify" => isset($arg["no-notify"]),
-    "no_create" => isset($arg["modify-only"]),
-    "no_modify" => isset($arg["create-only"])
-]);
+$ustatus = new UserStatus($Conf->root_user());
+$ustatus->notify = isset($arg["notify"]) || !isset($arg["no-notify"]);
+$ustatus->no_create = isset($arg["modify-only"]);
+$ustatus->no_modify = isset($arg["create-only"]);
 $status = 0;
 if (isset($arg["u"])) {
     $cj = (object) ["email" => $arg["u"]];
@@ -89,10 +88,10 @@ if (isset($arg["u"])) {
     $csv = new CsvParser(cleannl(convert_to_utf8($content)));
     $csv->set_comment_chars("#%");
     $line = $csv->next_list();
-    if ($line && preg_grep('{\Aemail\z}i', $line)) {
+    if ($line !== null && preg_grep('/\Aemail\z/i', $line)) {
         $csv->set_header($line);
     } else {
-        fwrite(STDERR, "$file: 'email' field missing from CSV header\n");
+        fwrite(STDERR, "$file: email field missing from CSV header\n");
         exit(1);
     }
     $ustatus->add_csv_synonyms($csv);

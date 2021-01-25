@@ -2,27 +2,53 @@
 // assignmentset.php -- HotCRP helper classes for assignments
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
+class Assignable {
+    /** @var string */
+    public $type;
+    /** @var int */
+    public $pid;
+    /** @return self */
+    function fresh() {
+        return new Assignable;
+    }
+    /** @param Assignable $q
+     * @return bool */
+    function match($q) {
+        foreach (get_object_vars($q) as $k => $v) {
+            if ($v !== null && $this->$k !== $v)
+                return false;
+        }
+        return true;
+    }
+}
+
 class AssignmentItem implements ArrayAccess {
-    /** @var false|array */
+    /** @var Assignable */
     public $before;
-    /** @var false|null|array */
+    /** @var ?Assignable */
     public $after;
+    /** @var bool */
+    public $existed;
+    /** @var bool */
+    public $deleted = false;
     /** @var null|int|string */
     public $landmark;
-    /** @param false|array $before */
-    function __construct($before) {
+    /** @param Assignable $before
+     * @param bool $existed */
+    function __construct($before, $existed) {
         $this->before = $before;
+        $this->existed = $existed;
     }
     /** @param string $offset
      * @return bool */
     function offsetExists($offset) {
-        $x = $this->after ? : $this->before;
-        return isset($x[$offset]);
+        $x = $this->after ?? $this->before;
+        return isset($x->$offset);
     }
     /** @param string $offset */
     function offsetGet($offset) {
-        $x = $this->after ? : $this->before;
-        return $x[$offset] ?? null;
+        $x = $this->after ?? $this->before;
+        return $x->$offset ?? null;
     }
     function offsetSet($offset, $value) {
         throw new Exception("invalid AssignmentItem::offsetSet");
@@ -32,39 +58,51 @@ class AssignmentItem implements ArrayAccess {
     }
     /** @return bool */
     function existed() {
-        return !!$this->before;
+        return $this->existed;
     }
     /** @return bool */
     function deleted() {
-        return $this->after === false;
+        return $this->deleted;
     }
     /** @return bool */
     function modified() {
-        return $this->after !== null;
+        return !!$this->after;
     }
     /** @param bool $pre
      * @param string $offset */
     function get($pre, $offset) {
-        if ($pre || $this->after === null) {
-            $x = $this->before;
+        if (!$pre && $this->after) {
+            return $this->after->$offset ?? null;
         } else {
-            $x = $this->after;
+            return $this->before->$offset ?? null;
         }
-        return $x ? $x[$offset] ?? null : null;
     }
     /** @param string $offset */
     function pre($offset) {
-        return $this->before ? $this->before[$offset] ?? null : null;
+        return $this->before->$offset ?? null;
     }
     /** @param string $offset */
     function post($offset) {
         $x = $this->after ?? $this->before;
-        return $x ? $x[$offset] ?? null : null;
+        return $x->$offset ?? null;
     }
     /** @param string $offset
      * @return bool */
     function differs($offset) {
         return $this->pre($offset) !== $this->post($offset);
+    }
+    /** @param null|int|string $landmark
+     * @return Assignable */
+    function delete_at($landmark) {
+        $r = $this->after ?? clone $this->before;
+        if ($this->existed) {
+            $this->after = $this->before->fresh();
+            $this->deleted = true;
+        } else {
+            $this->after = null;
+        }
+        $this->landmark = $landmark;
+        return $r;
     }
     function realize(AssignmentState $astate) {
         return call_user_func($astate->realizer($this->offsetGet("type")), $this, $astate);
@@ -79,7 +117,9 @@ class AssignmentItemSet {
 class AssignmentState {
     /** @var array<int,AssignmentItemSet> */
     private $st = [];
+    /** @var array<string,list<string>> */
     private $types = [];
+    /** @var array<string,callable(AssignmentItem,AssignmentState):Assigner> */
     private $realizers = [];
     /** @var Conf */
     public $conf;
@@ -95,8 +135,8 @@ class AssignmentState {
     private $cmap;
     /** @var ?array<int,Contact> */
     private $reviewer_users = null;
-    /** @var string */
-    public $filename = "";
+    /** @var ?string */
+    private $filename;
     /** @var null|int|string */
     public $landmark;
     public $defaults = [];
@@ -127,6 +167,34 @@ class AssignmentState {
         $this->cmap = new AssignerContacts($this->conf, $this->user);
     }
 
+    /** @param ?string $filename */
+    function set_filename($filename) {
+        $this->filename = $filename;
+    }
+    /** @param null|int|string $landmark
+     * @return string */
+    function landmark_near($landmark) {
+        if (is_string($landmark)) {
+            return $landmark;
+        } else if ($landmark === false) {
+            return "";
+        } else if ($landmark === null || $landmark === 0) {
+            return $this->filename ?? "";
+        } else if (($this->filename ?? "") === "") {
+            return "line {$landmark}";
+        } else {
+            return "{$this->filename}:{$landmark}";
+        }
+    }
+    /** @return string */
+    function landmark() {
+        return $this->landmark_near($this->landmark);
+    }
+
+    /** @param string $type
+     * @param list<string> $keys
+     * @param callable(AssignmentItem,AssignmentState):Assigner $realizer
+     * @return bool */
     function mark_type($type, $keys, $realizer) {
         if (!isset($this->types[$type])) {
             $this->types[$type] = $keys;
@@ -136,6 +204,8 @@ class AssignmentState {
             return false;
         }
     }
+    /** @param string $type
+     * @return callable(AssignmentItem,AssignmentState):Assigner */
     function realizer($type) {
         return $this->realizers[$type];
     }
@@ -147,45 +217,42 @@ class AssignmentState {
         }
         return $this->st[$pid];
     }
+    /** @param Assignable $x
+     * @return ?string */
     private function extract_key($x, $pid = null) {
-        $tkeys = $this->types[$x["type"]];
-        assert(!!$tkeys);
-        $t = $x["type"];
-        foreach ($tkeys as $k) {
-            if (isset($x[$k])) {
-                $t .= "`" . $x[$k];
+        $t = $x->type;
+        foreach ($this->types[$x->type] as $k) {
+            if (isset($x->$k)) {
+                $t .= "`" . $x->$k;
             } else if ($pid !== null && $k === "pid") {
                 $t .= "`" . $pid;
             } else {
-                return false;
+                return null;
             }
         }
+        assert($t !== $x->type);
         return $t;
     }
+    /** @param Assignable $x */
     function load($x) {
-        $st = $this->pidstate($x["pid"]);
+        $st = $this->pidstate($x->pid);
         $k = $this->extract_key($x);
         assert($k && !isset($st->items[$k]));
-        $st->items[$k] = new AssignmentItem($x);
+        $st->items[$k] = new AssignmentItem($x, true);
     }
 
-    /** @param array{pid?:int} $q
-     * @return list<int> */
+    /** @return list<int> */
     private function pid_keys($q) {
-        if (isset($q["pid"])) {
-            return array($q["pid"]);
+        '@phan-var-force Assignable $q';
+        if (isset($q->pid)) {
+            return [$q->pid];
         } else {
             return array_keys($this->st);
         }
     }
-    static private function match($x, $q) {
-        foreach ($q as $k => $v) {
-            if ($v !== null && ($x[$k] ?? null) !== $v)
-                return false;
-        }
-        return true;
-    }
+    /** @return list<AssignmentItem> */
     function query_items($q) {
+        '@phan-var-force Assignable $q';
         $res = [];
         foreach ($this->pid_keys($q) as $pid) {
             $st = $this->pidstate($pid);
@@ -193,22 +260,27 @@ class AssignmentState {
             foreach ($k ? [$st->items[$k] ?? null] : $st->items as $item) {
                 if ($item
                     && !$item->deleted()
-                    && self::match($item->after ? : $item->before, $q)) {
+                    && $item->before->type === $q->type
+                    && ($item->after ?? $item->before)->match($q)) {
                     $res[] = $item;
                 }
             }
         }
         return $res;
     }
-    /** @return list<array> */
+    /** @template T
+     * @param T $q
+     * @return list<T> */
     function query($q) {
         $res = [];
         foreach ($this->query_items($q) as $item) {
-            $res[] = $item->after ? : $item->before;
+            $res[] = $item->after ?? $item->before;
         }
         return $res;
     }
-    /** @return list<array> */
+    /** @template T
+     * @param T $q
+     * @return list<T> */
     function query_unmodified($q) {
         $res = [];
         foreach ($this->query_items($q) as $item) {
@@ -217,44 +289,51 @@ class AssignmentState {
         }
         return $res;
     }
+    /** @param Assignable $q
+     * @return array */
     function make_filter($key, $q) {
         $cf = [];
         foreach ($this->query($q) as $m) {
-            $cf[$m[$key]] = true;
+            $cf[$m->$key] = true;
         }
         return $cf;
     }
 
+    /** @template T
+     * @param T $q
+     * @return list<T> */
     function remove($q) {
         $res = [];
         foreach ($this->query_items($q) as $item) {
-            $res[] = $item->after ? : $item->before;
-            $item->after = false;
-            $item->landmark = $this->landmark;
+            $res[] = $item->delete_at($this->landmark);
         }
         return $res;
     }
+    /** @template T
+     * @param T $q
+     * @param callable(T):bool $predicate
+     * @return list<T> */
     function remove_if($q, $predicate) {
         $res = [];
         foreach ($this->query_items($q) as $item) {
             if (!$predicate
-                || call_user_func($predicate, $item->after ? : $item->before)) {
-                $res[] = $item->after ? : $item->before;
-                $item->after = false;
-                $item->landmark = $this->landmark;
+                || call_user_func($predicate, $item->after ?? $item->before)) {
+                $res[] = $item->delete_at($this->landmark);
             }
         }
         return $res;
     }
-    /** @return AssignmentItem */
+    /** @param Assignable $x
+     * @return AssignmentItem */
     function add($x) {
         $k = $this->extract_key($x);
         assert(!!$k);
-        $st = $this->pidstate($x["pid"]);
+        $st = $this->pidstate($x->pid);
         if (!($item = $st->items[$k] ?? null)) {
-            $item = $st->items[$k] = new AssignmentItem(false);
+            $item = $st->items[$k] = new AssignmentItem($x->fresh(), false);
         }
         $item->after = $x;
+        $item->deleted = false;
         $item->landmark = $this->landmark;
         return $item;
     }
@@ -264,9 +343,8 @@ class AssignmentState {
         $diff = [];
         foreach ($this->st as $pid => $st) {
             foreach ($st->items as $item) {
-                if ((!$item->before && $item->after)
-                    || ($item->before && $item->after === false)
-                    || ($item->before && $item->after && !self::match($item->before, $item->after)))
+                if ($item->after
+                    && (!$item->existed() || !$item->after->match($item->before)))
                     $diff[$pid][] = $item;
             }
         }
@@ -355,17 +433,10 @@ class AssignmentState {
 
     /** @param null|false|int|string $landmark
      * @param string $msg
-     * @param 0|1|2 $status */
-    function msg($landmark, $msg, $status) {
-        if (is_string($landmark)) {
-            $l = $landmark;
-        } else if ($landmark === false) {
-            $l = "";
-        } else if ($landmark) {
-            $l = ($this->filename === "" ? "line " : $this->filename . ":") . $landmark;
-        } else {
-            $l = $this->filename;
-        }
+     * @param 0|1|2 $status
+     * @return void */
+    function msg_near($landmark, $msg, $status) {
+        $l = $this->landmark_near($landmark);
         $n = count($this->msgs) - 1;
         if ($n >= 0
             && $this->msgs[$n]->field === $l
@@ -378,37 +449,37 @@ class AssignmentState {
             $this->has_error = true;
         }
     }
-    /** @param string $msg */
+    /** @param string $msg
+     * @return void */
     function warning($msg) {
-        $this->msg($this->landmark, $msg, 1);
+        $this->msg_near($this->landmark, $msg, 1);
     }
     /** @param null|false|int|string $landmark
-     * @param string $msg */
-    function warning_at($landmark, $msg) {
-        $this->msg($landmark, $msg, 1);
+     * @param string $msg
+     * @return void */
+    function warning_near($landmark, $msg) {
+        $this->msg_near($landmark, $msg, 1);
     }
     /** @param string $msg
-     * @return false */
+     * @return void */
     function error($msg) {
-        $this->msg($this->landmark, $msg, 2);
-        return false;
+        $this->msg_near($this->landmark, $msg, 2);
     }
     /** @param string $msg
-     * @return false */
+     * @return void */
     function user_error($msg) {
         $this->has_user_error = true;
-        return $this->error($msg);
+        $this->error($msg);
     }
     /** @param string $msg
-     * @return false */
+     * @return void */
     function paper_error($msg) {
         if ($this->paper_exact_match) {
-            $this->msg($this->landmark, $msg, 2);
+            $this->msg_near($this->landmark, $msg, 2);
         } else {
-            $this->msg($this->landmark, $msg, 1);
+            $this->msg_near($this->landmark, $msg, 1);
             $this->nonexact_msgi[] = count($this->msgs) - 1;
         }
-        return false;
     }
 
     /** @return bool */
@@ -447,6 +518,7 @@ class AssignerContacts {
     private $has_pc = false;
     /** @var ?Contact */
     private $none_user;
+    /** @var int */
     static private $next_fake_id = -10;
     static public $query = "ContactInfo.contactId, firstName, lastName, unaccentedName, email, affiliation, collaborators, roles, contactTags";
     static public $cdb_query = "contactDbId, firstName, lastName, email, affiliation, collaborators, 0 roles, '' contactTags";
@@ -583,81 +655,6 @@ class AssignerContacts {
             $cx = $this->store($cx);
         }
         return $cx;
-    }
-}
-
-class AssignmentCount {
-    public $ass = 0;
-    public $rev = 0;
-    public $meta = 0;
-    public $pri = 0;
-    public $sec = 0;
-    public $lead = 0;
-    public $shepherd = 0;
-    function add(AssignmentCount $ct) {
-        $xct = new AssignmentCount;
-        foreach (["rev", "meta", "pri", "sec", "ass", "lead", "shepherd"] as $k) {
-            $xct->$k = $this->$k + $ct->$k;
-        }
-        return $xct;
-    }
-}
-
-class AssignmentCountSet {
-    /** @var Conf */
-    public $conf;
-    /** @var array<int,AssignmentCount> */
-    public $bypc = [];
-    public $rev = false;
-    public $lead = false;
-    public $shepherd = false;
-    function __construct(Conf $conf) {
-        $this->conf = $conf;
-    }
-    /** @return AssignmentCount */
-    function get($offset) {
-        return $this->bypc[$offset] ?? new AssignmentCount;
-    }
-    /** @param int $offset
-     * @return AssignmentCount */
-    function ensure($offset) {
-        if (!isset($this->bypc[$offset])) {
-            $this->bypc[$offset] = new AssignmentCount;
-        }
-        return $this->bypc[$offset];
-    }
-    function load_rev() {
-        $result = $this->conf->qe("select u.contactId, group_concat(r.reviewType separator '')
-                from ContactInfo u
-                left join PaperReview r on (r.contactId=u.contactId)
-                left join Paper p on (p.paperId=r.paperId)
-                where p.timeWithdrawn<=0 and p.timeSubmitted>0
-                and u.roles!=0 and (u.roles&" . Contact::ROLE_PC . ")!=0
-                group by u.contactId");
-        while (($row = $result->fetch_row())) {
-            $ct = $this->ensure((int) $row[0]);
-            $ct->rev = strlen($row[1]);
-            $ct->meta = substr_count($row[1], (string) REVIEW_META);
-            $ct->pri = substr_count($row[1], (string) REVIEW_PRIMARY);
-            $ct->sec = substr_count($row[1], (string) REVIEW_SECONDARY);
-        }
-        Dbl::free($result);
-    }
-    private function load_paperpc($type) {
-        $result = $this->conf->qe("select {$type}ContactId, count(paperId)
-                from Paper where timeWithdrawn<=0 and timeSubmitted>0
-                group by {$type}ContactId");
-        while (($row = $result->fetch_row())) {
-            $ct = $this->ensure((int) $row[0]);
-            $ct->$type = (int) $row[1];
-        }
-        Dbl::free($result);
-    }
-    function load_lead() {
-        $this->load_paperpc("lead");
-    }
-    function load_shepherd() {
-        $this->load_paperpc("shepherd");
     }
 }
 
@@ -815,6 +812,7 @@ class Assigner {
     public $cid;
     /** @var ?Contact */
     public $contact;
+    /** @var ?int */
     public $next_index;
     function __construct(AssignmentItem $item, AssignmentState $state) {
         $this->item = $item;
@@ -944,23 +942,33 @@ class ReviewAssigner_Data {
 
 
 class AssignmentSet {
-    /** @var Conf */
+    /** @var Conf
+     * @readonly */
     public $conf;
-    /** @var Contact */
+    /** @var Contact
+     * @readonly */
     public $user;
-    /** @var string */
-    public $filename = "";
+    /** @var int */
+    private $request_count = 0;
+    /** @var list<callable> */
+    private $progressf = [];
     /** @var list<Assigner> */
     private $assigners = [];
     /** @var array<int,int> */
     private $assigners_pidhead = [];
-    private $enabled_pids = null;
-    private $enabled_actions = null;
+    /** @var ?list<int> */
+    private $enabled_pids;
+    /** @var ?array<string,true> */
+    private $enabled_actions;
     /** @var AssignmentState */
     private $astate;
+    /** @var array<string,list<int>> */
     private $searches = [];
+    /** @var string */
     private $search_type = "s";
-    private $unparse_search = false;
+    /** @var ?string */
+    private $unparse_search;
+    /** @var array<string,bool> */
     private $unparse_columns = [];
     private $assignment_type;
     /** @var array<string,array{callable,mixed}> */
@@ -975,6 +983,10 @@ class AssignmentSet {
         $this->set_overrides($overrides);
     }
 
+    /** @param callable(AssignmentSet,?CsvRow) $progressf */
+    function add_progress_handler($progressf) {
+        $this->progressf[] = $progressf;
+    }
     /** @param string $search_type */
     function set_search_type($search_type) {
         $this->search_type = $search_type;
@@ -999,6 +1011,7 @@ class AssignmentSet {
         $this->astate->flags = $flags;
     }
 
+    /** @param string|list<string> $action */
     function enable_actions($action) {
         assert(empty($this->assigners));
         if ($this->enabled_actions === null) {
@@ -1030,6 +1043,10 @@ class AssignmentSet {
     function is_empty() {
         return empty($this->assigners);
     }
+    /** @return string */
+    function landmark() {
+        return $this->astate->landmark();
+    }
 
     /** @return bool */
     function has_messages() {
@@ -1041,30 +1058,34 @@ class AssignmentSet {
     }
     /** @param null|false|int|string $landmark
      * @param string $msg
-     * @return false */
-    function error_at($landmark, $msg) {
-        $this->astate->msg($landmark, $msg, 2);
-        return false;
+     * @return void */
+    function error_near($landmark, $msg) {
+        $this->astate->msg_near($landmark, $msg, 2);
     }
     /** @param string $msg
-     * @return false */
-    function error_here($msg) {
-        $this->astate->msg($this->astate->landmark, $msg, 2);
-        return false;
+     * @return void */
+    function error($msg) {
+        $this->astate->msg_near($this->astate->landmark, $msg, 2);
     }
     /** @param null|false|int|string $landmark
      * @param string $msg
-     * @return false */
+     * @return void */
+    function warning_near($landmark, $msg) {
+        $this->astate->msg_near($landmark, $msg, 1);
+    }
+    /** @param null|false|int|string $landmark
+     * @param string $msg
+     * @return void
+     * @deprecated */
     function warning_at($landmark, $msg) {
-        $this->astate->msg($landmark, $msg, 1);
-        return false;
+        $this->warning_near($landmark, $msg);
     }
     /** @param string $msg
-     * @return false */
-    function warning_here($msg) {
-        $this->astate->msg($this->astate->landmark, $msg, 2);
-        return false;
+     * @return void */
+    function warning($msg) {
+        $this->astate->msg_near($this->astate->landmark, $msg, 2);
     }
+
     function clear_errors() {
         $this->astate->clear_messages();
     }
@@ -1244,9 +1265,11 @@ class AssignmentSet {
             if (count($ret->user_ids()) === 1) {
                 return $ret->users();
             } else if (count($ret->user_ids()) > 1) {
-                return $this->error_here("“" . self::req_user_html($req) . "” matches more than one $cset_text, use a full email address to disambiguate.");
+                $this->error("“" . self::req_user_html($req) . "” matches more than one $cset_text, use a full email address to disambiguate.");
+                return false;
             } else {
-                return $this->error_here("No $cset_text matches “" . self::req_user_html($req) . "”.");
+                $this->error("No $cset_text matches “" . self::req_user_html($req) . "”.");
+                return false;
             }
         } else {
             // create contact
@@ -1255,11 +1278,14 @@ class AssignmentSet {
                 && ($u = $this->astate->user_by_email($email, true, $req))) {
                 return [$u];
             } else if (!$email) {
-                return $this->error_here("Missing email address.");
+                $this->error("Missing email address.");
+                return false;
             } else if (!validate_email($email)) {
-                return $this->error_here("Email address “" . htmlspecialchars($email) . "” is invalid.");
+                $this->error("Email address “" . htmlspecialchars($email) . "” is invalid.");
+                return false;
             } else {
-                return $this->error_here("Could not create user.");
+                $this->error("Could not create user.");
+                return false;
             }
         }
     }
@@ -1268,10 +1294,11 @@ class AssignmentSet {
         return !!preg_grep('/\A(?:action|assignment|paper|pid|paperid|id)\z/i', $req);
     }
 
+    /** @param CsvParser $csv */
     private function install_csv_header($csv) {
         if (!$csv->header()) {
             if (!($req = $csv->next_list())) {
-                $this->error_at($csv->lineno(), "empty file");
+                $this->error_near($csv->lineno(), "empty file");
                 return false;
             }
             if (!self::is_csv_header($req)) {
@@ -1331,10 +1358,10 @@ class AssignmentSet {
         }
 
         if (!$has_action && !($this->astate->defaults["action"] ?? null)) {
-            $this->error_at($csv->lineno(), "“action” column missing");
+            $this->error_near($csv->lineno(), "“action” column missing");
             return false;
         } else if (!$csv->has_column("paper")) {
-            $this->error_at($csv->lineno(), "“paper” column missing");
+            $this->error_near($csv->lineno(), "“paper” column missing");
             return false;
         } else {
             if (!isset($this->astate->defaults["action"])) {
@@ -1373,7 +1400,7 @@ class AssignmentSet {
         $pfield = trim($pfield);
         if ($pfield === "") {
             if ($report_error) {
-                $this->error_here("Missing paper.");
+                $this->error("Missing paper.");
             }
             return 0;
         }
@@ -1393,7 +1420,7 @@ class AssignmentSet {
                 $this->searches[$pfield] = $search->paper_ids();
                 if ($report_error) {
                     foreach ($search->problem_texts() as $w) {
-                        $this->error_here($w);
+                        $this->error($w);
                     }
                 }
             }
@@ -1448,14 +1475,17 @@ class AssignmentSet {
         // check action
         if (!$aparser) {
             if ($req["action"]) {
-                return $this->error_here("Unknown action “" . htmlspecialchars($req["action"]) . "”.");
+                $this->error("Unknown action “" . htmlspecialchars($req["action"]) . "”.");
+                return false;
             } else {
-                return $this->error_here("Missing action.");
+                $this->error("Missing action.");
+                return false;
             }
         }
         if ($this->enabled_actions !== null
             && !isset($this->enabled_actions[$aparser->type])) {
-            return $this->error_here("Action " . htmlspecialchars($aparser->type) . " disabled.");
+            $this->error("Action " . htmlspecialchars($aparser->type) . " disabled.");
+            return false;
         }
 
         // parse paper
@@ -1509,7 +1539,7 @@ class AssignmentSet {
             foreach ($pids as $p) {
                 $prow = $this->astate->prow($p);
                 if (!$prow) {
-                    $this->error_here(whyNotText($this->user->no_paper_whynot($p)));
+                    $this->error(whyNotText($this->user->no_paper_whynot($p)));
                 } else {
                     $ret = $this->apply_paper($prow, $contacts, $aparser, $req);
                     if ($ret === 1) {
@@ -1582,29 +1612,34 @@ class AssignmentSet {
     }
 
     /** @param CsvParser|string|list<string> $text
-     * @param string $filename */
-    function parse($text, $filename = "", $defaults = null, $alertf = null) {
+     * @param string $filename
+     * @param ?array<string,mixed> $defaults */
+    function parse($text, $filename = "", $defaults = null) {
         assert(empty($this->assigners));
-        $this->astate->filename = $this->filename = $filename;
-        $this->astate->defaults = $defaults ? : [];
 
         if ($text instanceof CsvParser) {
             $csv = $text;
+            assert($filename === "" || $csv->filename() === $filename);
         } else {
             $csv = new CsvParser($text, CsvParser::TYPE_GUESS);
             $csv->set_comment_chars("%#");
-            $csv->set_comment_function(array($this, "parse_csv_comment"));
+            $csv->set_comment_function([$this, "parse_csv_comment"]);
+            $csv->set_filename($filename);
         }
+        $this->astate->set_filename($csv->filename());
+
+        $this->astate->defaults = $defaults ?? [];
+
         if (!$this->install_csv_header($csv)) {
             return false;
         }
-        $has_landmark = $csv->has_column("landmark");
 
+        $has_landmark = $csv->has_column("landmark");
         $old_overrides = $this->user->set_overrides($this->astate->overrides);
 
         // parse file, load papers all at once
         $lines = $pids = [];
-        while (($req = $csv->next_row()) !== false) {
+        while (($req = $csv->next_row())) {
             if (($aparser = $this->collect_parser($req))) {
                 if ($aparser->paper_universe($req, $this->astate) === "none") {
                     $paper = "NONE";
@@ -1627,19 +1662,17 @@ class AssignmentSet {
             $this->astate->fetch_prows(array_keys($pids), true);
         }
 
-        // now apply assignment parsers
-        foreach ($lines as $i => $linereq) {
+        // apply assignment parsers
+        foreach ($lines as $linereq) {
             $this->astate->landmark = $linereq[0];
-            if ($i % 100 == 0) {
-                if ($alertf) {
-                    call_user_func($alertf, $this, $linereq[0], $linereq[2]);
+            ++$this->request_count;
+            if ($this->request_count % 100 === 0) {
+                foreach ($this->progressf as $progressf) {
+                    call_user_func($progressf, $this, $linereq[2]);
                 }
                 set_time_limit(30);
             }
             $this->apply($linereq[1], $linereq[2]);
-        }
-        if ($alertf) {
-            call_user_func($alertf, $this, $csv->lineno(), false);
         }
 
         // call finishers
@@ -1671,9 +1704,14 @@ class AssignmentSet {
             }
         }
 
+        $this->astate->landmark = $csv->lineno();
+        foreach ($this->progressf as $progressf) {
+            call_user_func($progressf, $this, null);
+        }
         $this->user->set_overrides($old_overrides);
     }
 
+    /** @return list<string> */
     function assigned_types() {
         $types = array();
         foreach ($this->assigners as $assigner) {
@@ -1682,29 +1720,45 @@ class AssignmentSet {
         ksort($types);
         return array_keys($types);
     }
-    function assigned_pids($compress = false) {
+
+    /** @return list<int> */
+    function assigned_pids() {
         $pids = array_keys($this->assigners_pidhead);
         sort($pids, SORT_NUMERIC);
-        if ($compress) {
-            $xpids = array();
-            $lpid = $rpid = -1;
-            foreach ($pids as $pid) {
-                if ($lpid >= 0 && $pid != $rpid + 1) {
-                    $xpids[] = $lpid == $rpid ? $lpid : "$lpid-$rpid";
-                }
-                if ($lpid < 0 || $pid != $rpid + 1) {
-                    $lpid = $pid;
-                }
-                $rpid = $pid;
-            }
-            if ($lpid >= 0) {
-                $xpids[] = $lpid == $rpid ? $lpid : "$lpid-$rpid";
-            }
-            $pids = $xpids;
-        }
         return $pids;
     }
 
+    /** @return int */
+    function assignment_count() {
+        return count($this->assigners);
+    }
+
+    /** @return int */
+    function request_count() {
+        return $this->request_count;
+    }
+
+    /** @param string $joiner
+     * @return string */
+    function numjoin_assigned_pids($joiner) {
+        $t = [];
+        $l = $r = -1;
+        foreach ($this->assigned_pids() as $pid) {
+            if ($l >= 0 && $pid != $r + 1) {
+                $t[] = $l === $r ? $l : "$l-$r";
+            }
+            if ($l < 0 || $pid !== $r + 1) {
+                $l = $pid;
+            }
+            $r = $pid;
+        }
+        if ($l >= 0) {
+            $t[] = $l === $r ? $l : "$l-$r";
+        }
+        return join($joiner, $t);
+    }
+
+    /** @return string */
     function type_description() {
         if ($this->assignment_type === null) {
             foreach ($this->assigners as $assigner) {
@@ -1720,12 +1774,14 @@ class AssignmentSet {
         return $this->assignment_type;
     }
 
-    function unparse_paper_assignment(PaperInfo $prow) {
+    /** @param int $pid
+     * @return string */
+    function unparse_paper_assignment($pid) {
         $assigners = [];
-        for ($index = $this->assigners_pidhead[$prow->paperId] ?? null;
-             $index !== null;
-             $index = $assigner->next_index) {
-            $assigners[] = $assigner = $this->assigners[$index];
+        $index = $this->assigners_pidhead[$pid] ?? null;
+        while ($index !== null) {
+            $assigners[] = $this->assigners[$index];
+            $index = $this->assigners[$index]->next_index;
         }
         usort($assigners, function ($assigner1, $assigner2) {
             $c1 = $assigner1->contact;
@@ -1754,52 +1810,38 @@ class AssignmentSet {
             return "";
         }
     }
-    function echo_unparse_display() {
-        $deltarev = new AssignmentCountSet($this->conf);
-        foreach ($this->assigners as $assigner) {
-            $assigner->account($this, $deltarev);
+
+    /** @return Assignment_PaperColumn */
+    function unparse_paper_column() {
+        $pc = new Assignment_PaperColumn($this->user, $this->astate->reviewer);
+
+        foreach ($this->assigners_pidhead as $pid => $n) {
+            if (($t = $this->unparse_paper_assignment($pid)) !== "") {
+                $pc->content[$pid] = $t;
+            }
         }
 
-        $query = $this->assigned_pids(true);
+        $pc->change_counts = new AssignmentCountSet($this->user);
+        foreach ($this->assigners as $assigner) {
+            $assigner->account($this, $pc->change_counts);
+        }
+
+        // Compute query last; unparse/account may show columns
+        $q = $this->numjoin_assigned_pids(" ") ? : "NONE";
         if ($this->unparse_search) {
-            $query_order = "(" . $this->unparse_search . ") THEN HEADING:none " . join(" ", $query);
-        } else {
-            $query_order = empty($query) ? "NONE" : join(" ", $query);
+            $q = "({$this->unparse_search}) THEN HEADING:none $q";
         }
         foreach ($this->unparse_columns as $k => $v) {
             if ($v)
-                $query_order .= " show:$k";
+                $q .= " show:$k";
         }
-        $query_order .= " show:autoassignment";
-        $search = new PaperSearch($this->user, ["q" => $query_order, "t" => "viewable", "reviewer" => $this->astate->reviewer]);
-        $plist = new PaperList("reviewers", $search);
-        $plist->add_column("autoassignment", new AutoassignmentPaperColumn($this));
-        $plist->set_table_id_class("foldpl", "pltable-fullw");
-        echo $plist->table_html(["nofooter" => true]);
+        $pc->search_query = "$q show:autoassignment";
 
-        if (count(array_intersect_key($deltarev->bypc, $this->conf->pc_members()))) {
-            $summary = [];
-            $tagger = new Tagger($this->user);
-            $nrev = new AssignmentCountSet($this->conf);
-            $deltarev->rev && $nrev->load_rev();
-            $deltarev->lead && $nrev->load_lead();
-            $deltarev->shepherd && $nrev->load_shepherd();
-            foreach ($this->conf->pc_members() as $p) {
-                if ($deltarev->get($p->contactId)->ass) {
-                    $t = '<div class="ctelt"><div class="ctelti">'
-                        . $this->user->reviewer_html_for($p) . ": "
-                        . plural($deltarev->get($p->contactId)->ass, "assignment")
-                        . self::review_count_report($nrev, $deltarev, $p, "After assignment:&nbsp;")
-                        . "<hr class=\"c\" /></div></div>";
-                    $summary[] = $t;
-                }
-            }
-            if (!empty($summary)) {
-                echo "<div class=\"g\"></div>\n",
-                    "<h3>Summary</h3>\n",
-                    '<div class="pc-ctable">', join("", $summary), "</div>\n";
-            }
-        }
+        return $pc;
+    }
+
+    function echo_unparse_display() {
+        Assignment_PaperColumn::echo_unparse_display($this->unparse_paper_column());
     }
 
     /** @return AssignmentCsv */
@@ -1875,7 +1917,7 @@ class AssignmentSet {
             call_user_func($cb[0], $this, $cb[1]);
         }
         if (!empty($pids)) {
-            $this->conf->update_autosearch_tags(array_keys($pids), $this->assigned_types());
+            $this->conf->update_automatic_tags(array_keys($pids), $this->assigned_types());
         }
         if (!empty($this->cleanup_notify_tracker)
             && $this->conf->opt("trackerCometSite")) {
@@ -1913,49 +1955,6 @@ class AssignmentSet {
         $this->cleanup_notify_tracker[$pid] = true;
     }
 
-    private static function _review_count_link($count, $word, $pl, $prefix, $pc) {
-        $word = $pl ? plural($count, $word) : $count . "&nbsp;" . $word;
-        if ($count == 0) {
-            return $word;
-        } else {
-            return '<a class="qq" href="' . $pc->conf->hoturl("search", "q=" . urlencode("$prefix:$pc->email")) . '">' . $word . "</a>";
-        }
-    }
-
-    private static function _review_count_report_one($ct, $pc) {
-        $t = self::_review_count_link($ct->rev, "review", true, "re", $pc);
-        $x = array();
-        if ($ct->meta != 0) {
-            $x[] = self::_review_count_link($ct->meta, "meta", false, "meta", $pc);
-        }
-        if ($ct->pri != $ct->rev && (!$ct->meta || $ct->meta != $ct->rev)) {
-            $x[] = self::_review_count_link($ct->pri, "primary", false, "pri", $pc);
-        }
-        if ($ct->sec != 0 && $ct->sec != $ct->rev && $ct->pri + $ct->sec != $ct->rev) {
-            $x[] = self::_review_count_link($ct->sec, "secondary", false, "sec", $pc);
-        }
-        if (!empty($x)) {
-            $t .= " (" . join(", ", $x) . ")";
-        }
-        return $t;
-    }
-
-    static function review_count_report($nrev, $deltarev, $pc, $prefix) {
-        $data = [];
-        $ct = $nrev->get($pc->contactId);
-        $deltarev && ($ct = $ct->add($deltarev->get($pc->contactId)));
-        if (!$deltarev || $deltarev->rev) {
-            $data[] = self::_review_count_report_one($ct, $pc);
-        }
-        if ($deltarev && $deltarev->lead) {
-            $data[] = self::_review_count_link($ct->lead, "lead", true, "lead", $pc);
-        }
-        if ($deltarev && $deltarev->shepherd) {
-            $data[] = self::_review_count_link($ct->shepherd, "shepherd", true, "shepherd", $pc);
-        }
-        return '<span class="pcrevsum">' . $prefix . join(", ", $data) . "</span>";
-    }
-
     static function run($contact, $text, $forceShow = null) {
         $aset = new AssignmentSet($contact, $forceShow);
         $aset->parse($text);
@@ -1964,28 +1963,70 @@ class AssignmentSet {
 }
 
 
-class AutoassignmentPaperColumn extends PaperColumn {
-    /** @var AssignmentSet */
-    private $aset;
-    function __construct(AssignmentSet $aset) {
-        parent::__construct($aset->conf, (object) ["name" => "autoassignment", "prefer_row" => true, "className" => "pl_autoassignment"]);
-        $this->aset = $aset;
+class Assignment_PaperColumn extends PaperColumn {
+    /** @var Conf */
+    public $conf;
+    /** @var Contact */
+    public $user;
+    /** @var ?Contact */
+    public $reviewer;
+    /** @var string */
+    public $search_query;
+    /** @var array<int,string> */
+    public $content = [];
+    /** @var ?AssignmentCountSet */
+    public $change_counts;
+    function __construct(Contact $user, Contact $reviewer = null) {
+        parent::__construct($user->conf, (object) ["name" => "autoassignment", "prefer_row" => true, "className" => "pl_autoassignment"]);
+        $this->conf = $user->conf;
+        $this->user = $user;
+        $this->reviewer = $reviewer;
         $this->override = PaperColumn::OVERRIDE_IFEMPTY_LINK;
     }
     function header(PaperList $pl, $is_text) {
         return "Assignment";
     }
     function content_empty(PaperList $pl, PaperInfo $row) {
-        return !$pl->user->can_administer($row)
-            && !($pl->user->overrides() & Contact::OVERRIDE_CONFLICT);
+        return (!$pl->user->can_administer($row)
+                && !($pl->user->overrides() & Contact::OVERRIDE_CONFLICT))
+            || !isset($this->content[$row->paperId]);
     }
     function content(PaperList $pl, PaperInfo $row) {
-        $t = $this->aset->unparse_paper_assignment($row);
+        $t = $this->content[$row->paperId];
         if ($t !== ""
             && ($pl->user->overrides() & Contact::OVERRIDE_CONFLICT)
             && !$pl->user->can_administer($row)) {
             $t = '<em>Hidden for conflict</em>';
         }
         return $t;
+    }
+
+    static function echo_unparse_display(Assignment_PaperColumn $pc) {
+        $search = new PaperSearch($pc->user, ["q" => $pc->search_query, "t" => "viewable", "reviewer" => $pc->reviewer]);
+        $plist = new PaperList("reviewers", $search);
+        $plist->add_column("autoassignment", $pc);
+        $plist->set_table_id_class("foldpl", "pltable-fullw");
+        $plist->echo_table_html(["nofooter" => true]);
+
+        if (count(array_intersect_key($pc->change_counts->bypc, $pc->conf->pc_members()))) {
+            $summary = [];
+            $current_counts = AssignmentCountSet::load($pc->user, $pc->change_counts->has);
+            $current_counts->add($pc->change_counts);
+            foreach ($pc->conf->pc_members() as $p) {
+                if ($pc->change_counts->get($p->contactId)->ass) {
+                    $t = '<div class="ctelt"><div class="ctelti">'
+                        . $pc->user->reviewer_html_for($p) . ": "
+                        . plural($pc->change_counts->get($p->contactId)->ass, "assignment")
+                        . $current_counts->unparse_counts_for($p, "After assignment: ")
+                        . "<hr class=\"c\" /></div></div>";
+                    $summary[] = $t;
+                }
+            }
+            if (!empty($summary)) {
+                echo "<div class=\"g\"></div>\n",
+                    "<h3>Summary</h3>\n",
+                    '<div class="pc-ctable">', join("", $summary), "</div>\n";
+            }
+        }
     }
 }

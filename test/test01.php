@@ -4,7 +4,7 @@
 
 declare(strict_types=1);
 require_once(preg_replace('/\/test\/[^\/]+/', '/test/setup.php', __FILE__));
-ConfInvariants::test_all($Conf);
+ConfInvariants::test_all($Conf, "test01.php:A: ");
 
 $Conf->save_setting("sub_open", 1);
 $Conf->save_setting("sub_update", Conf::$now + 10);
@@ -149,8 +149,7 @@ xassert(!$user_mgbaker->can_administer($paper18));
 xassert($user_mgbaker->act_author_view($paper18));
 
 // simple search
-$pl = new PaperList("empty", new PaperSearch($user_shenker, "au:berkeley"));
-$j = $pl->text_json("id title");
+$j = search_json($user_shenker, "au:berkeley", "id title");
 xassert_eqq(join(";", array_keys($j)), "1;6;13;15;24");
 
 // "and"
@@ -186,18 +185,15 @@ assert_search_papers($user_shenker, "au:*@*.stanford.edu", "3 18 19");
 assert_search_papers($user_shenker, "au:n*@*u", "3 10");
 
 // correct conflict information returned
-$psearch = new PaperSearch($user_shenker, ["q" => "1 2 3 4 5 15-18", "reviewer" => $user_mgbaker]);
-$pl = new PaperList("empty", $psearch);
-$j = $pl->text_json("id conf");
+$j = search_json($user_shenker, ["q" => "1 2 3 4 5 15-18", "reviewer" => $user_mgbaker], "id conf");
 xassert_eqq(join(";", array_keys($j)), "1;2;3;4;5;15;16;17;18");
 xassert_eqq($j[3]->conf, "Y");
 xassert_eqq($j[18]->conf, "Y");
-foreach ([1, 2, 4, 5, 15, 16, 17] as $i)
+foreach ([1, 2, 4, 5, 15, 16, 17] as $i) {
     xassert_eqq($j[$i]->conf, "N");
+}
 
-$psearch = new PaperSearch($user_shenker, ["q" => "1 2 3 4 5 15-18", "reviewer" => $user_jon]);
-$pl = new PaperList("empty", $psearch);
-$j = $pl->text_json("id conf");
+$j = search_json($user_shenker, ["q" => "1 2 3 4 5 15-18", "reviewer" => $user_jon], "id conf");
 xassert_eqq(join(";", array_keys($j)), "1;2;3;4;5;15;16;17;18");
 xassert_eqq($j[17]->conf, "Y");
 foreach ([1, 2, 3, 4, 5, 15, 16, 18] as $i) {
@@ -514,9 +510,9 @@ xassert_assign_fail($user_varghese, "paper,tag\n1,chairtest1#clear\n");
 assert_search_papers($user_varghese, "#chairtest1", "1");
 
 // pattern tag merging
-$Conf->save_setting("tag_approval", 1, "chair*");
+$Conf->save_setting("tag_hidden", 1, "chair*");
 $ct = $Conf->tags()->check("chairtest0");
-xassert($ct && $ct->readonly && $ct->approval);
+xassert($ct && $ct->readonly && $ct->hidden);
 
 // colon tag setting
 xassert(!$Conf->setting("has_colontag"));
@@ -1176,10 +1172,10 @@ assert_search_papers($user_chair, "re:any 19", "19");
 assert_search_papers($user_chair, "re:1 19", "19");
 
 // check rev_tokens setting
-ConfInvariants::test_all($Conf);
+ConfInvariants::test_all($Conf, "test01.php:B: ");
 xassert_assign($user_chair, "paper,action,user\n19,clearreview,anonymous\n");
 assert_search_papers($user_chair, "re:any 19", "");
-ConfInvariants::test_all($Conf);
+ConfInvariants::test_all($Conf, "test01.php:C: ");
 xassert_assign($user_chair, "paper,action,user\n19,review,anonymous\n");
 
 xassert_assign($user_chair, "paper,action,user\n19,review,anonymous\n");
@@ -1259,6 +1255,7 @@ xassert_assign($user_mogul, "paper,action,reason\n16,revive,Sucky\n");
 // more tags
 $Conf->save_setting("tag_vote", 1, "vote#10 crap#3");
 $Conf->save_setting("tag_approval", 1, "app#0");
+$Conf->update_automatic_tags();
 xassert_assign($user_chair,
     "paper,tag\n16,+huitema~vote#5 +crowcroft~vote#1 +crowcroft~crap#2 +estrin~app +estrin~crap#1 +estrin~bar");
 $paper16 = $user_chair->checked_paper_by_id(16);
@@ -1283,7 +1280,7 @@ xassert_eqq($paper16->all_tags_text(), " 4~bar#0");
 xassert_eqq($paper16->sorted_searchable_tags($user_marina), "");
 xassert_eqq($paper16->sorted_searchable_tags($user_estrin), " 4~bar#0");
 
-ConfInvariants::test_all($Conf);
+ConfInvariants::test_all($Conf, "test01.php:D: ");
 
 // author view capabilities and multiple blank users
 $blank1 = new Contact(null, $Conf);
@@ -1351,6 +1348,7 @@ assert_search_papers($user_chair, "many applications", "8 25");
 assert_search_papers($user_chair, "\"many applications\"", "8");
 assert_search_papers($user_chair, "“many applications”", "8");
 assert_search_papers($user_chair, "“many applications“", "8");
+assert_search_papers($user_chair, "status:mis[take", "");
 
 // users
 xassert(!maybe_user("sclinx@leland.stanford.edu"));

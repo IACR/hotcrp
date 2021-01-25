@@ -58,24 +58,6 @@ function is_string_list($x) {
 /** @param string $haystack
  * @param string $needle
  * @return bool */
-function str_starts_with($haystack, $needle) {
-    $nl = strlen($needle);
-    $hl = strlen($haystack);
-    return $nl === 0 || ($hl >= $nl && substr_compare($haystack, $needle, 0, $nl) === 0);
-}
-
-/** @param string $haystack
- * @param string $needle
- * @return bool */
-function str_ends_with($haystack, $needle) {
-    $nl = strlen($needle);
-    $hl = strlen($haystack);
-    return $nl === 0 || ($hl >= $nl && substr_compare($haystack, $needle, -$nl) === 0);
-}
-
-/** @param string $haystack
- * @param string $needle
- * @return bool */
 function stri_ends_with($haystack, $needle) {
     $nl = strlen($needle);
     $hl = strlen($haystack);
@@ -338,7 +320,8 @@ function json_encode_db($x, $flags = 0) {
 
 /** @param object|array|null $var
  * @param string|int $idx
- * @return mixed */
+ * @return mixed
+ * @deprecated */
 function get($var, $idx, $default = null) {
     if (is_array($var)) {
         return array_key_exists($idx, $var) ? $var[$idx] : $default;
@@ -352,21 +335,27 @@ function get($var, $idx, $default = null) {
 
 /** @param object|array|null $var
  * @param string|int $idx
- * @return string */
+ * @return string
+ * @deprecated
+ * @suppress PhanDeprecatedFunction */
 function get_s($var, $idx, $default = null) {
     return (string) get($var, $idx, $default);
 }
 
 /** @param object|array|null $var
  * @param string|int $idx
- * @return int */
+ * @return int
+ * @deprecated
+ * @suppress PhanDeprecatedFunction */
 function get_i($var, $idx, $default = null) {
     return (int) get($var, $idx, $default);
 }
 
 /** @param object|array|null $var
  * @param string|int $idx
- * @return float */
+ * @return float
+ * @deprecated
+ * @suppress PhanDeprecatedFunction */
 function get_f($var, $idx, $default = null) {
     return (float) get($var, $idx, $default);
 }

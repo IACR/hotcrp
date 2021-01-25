@@ -2,20 +2,6 @@
 // redirect.php -- HotCRP redirection helper functions
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
-/** @deprecated */
-function go($url = false) {
-    Navigation::redirect($url);
-}
-
-/** @deprecated */
-function error_go($url, $message) {
-    if ($url === false) {
-        $url = hoturl("index");
-    }
-    Conf::msg_error($message);
-    Navigation::redirect($url);
-}
-
 /** @return string */
 function make_session_name(Conf $conf, $n) {
     if (($n === "" || $n === null || $n === true)
@@ -47,7 +33,7 @@ function set_session_name(Conf $conf) {
         $_COOKIE[$sn] = $_COOKIE[$upgrade_sn];
         hotcrp_setcookie($upgrade_sn, "", [
             "expires" => time() - 3600, "path" => "/",
-            "domain" => $conf->opt("sessionUpgradeDomain", $domain ? : ""),
+            "domain" => $conf->opt("sessionUpgradeDomain") ?? ($domain ? : ""),
             "secure" => !!$secure
         ]);
     }
@@ -74,7 +60,7 @@ function set_session_name(Conf $conf) {
         $params["domain"] = $domain;
     }
     $params["httponly"] = true;
-    if (($samesite = $conf->opt("sessionSameSite"))) {
+    if (($samesite = $conf->opt("sessionSameSite") ?? "Lax")) {
         $params["samesite"] = $samesite;
     }
     if (PHP_VERSION_ID >= 70300) {

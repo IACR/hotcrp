@@ -24,7 +24,7 @@ class Color_SearchTerm {
                 $tm->add_tag($t);
             }
         }
-        return (new Tag_SearchTerm($tm))->negate_if($word === "none");
+        return (new Tag_SearchTerm($srch->user, $tm))->negate_if($word === "none");
     }
     static function parse_badge($word, SearchWord $sword, PaperSearch $srch) {
         $word = strtolower($word);
@@ -49,7 +49,7 @@ class Color_SearchTerm {
                 $tm->add_tag($tag);
             }
         }
-        return (new Tag_SearchTerm($tm))->negate_if($word === "none");
+        return (new Tag_SearchTerm($srch->user, $tm))->negate_if($word === "none");
     }
     static function parse_emoji($word, SearchWord $sword, PaperSearch $srch) {
         $tm = new TagSearchMatcher($srch->user);
@@ -66,7 +66,7 @@ class Color_SearchTerm {
                 if (!str_ends_with($xword, ":")) {
                     $xword = "$xword:";
                 }
-                $code = get($srch->conf->emoji_code_map(), $xword, false);
+                $code = ($srch->conf->emoji_code_map())[$xword] ?? false;
                 $codes = [];
                 if ($code !== false) {
                     $codes[] = $code;
@@ -94,6 +94,6 @@ class Color_SearchTerm {
                 $tm->add_tag($tag);
             }
         }
-        return (new Tag_SearchTerm($tm))->negate_if(strcasecmp($word, "none") == 0);
+        return (new Tag_SearchTerm($srch->user, $tm))->negate_if(strcasecmp($word, "none") == 0);
     }
 }

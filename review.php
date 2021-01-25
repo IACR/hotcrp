@@ -7,6 +7,9 @@ require_once("src/papertable.php");
 
 $rf = $Conf->review_form();
 $Me->add_overrides(Contact::OVERRIDE_CHECK_TIME);
+if (session_id() === "" && $Me->is_reviewer()) {
+    ensure_session();
+}
 
 
 // header
@@ -16,9 +19,8 @@ function review_header() {
 }
 
 function review_error($msg) {
-    global $Conf;
     review_header();
-    Ht::stash_script("shortcut().add()");
+    Ht::stash_script("hotcrp.shortcut().add()");
     $msg && Conf::msg_error($msg);
     Conf::$main->footer();
     exit;
@@ -56,7 +58,7 @@ if ($Qreq->post && $Qreq->post_empty()) {
 
 
 // cancel action
-if ($Qreq->cancel && $Qreq->post_ok()) {
+if ($Qreq->cancel) {
     $Conf->redirect_self($Qreq);
 }
 
@@ -64,7 +66,7 @@ if ($Qreq->cancel && $Qreq->post_ok()) {
 // upload review form action
 if (isset($Qreq->uploadForm)
     && $Qreq->has_file("uploadedFile")
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     // parse form, store reviews
     $tf = ReviewValues::make_text($rf, $Qreq->file_contents("uploadedFile"),
             $Qreq->file_filename("uploadedFile"));
@@ -86,7 +88,7 @@ if (isset($Qreq->unsubmitreview)
     && $paperTable->editrrow
     && $paperTable->editrrow->reviewStatus >= ReviewInfo::RS_DELIVERED
     && $Me->can_administer($prow)
-    && $Qreq->post_ok()) {
+    && $Qreq->valid_post()) {
     $result = $Me->unsubmit_review_row($paperTable->editrrow);
     if (!Dbl::is_error($result) && $result->affected_rows) {
         $Me->log_activity_for($paperTable->editrrow->contactId, "Review {$paperTable->editrrow->reviewId} unsubmitted", $prow);
@@ -102,7 +104,7 @@ if (isset($Qreq->unsubmitreview)
 
 
 // update review action
-if (isset($Qreq->update) && $Qreq->post_ok()) {
+if (isset($Qreq->update) && $Qreq->valid_post()) {
     $tf = new ReviewValues($rf);
     $tf->paperId = $prow->paperId;
     if (($whyNot = $Me->perm_submit_review($prow, $paperTable->editrrow))) {
@@ -131,7 +133,7 @@ if (isset($Qreq->update) && $Qreq->post_ok()) {
 
 // adopt review action
 if (isset($Qreq->adoptreview)
-    && $Qreq->post_ok()
+    && $Qreq->valid_post()
     && $paperTable->editrrow
     && $Me->can_approve_review($prow, $paperTable->editrrow)) {
     $tf = new ReviewValues($rf);
@@ -160,7 +162,7 @@ if (isset($Qreq->adoptreview)
 
 // delete review action
 if (isset($Qreq->deletereview)
-    && $Qreq->post_ok()
+    && $Qreq->valid_post()
     && $Me->can_administer($prow)) {
     if (!$paperTable->editrrow) {
         Conf::msg_error("No review to delete.");
@@ -264,7 +266,8 @@ if (isset($Qreq->text)) {
 
 // retract review request
 if ((isset($Qreq->refuse) || isset($Qreq->decline))
-    && ($Qreq->post_ok() || $Me->capability("@ra" . $prow->paperId))) {
+    && ($Qreq->valid_post()
+        || ($Me->capability("@ra" . $prow->paperId) && !$Qreq->is_head()))) {
     $decline_email = null;
     if ($paperTable->editrrow) {
         $Qreq->email = $decline_email = $paperTable->editrrow->email;
@@ -291,12 +294,13 @@ if ((isset($Qreq->refuse) || isset($Qreq->decline))
         }
     } else {
         $result->export_errors();
-        review_load();
     }
+    review_load();
 }
 
 if (isset($Qreq->accept)
-    && ($Qreq->post_ok() || $Me->capability("@ra" . $prow->paperId))) {
+    && ($Qreq->valid_post()
+        || ($Me->capability("@ra" . $prow->paperId) && !$Qreq->is_head()))) {
     $rrow = $paperTable->editrrow;
     if (!$rrow
         || (!$Me->is_my_review($rrow) && !$Me->can_administer($prow))) {

@@ -1,4 +1,4 @@
-export VERSION=2.102
+export VERSION=3.0b1
 
 # check that schema.sql and updateschema.php agree on schema version
 updatenum=`grep 'settings.*allowPaperOption.*=\|update_schema_version' src/updateschema.php | tail -n 1 | sed 's/.*= *//;s/.*[(] *//;s/[;)].*//'`
@@ -161,9 +161,6 @@ lib/text.php
 lib/unicodehelper.php
 lib/xlsx.php
 
-pages/.htaccess
-pages/home.php
-
 src/.htaccess
 src/api/api_alltags.php
 src/api/api_comment.php
@@ -192,6 +189,7 @@ src/assigners/a_review.php
 src/assigners/a_status.php
 src/assigners/a_tag.php
 src/assigners/a_unsubmitreview.php
+src/assignmentcountset.php
 src/assignmentset.php
 src/author.php
 src/authormatcher.php
@@ -266,6 +264,7 @@ src/listactions/la_getjson.php
 src/listactions/la_getjsonrqc.php
 src/listactions/la_getlead.php
 src/listactions/la_getrank.php
+src/listactions/la_getpcassignments.php
 src/listactions/la_getreviewbase.php
 src/listactions/la_getreviewforms.php
 src/listactions/la_getreviews.php
@@ -292,6 +291,7 @@ src/options/o_topics.php
 src/paperapi.php
 src/papercolumn.php
 src/papercolumns/pc_administrator.php
+src/papercolumns/pc_assignreview.php
 src/papercolumns/pc_commenters.php
 src/papercolumns/pc_conflict.php
 src/papercolumns/pc_conflictmatch.php
@@ -360,6 +360,7 @@ src/search/st_tag.php
 src/search/st_topic.php
 src/searchexample.php
 src/searchselection.php
+src/searchsplitter.php
 src/sessionlist.php
 src/settings/s_basics.php
 src/settings/s_decisions.php
@@ -445,7 +446,7 @@ scripts/buzzer.js
 scripts/emojicodes.json
 scripts/graph.js
 scripts/jquery-1.12.4.min.js
-scripts/jquery-3.4.1.min.js
+scripts/jquery-3.5.1.min.js
 scripts/script.js
 scripts/settings.js
 

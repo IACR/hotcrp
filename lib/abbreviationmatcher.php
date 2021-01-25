@@ -19,8 +19,7 @@
 // Digit sequences are not prefix-matched, so a pattern like “X1” will not
 // match subject “X 100”.
 //
-// The subject list can be “deparenthesized”, allowing parenthesized expressions
-// to be skipped without penalty. See `add_deparenthesized`.
+// Parenthesized expressions can be skipped without penalty.
 
 /** @template T */
 class AbbreviationEntry {
@@ -43,6 +42,7 @@ class AbbreviationEntry {
     public $loader_args;
 
     const TFLAG_KW = 0x10000000;
+    const TFLAG_DP = 0x20000000;
 
     /** @param string $name
      * @param T $value
@@ -84,8 +84,6 @@ class AbbreviationMatcher {
     private $data = [];
     /** @var int */
     private $nanal = 0;
-    /** @var int */
-    private $ndeparen = 0;
     /** @var array<int,float> */
     private $prio = [];
 
@@ -103,7 +101,7 @@ class AbbreviationMatcher {
     private function add_entry(AbbreviationEntry $e, $isphrase) {
         $i = count($this->data);
         $this->data[] = $e;
-        if (!($e->tflags & AbbreviationEntry::TFLAG_KW)) {
+        if (($e->tflags & AbbreviationEntry::TFLAG_KW) === 0) {
             $this->xmatches = $this->lxmatches = [];
             if ($isphrase
                 && strpos($e->name, " ") === false
@@ -155,26 +153,6 @@ class AbbreviationMatcher {
         assert(strpos($name, " ") === false);
         return $this->add_entry(AbbreviationEntry::make_lazy($name, $loader, $loader_args, $tflags | AbbreviationEntry::TFLAG_KW), false);
     }
-    function add_deparenthesized() {
-        $this->_analyze();
-        $n = count($this->data);
-        while ($this->ndeparen !== $this->nanal) {
-            $e = $this->data[$this->ndeparen];
-            if (($e->tflags & AbbreviationEntry::TFLAG_KW) === 0
-                && ($s = self::deparenthesize($e->name)) !== ""
-                && !in_array(self::make_xtester(strtolower($s)), $this->ltesters)) {
-                $e = clone $e;
-                /** @phan-suppress-next-line PhanAccessReadOnlyProperty */
-                $e->name = $s;
-                $this->data[] = $e;
-            }
-            ++$this->ndeparen;
-        }
-        $this->ndeparen = count($this->data);
-        if ($this->ndeparen !== $n) {
-            $this->xmatches = $this->lxmatches = [];
-        }
-    }
 
     function set_priority(int $tflags, float $prio) {
         $this->prio[$tflags] = $prio;
@@ -203,35 +181,29 @@ class AbbreviationMatcher {
     /** @param string $s
      * @return string */
     static function make_xtester($s) {
-        if (strpbrk($s, "\'()[]") !== false) {
-            preg_match_all('/(?:\A_+|)[A-Za-z~?!][A-Za-z~?!\'()\[\]]*|(?:[0-9]|\.[0-9])[0-9.]*/', $s, $m);
-            if (!empty($m[0])) {
-                return preg_replace('/[\'()\[\]]/', "", " " . join(" ", $m[0]));
-            } else {
-                return "";
-            }
+        $s = str_replace("\'", "", $s);
+        preg_match_all('/(?:\A_+|)[A-Za-z~?!][A-Za-z~?!]*|(?:[0-9]|\.[0-9])[0-9.]*/', $s, $m);
+        if (!empty($m[0])) {
+            return " " . join(" ", $m[0]);
         } else {
-            preg_match_all('/(?:\A_+|)[A-Za-z~?!][A-Za-z~?!]*|(?:[0-9]|\.[0-9])[0-9.]*/', $s, $m);
-            if (!empty($m[0])) {
-                return " " . join(" ", $m[0]);
-            } else {
-                return "";
-            }
+            return "";
         }
     }
     /** @param string $s
      * @param bool $case_sensitive
      * @return string */
     static function xtester_remove_stops($s, $case_sensitive = false) {
-        return preg_replace('/ (?:a|an|and|are|at|be|been|can|did|do|for|has|how|if|in|is|isnt|it|new|of|on|or|that|the|their|they|this|to|we|were|what|which|with|you)(?= |\z)/i', "", $s);
+        return preg_replace('/ (?:a|an|and|are|at|be|been|can|did|do|for|has|how|if|in|is|isnt|it|new|of|on|or|s|that|the|their|they|this|to|we|were|what|which|with|you)(?= |\z)/i', "", $s);
     }
     /** @param string $name
      * @return string */
     static private function deparenthesize($name) {
-        if ((strpos($name, "(") !== false || strpos($name, "[") !== false)
-            && ($xname = preg_replace('/(?:\s+|\A)(?:\(.*?\)|\[.*?\])(?=\s|\z)/', "", $name)) !== ""
-            && $xname !== $name) {
-            return $xname;
+        if (strpos($name, "(") !== false || strpos($name, "[") !== false) {
+            $x = preg_replace_callback('/(?:\s+|\A)(?:\(.*?\)|\[.*?\])(?=\s|\z)|[a-z]\(s\)(?=[\s\']|\z)/',
+                function ($m) {
+                    return ctype_alpha($m[0][0]) ? "{$m[0][0]}s" : "";
+                }, $name);
+            return $x !== "" && $x !== $name ? $x : "";
         } else {
             return "";
         }
@@ -240,8 +212,10 @@ class AbbreviationMatcher {
     /** @suppress PhanAccessReadOnlyProperty */
     private function _analyze() {
         assert($this->nanal === count($this->ltesters));
-        while ($this->nanal < count($this->data)) {
-            $d = $this->data[$this->nanal];
+        $n = count($this->data);
+        $n1 = $this->nanal;
+        while ($n1 < $n) {
+            $d = $this->data[$n1];
             $d->dedash_name = self::dedash($d->name);
             $lname = strtolower($d->name);
             if (($d->tflags & AbbreviationEntry::TFLAG_KW) !== 0) {
@@ -249,7 +223,51 @@ class AbbreviationMatcher {
             } else {
                 $this->ltesters[] = self::make_xtester($lname);
             }
-            ++$this->nanal;
+            ++$n1;
+        }
+
+        $n2 = $this->nanal;
+        while ($n2 < $n) {
+            $d = $this->data[$n2];
+            if (($d->tflags & AbbreviationEntry::TFLAG_KW) === 0
+                && (strpos($d->name, "(") !== false || strpos($d->name, "[") !== false)) {
+                $this->_analyze_deparen($d);
+            }
+            ++$n2;
+        }
+
+        $this->nanal = count($this->data);
+    }
+
+    /** @suppress PhanAccessReadOnlyProperty */
+    private function _add_deparen(AbbreviationEntry $d, $name) {
+        $xt = self::make_xtester(strtolower($name));
+        $i = array_search($xt, $this->ltesters);
+        if ($i === false
+            || ($this->data[$i]->tflags & AbbreviationEntry::TFLAG_DP) !== 0) {
+            $e = clone $d;
+            $e->name = $name;
+            $e->dedash_name = self::dedash($name);
+            $e->tflags |= AbbreviationEntry::TFLAG_DP;
+            $this->data[] = $e;
+            $this->ltesters[] = $xt;
+            $this->xmatches = $this->lxmatches = [];
+        }
+    }
+
+    private function _analyze_deparen(AbbreviationEntry $d) {
+        $nx = preg_replace('/\s*(?:\(.*?\)|\[.*?\])/', "", $d->name);
+        if ($nx !== "" && $nx !== $d->name) {
+            $this->_add_deparen($d, $nx);
+        }
+        // XXX special-case things like "Speaker(s)" (allow `Speakers`)
+        if (strpos($d->name, "(s)") !== false) {
+            $ny = str_replace("(s)", "s", $d->name);
+            $this->_add_deparen($d, $ny);
+            $nz = preg_replace('/\s*(?:\(.*?\)|\[.*?\])/', "", $ny);
+            if ($nz !== "" && $nz !== $ny) {
+                $this->_add_deparen($d, $nz);
+            }
         }
     }
 
@@ -267,6 +285,7 @@ class AbbreviationMatcher {
         $re = '';
         $npatternw = 0;
         $iscamel = self::is_camel_word($upat);
+        // These rules create strings that could match an xtester.
         if ($iscamel) {
             preg_match_all('/(?:\A_+|)[A-Za-z~][a-z~?!]+|[A-Z][A-Z]*(?![a-z])|(?:[0-9]|\.[0-9])[0-9.]*/', $upat, $m);
             //error_log($upat . " " . join(",", $m[0]));
@@ -310,8 +329,8 @@ class AbbreviationMatcher {
         $full_match_length = strlen($lpattern) + 1;
 
         $xt = preg_grep($re, $this->ltesters);
+        //error_log("! $re " . json_encode($xt));
         if (count($xt) > 1 && $starpos !== 0) {
-            //error_log("! $re " . json_encode($xt));
             $status = 0;
             $xtx = [];
             if ($iscamel) {
@@ -404,6 +423,8 @@ class AbbreviationMatcher {
         return $r;
     }
 
+    /** @param list<AbbreviationEntry> $r
+     * @return list<AbbreviationEntry> */
     static private function compress_entries($r) {
         $n = count($r);
         for ($i = 1; $i < $n; ) {
@@ -417,6 +438,7 @@ class AbbreviationMatcher {
         return $r;
     }
 
+    /** @return int */
     function nentries() {
         return count($this->data);
     }
@@ -478,6 +500,14 @@ class AbbreviationMatcher {
     }
 
 
+    function print_state() {
+        $this->_analyze();
+        foreach ($this->data as $i => $d) {
+            echo "#$i: {$d->name} dd:{$d->dedash_name} ltester:{$this->ltesters[$i]}\n";
+        }
+    }
+
+
     private function test_all_matches($pattern, AbbreviationEntry $test, $tflags) {
         if ($pattern === "") {
             return false;
@@ -527,7 +557,10 @@ class AbbreviationMatcher {
         return str_replace(" ", "", $s);
     }
 
-    /** @suppress PhanAccessReadOnlyProperty */
+    /** @param string $cname
+     * @param int $class
+     * @return string
+     * @suppress PhanAccessReadOnlyProperty */
     private function _finish_abbreviation($cname, AbbreviationEntry $e, $class) {
         if (($class & self::KW_FORMAT) === self::KW_CAMEL
             && ($class & self::KW_ENSURE) !== 0
@@ -550,7 +583,7 @@ class AbbreviationMatcher {
     const KWP_MULTIWORD = 32;
     /** @param int $class
      * @param int $tflags
-     * @return string|false
+     * @return ?string
      * @suppress PhanAccessReadOnlyProperty */
     function find_entry_keyword(AbbreviationEntry $e, $class, $tflags = 0) {
         // Strip parenthetical remarks when that preserves uniqueness
@@ -629,13 +662,13 @@ class AbbreviationMatcher {
             $this->add_entry($e2, false);
             return $cname . $suffix;
         } else {
-            return false;
+            return null;
         }
     }
 
     /** @param int $class
      * @param int $tflags
-     * @return string|false */
+     * @return ?string */
     function ensure_entry_keyword(AbbreviationEntry $e, $class, $tflags = 0) {
         return $this->find_entry_keyword($e, $class | self::KW_ENSURE, $tflags);
     }

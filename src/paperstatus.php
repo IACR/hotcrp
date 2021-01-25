@@ -22,8 +22,8 @@ class PaperStatus extends MessageSet {
     private $disable_users = false;
     /** @var bool */
     private $allow_any_content_file = false;
-    /** @var string|false */
-    private $content_file_prefix = false;
+    /** @var ?string */
+    private $content_file_prefix = null;
     /** @var bool */
     private $add_topics = false;
     /** @var list<callable> */
@@ -37,7 +37,9 @@ class PaperStatus extends MessageSet {
     public $diffs;
     /** @var PaperInfo */
     private $_nnprow;
+    /** @var array<string,null|int|string> */
     private $_paper_upd;
+    /** @var array<string,null|int|string> */
     private $_paper_overflow_upd;
     /** @var ?list<int> */
     public $_topic_ins; // set by Topics_PaperOption
@@ -104,7 +106,7 @@ class PaperStatus extends MessageSet {
         $this->_on_document_export[] = $cb;
     }
 
-    /** @param callable(object,PaperInfo):(?bool) $cb */
+    /** @param callable(object,PaperInfo,PaperStatus):(?bool) $cb */
     function on_document_import($cb) {
         $this->_on_document_import[] = $cb;
     }
@@ -217,7 +219,7 @@ class PaperStatus extends MessageSet {
         $pj = (object) [];
         $pj->pid = (int) $prow->paperId;
 
-        foreach ($this->conf->options()->form_fields($this->prow) as $opt) {
+        foreach ($this->prow->form_fields() as $opt) {
             if (!$user || $user->can_view_option($this->prow, $opt)) {
                 $ov = $prow->force_option($opt);
                 $oj = $opt->value_unparse_json($ov, $this);
@@ -310,7 +312,7 @@ class PaperStatus extends MessageSet {
                 $pstatus->error_at_option($o, "Bad content_file: only simple filenames allowed.");
                 return false;
             }
-            if ((string) $this->content_file_prefix !== "") {
+            if (($this->content_file_prefix ?? "") !== "") {
                 $docj->content_file = $this->content_file_prefix . $docj->content_file;
             }
         }
@@ -476,7 +478,7 @@ class PaperStatus extends MessageSet {
             }
         }
         $ikeys = [];
-        foreach ($this->conf->options()->form_fields($this->prow) as $o) {
+        foreach ($this->_nnprow->form_fields() as $o) {
             $k = $o->json_key();
             if (($j = $ipj->$k ?? $ioptions->$k ?? null) !== null) {
                 $xpj->$k = $j;
@@ -503,13 +505,13 @@ class PaperStatus extends MessageSet {
         }
         foreach ((array) $ipj as $k => $v) {
             if (!isset($xpj->$k) && !isset($ikeys[$k]) && !isset($xstatus->$k)
-                && !in_array($k, ["pid", "options", "status", "decision"])
+                && !in_array($k, ["pid", "id", "options", "status", "decision"])
                 && $k[0] !== "_" && $k[0] !== "\$") {
                 $matches = $this->conf->options()->find_all($k);
                 if (count($matches) === 1) {
                     $o = current($matches);
                     $xpj->{$o->json_key()} = $v;
-                } else if (count($matches) > 1) {
+                } else {
                     $xpj->_bad_options[] = $k;
                 }
             }
@@ -530,19 +532,26 @@ class PaperStatus extends MessageSet {
         return $xpj;
     }
 
+    /** @param string $f
+     * @param null|int|string $v */
     function save_paperf($f, $v) {
         assert(!isset($this->_paper_upd[$f]));
         $this->_paper_upd[$f] = $v;
     }
 
+    /** @param string $f
+     * @param null|int|string $v */
     function update_paperf($f, $v) {
         $this->_paper_upd[$f] = $v;
     }
 
+    /** @param string $f
+     * @param null|int|string $v */
     function update_paperf_overflow($f, $v) {
         $this->_paper_overflow_upd[$f] = $v;
     }
 
+    /** @param string $diff */
     function mark_diff($diff) {
         $this->diffs[$diff] = true;
     }
@@ -638,9 +647,9 @@ class PaperStatus extends MessageSet {
 
     private function _check_fields($pj) {
         if (!empty($pj->_bad_options)) {
-            $this->warning_at("options", $this->_("Unknown options ignored (%2\$s).", count($pj->_bad_options), htmlspecialchars(join("; ", array_keys($pj->_bad_options)))));
+            $this->warning_at("options", $this->_("Unknown options ignored (%2\$s).", count($pj->_bad_options), htmlspecialchars(join("; ", $pj->_bad_options))));
         }
-        foreach ($this->conf->options()->form_fields($this->_nnprow) as $o) {
+        foreach ($this->_nnprow->form_fields() as $o) {
             if (isset($pj->{$o->json_key()})) {
                 $this->_check_one_field($o, $pj->{$o->json_key()});
             }
@@ -649,7 +658,7 @@ class PaperStatus extends MessageSet {
 
     private function _validate_fields() {
         $max_status = 0;
-        foreach ($this->conf->options()->form_fields($this->_nnprow) as $opt) {
+        foreach ($this->_nnprow->form_fields() as $opt) {
             $ov = $this->_nnprow->new_option($opt);
             $errorindex = count($ov->message_list());
             if (!$ov->has_error()) {
@@ -822,7 +831,8 @@ class PaperStatus extends MessageSet {
 
         // Status
         $updatecontacts = $action === "updatecontacts";
-        if ($action === "submit") {
+        if ($action === "submit"
+            || ($action === "update" && $qreq->submitpaper)) {
             $pj->submitted = true;
             $pj->draft = false;
         } else if ($action === "final") {
@@ -835,7 +845,7 @@ class PaperStatus extends MessageSet {
 
         // Fields
         $nnprow = $prow ?? PaperInfo::make_new($this->user);
-        foreach ($this->conf->options()->form_fields($nnprow) as $o) {
+        foreach ($nnprow->form_fields() as $o) {
             if (($qreq["has_{$o->formid}"] || isset($qreq[$o->formid]))
                 && (!$o->final || $action === "final")
                 && (!$updatecontacts || $o->id === PaperOption::CONTACTSID)) {
@@ -1054,7 +1064,7 @@ class PaperStatus extends MessageSet {
     private function _postexecute_check_required_options() {
         $prow = null;
         $required_failure = false;
-        foreach ($this->conf->options()->form_fields($this->_nnprow) as $o) {
+        foreach ($this->_nnprow->form_fields() as $o) {
             if (!$o->required) {
                 continue;
             }
@@ -1153,8 +1163,8 @@ class PaperStatus extends MessageSet {
             $this->conf->update_papersub_setting($this->_paper_submitted ? 1 : -1);
         }
 
-        // update autosearch
-        $this->conf->update_autosearch_tags($this->paperId, "paper");
+        // update automatic tags
+        $this->conf->update_automatic_tags($this->paperId, "paper");
 
         // update document inactivity
         if ($this->_documents_changed

@@ -111,7 +111,7 @@ class CommentInfo {
                         $j["done"] = $rrd->done;
                     }
                 }
-                $t[] = "papercomment.set_resp_round(" . json_encode($rrd->name) . "," . json_encode($j) . ")";
+                $t[] = "hotcrp.set_response_round(" . json_encode($rrd->name) . "," . json_encode($j) . ")";
             }
             echo Ht::unstash_script(join(";", $t));
             Icons::stash_licon("ui_tag");
@@ -232,6 +232,7 @@ class CommentInfo {
         return $result;
     }
 
+    /** @return ?string */
     private function unparse_commenter_pseudonym(Contact $viewer) {
         if ($this->commentType & (COMMENTTYPE_RESPONSE | COMMENTTYPE_BYAUTHOR)) {
             return "Author";
@@ -242,7 +243,7 @@ class CommentInfo {
                    && $viewer->can_view_review($this->prow, $rrow)) {
             return "Reviewer " . unparseReviewOrdinal($rrow->reviewOrdinal);
         } else {
-            return false;
+            return null;
         }
     }
 
@@ -250,7 +251,7 @@ class CommentInfo {
         if ($viewer->can_view_comment_identity($this->prow, $this)) {
             $n = Text::nameo_h($this, NAME_P|NAME_I);
         } else {
-            $n = $this->unparse_commenter_pseudonym($viewer) ? : "anonymous";
+            $n = $this->unparse_commenter_pseudonym($viewer) ?? "anonymous";
         }
         if ($this->commentType & COMMENTTYPE_RESPONSE) {
             $n = "<i>" . $this->unparse_response_text() . "</i>"
@@ -263,7 +264,7 @@ class CommentInfo {
         if ($viewer->can_view_comment_identity($this->prow, $this)) {
             $n = Text::nameo($this, NAME_P|NAME_I);
         } else {
-            $n = $this->unparse_commenter_pseudonym($viewer) ? : "anonymous";
+            $n = $this->unparse_commenter_pseudonym($viewer) ?? "anonymous";
         }
         if ($this->commentType & COMMENTTYPE_RESPONSE) {
             $n = $this->unparse_response_text()
@@ -321,7 +322,7 @@ class CommentInfo {
     /** @return DocumentInfoSet */
     function attachments() {
         if ($this->commentType & COMMENTTYPE_HASDOC) {
-            return $this->prow->linked_documents($this->commentId, 0, 1024, $this);
+            return $this->prow->linked_documents($this->commentId, DocumentInfo::LINKTYPE_COMMENT_BEGIN, DocumentInfo::LINKTYPE_COMMENT_END, $this);
         } else {
             return new DocumentInfoSet;
         }
@@ -346,11 +347,12 @@ class CommentInfo {
         return $docs;
     }
 
+    /** @return ?object */
     function unparse_json(Contact $viewer) {
         if ($this->commentId
             ? !$viewer->can_view_comment($this->prow, $this, true)
             : !$viewer->can_comment($this->prow, $this)) {
-            return false;
+            return null;
         }
 
         if ($this->commentId) {
@@ -754,8 +756,8 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         }
         $acting_contact->log_activity_for($this->contactId ? : $contact->contactId, $log, $this->prow->$LinkColumn);
 
-        // update autosearch
-        $this->conf->update_autosearch_tags($this->prow, "comment");
+        // update automatic tags
+        $this->conf->update_automatic_tags($this->prow, "comment");
 
         // ordinal
         if ($text !== false && $this->ordinal_missing($ctype)) {
@@ -778,7 +780,7 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         // document links
         if ($docids !== $old_docids) {
             if ($old_docids) {
-                $this->conf->qe("delete from DocumentLink where paperId=? and linkId=? and linkType>=? and linkType<?", $this->prow->paperId, $this->commentId, 0, 1024);
+                $this->conf->qe("delete from DocumentLink where paperId=? and linkId=? and linkType>=? and linkType<?", $this->prow->paperId, $this->commentId, DocumentInfo::LINKTYPE_COMMENT_BEGIN, DocumentInfo::LINKTYPE_COMMENT_END);
             }
             if ($docids) {
                 $qv = [];
@@ -796,12 +798,14 @@ set $okey=(t.maxOrdinal+1) where commentId=$cmtid";
         return true;
     }
 
+    /** @param PaperInfo $prow
+     * @param Contact $minic */
     function watch_callback($prow, $minic) {
         $ctype = $this->commentType;
         if ($minic->can_view_comment($prow, $this)
             // Don't send notifications about draft responses to the chair,
             // even though the chair can see draft responses.
-            && (!($ctype & COMMENTTYPE_DRAFT) || $minic->act_author_view($prow))) {
+            && (!($ctype & COMMENTTYPE_DRAFT) || $prow->has_author($minic))) {
             if (($ctype & COMMENTTYPE_RESPONSE) && ($ctype & COMMENTTYPE_DRAFT)) {
                 $tmpl = "@responsedraftnotify";
             } else if ($ctype & COMMENTTYPE_RESPONSE) {

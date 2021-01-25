@@ -2,6 +2,42 @@
 // a_tag.php -- HotCRP assignment helper classes
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
+class Tag_Assignable extends Assignable {
+    /** @var string */
+    public $ltag;
+    /** @var string */
+    public $_tag;
+    /** @var ?float */
+    public $_index;
+    /** @var ?bool */
+    public $_override;
+    /** @param ?int $pid
+     * @param string $ltag
+     * @param ?string $tag
+     * @param ?float $index
+     * @param ?bool $override */
+    function __construct($pid, $ltag, $tag = null, $index = null, $override = null) {
+        $this->type = "tag";
+        $this->pid = $pid;
+        $this->ltag = $ltag;
+        $this->_tag = $tag ?? $ltag;
+        $this->_index = $index;
+        $this->_override = $override;
+    }
+    /** @return self */
+    function fresh() {
+        return new Tag_Assignable($this->pid, $this->ltag);
+    }
+    /** @param Assignable $q
+     * @return bool */
+    function match($q) {
+        '@phan-var-force Tag_Assignable $q';
+        return ($q->pid ?? $this->pid) === $this->pid
+            && ($q->ltag ?? $this->ltag) === $this->ltag
+            && ($q->_index ?? $this->_index) === $this->_index;
+    }
+}
+
 class NextTagAssigner {
     private $tag;
     public $pidindex = array();
@@ -11,9 +47,9 @@ class NextTagAssigner {
     function __construct($state, $tag, $index, $isseq) {
         $this->tag = $tag;
         $ltag = strtolower($tag);
-        $res = $state->query(["type" => "tag", "ltag" => $ltag]);
+        $res = $state->query(new Tag_Assignable(null, $ltag));
         foreach ($res as $x) {
-            $this->pidindex[$x["pid"]] = (float) $x["_index"];
+            $this->pidindex[$x->pid] = $x->_index;
         }
         asort($this->pidindex);
         if ($index === null) {
@@ -37,12 +73,9 @@ class NextTagAssigner {
         $ltag = strtolower($this->tag);
         foreach ($this->pidindex as $pid => $index) {
             if ($index >= $this->first_index && $index < $this->next_index) {
-                $x = $state->query_unmodified(["type" => "tag", "pid" => $pid, "ltag" => $ltag]);
+                $x = $state->query_unmodified(new Tag_Assignable($pid, $ltag));
                 if (!empty($x)) {
-                    $item = $state->add(["type" => "tag", "pid" => $pid, "ltag" => $ltag,
-                                         "_tag" => $this->tag,
-                                         "_index" => $this->next_index($this->isseq),
-                                         "_override" => true]);
+                    $item = $state->add(new Tag_Assignable($pid, $ltag, $this->tag, $this->next_index($this->isseq), true));
                 }
             }
         }
@@ -72,7 +105,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         }
         $result = $state->conf->qe("select paperId, tag, tagIndex from PaperTag where paperId?a", $state->paper_ids());
         while (($row = $result->fetch_row())) {
-            $state->load(["type" => "tag", "pid" => +$row[0], "ltag" => strtolower($row[1]), "_tag" => $row[1], "_index" => (float) $row[2]]);
+            $state->load(new Tag_Assignable(+$row[0], strtolower($row[1]), $row[1], (float) $row[2]));
         }
         Dbl::free($result);
     }
@@ -97,7 +130,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
     function apply(PaperInfo $prow, Contact $contact, $req, AssignmentState $state) {
         // tag argument (can have multiple space-separated tags)
         if (!isset($req["tag"])) {
-            return $state->error("Tag missing.");
+            $state->error("Tag missing.");
+            return false;
         }
         $tag = $req["tag"];
         $ok = true;
@@ -121,14 +155,17 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         $xvalue = trim((string) $req["tag_value"]);
         if (!preg_match('/\A([-+]?#?)(|~~|[^-~+#]*~)([a-zA-Z@*_:.][-+a-zA-Z0-9!@*_:.\/]*)(\z|#|#?[=!<>]=?|#?≠|#?≤|#?≥)(.*)\z/', $tag, $m)
             || ($m[4] !== "" && $m[4] !== "#")) {
-            return $state->error("“" . htmlspecialchars($tag) . "”: Invalid tag.");
+            $state->error("“" . htmlspecialchars($tag) . "”: Invalid tag.");
+            return false;
         } else if ($xvalue !== "" && $m[5] !== "") {
-            return $state->error("“" . htmlspecialchars($tag) . "”: You have a <code>tag value</code> column, so the tag value specified here is ignored.");
+            $state->error("“" . htmlspecialchars($tag) . "”: You have a <code>tag value</code> column, so the tag value specified here is ignored.");
+            return false;
         } else if (($this->remove || str_starts_with($m[1], "-")) && $m[5] !== "") {
             $state->warning("“" . htmlspecialchars($tag) . "”: Tag values ignored when removing a tag.");
         } else if (($this->remove && str_starts_with($m[1], "+"))
                    || ($this->remove === false && str_starts_with($m[1], "-"))) {
-            return $state->error("“" . htmlspecialchars($tag) . "” is incompatible with this action.");
+            $state->error("“" . htmlspecialchars($tag) . "” is incompatible with this action.");
+            return false;
         }
 
         $xremove = $this->remove || str_starts_with($m[1], "-");
@@ -164,12 +201,14 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
                 || ($this->formula->user && $this->formula->user !== $state->user)) {
                 $this->formula = new Formula($xvalue);
                 if (!$this->formula->check($state->user)) {
-                    return $state->error("“" . htmlspecialchars($xvalue) . "”: Bad tag value.");
+                    $state->error("“" . htmlspecialchars($xvalue) . "”: Bad tag value.");
+                    return false;
                 }
                 $this->formulaf = $this->formula->compile_function();
             }
-            if ($this->formula->view_score($state->user) < $state->user->view_score_bound($prow)) {
-                return $state->error("“" . htmlspecialchars($xvalue) . "”: Can’t compute this formula here.");
+            if (!$state->user->can_view_formula($this->formula)) {
+                $state->error("“" . htmlspecialchars($xvalue) . "”: Can’t compute this formula here.");
+                return false;
             }
             $nvalue = call_user_func($this->formulaf, $prow, null, $state->user);
             if ($nvalue === null || $nvalue === false) {
@@ -179,13 +218,14 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             } else if (is_int($nvalue)) {
                 $nvalue = (float) $nvalue;
             } else if (!is_float($nvalue)) {
-                return $state->error("“" . htmlspecialchars($xvalue) . "”: Bad tag value.");
+                $state->error("“" . htmlspecialchars($xvalue) . "”: Bad tag value.");
+                return false;
             }
         }
 
-        // ignore attempts to change vote & autosearch tags
+        // ignore attempts to change vote & automatic tags
         $tagmap = $state->conf->tags();
-        if (!$state->conf->is_updating_autosearch_tags()
+        if (!$state->conf->is_updating_automatic_tags()
             && $xuser === ""
             && $tagmap->is_automatic($xtag)) {
             return true;
@@ -198,7 +238,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
 
         // otherwise handle adds
         if (strpos($xtag, "*") !== false) {
-            return $state->error("“" . htmlspecialchars($tag) . "”: Wildcards aren’t allowed here.");
+            $state->error("“" . htmlspecialchars($tag) . "”: Wildcards aren’t allowed here.");
+            return false;
         }
         if ($xuser !== ""
             && $xuser !== "~~"
@@ -206,15 +247,18 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             $c = substr($xuser, 0, -1);
             $twiddlecids = ContactSearch::make_pc($c, $state->user)->user_ids();
             if (empty($twiddlecids)) {
-                return $state->error("“" . htmlspecialchars($c) . "” doesn’t match a PC member.");
+                $state->error("“" . htmlspecialchars($c) . "” doesn’t match a PC member.");
+                return false;
             } else if (count($twiddlecids) > 1) {
-                return $state->error("“" . htmlspecialchars($c) . "” matches more than one PC member; be more specific to disambiguate.");
+                $state->error("“" . htmlspecialchars($c) . "” matches more than one PC member; be more specific to disambiguate.");
+                return false;
             }
             $xuser = $twiddlecids[0] . "~";
         }
         $tagger = new Tagger($state->user);
         if (!$tagger->check($xtag, Tagger::CHECKVERBOSE)) {
-            return $state->error($tagger->error_html);
+            $state->error($tagger->error_html);
+            return false;
         }
 
         // compute final tag and value
@@ -223,8 +267,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         if ($xnext) {
             $nvalue = $this->apply_next_index($prow->paperId, $xnext, $ntag, $nvalue, $state);
         } else if ($nvalue === null) {
-            if (($x = $state->query(["type" => "tag", "pid" => $prow->paperId, "ltag" => $ltag]))) {
-                $nvalue = $x[0]["_index"];
+            if (($x = $state->query(new Tag_Assignable($prow->paperId, $ltag)))) {
+                $nvalue = $x[0]->_index;
             } else {
                 $nvalue = 0.0;
             }
@@ -246,11 +290,10 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
 
         // perform assignment
         if ($nvalue === false) {
-            $state->remove(["type" => "tag", "pid" => $prow->paperId, "ltag" => $ltag]);
+            $state->remove(new Tag_Assignable($prow->paperId, $ltag));
         } else {
             assert(is_float($nvalue));
-            $state->add(["type" => "tag", "pid" => $prow->paperId, "ltag" => $ltag,
-                         "_tag" => $ntag, "_index" => (float) $nvalue]);
+            $state->add(new Tag_Assignable($prow->paperId, $ltag, $ntag, $nvalue));
         }
         return true;
     }
@@ -282,7 +325,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             } else {
                 $twiddlecids = ContactSearch::make_pc($c, $state->user)->user_ids();
                 if (empty($twiddlecids)) {
-                    return $state->error("“" . htmlspecialchars($c) . "” doesn’t match a PC member.");
+                    $state->error("“" . htmlspecialchars($c) . "” doesn’t match a PC member.");
+                    return false;
                 } else if (count($twiddlecids) === 1) {
                     $xuser = $twiddlecids[0] . "~";
                 } else {
@@ -320,13 +364,13 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         }
 
         // query
-        $res = $state->query(["type" => "tag", "pid" => $prow->paperId, "ltag" => $search_ltag]);
+        $res = $state->query(new Tag_Assignable($prow->paperId, $search_ltag));
         $tag_re = '{\A' . $xuser . $xtag . '\z}i';
         foreach ($res as $x) {
-            if (preg_match($tag_re, $x["ltag"])
+            if (preg_match($tag_re, $x->ltag)
                 && ($search_ltag
-                    || $state->user->can_change_tag($prow, $x["ltag"], $x["_index"], null))) {
-                $state->remove($x);
+                    || $state->user->can_change_tag($prow, $x->ltag, $x->_index, null))) {
+                $f = $state->remove($x);
             }
         }
         return true;

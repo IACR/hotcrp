@@ -17,7 +17,6 @@ class ReviewSearchMatcher extends ContactCountMatcher {
     private $review_type = 0;
     /** @var int */
     private $completeness = 0;
-    public $view_score;
     public $round;
     public $review_testable = true;
     private $tokens;
@@ -179,8 +178,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
                 || ($this->review_type !== 0 && $this->review_type !== REVIEW_EXTERNAL)
                 || $this->rfield
                 || $this->wordcountexpr
-                || $this->ratings
-                || $this->view_score !== null) {
+                || $this->ratings) {
                 $this->review_type = -100;
             } else {
                 $this->review_type = REVIEW_REQUEST;
@@ -189,9 +187,11 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         }
     }
 
+    /** @return ?string */
     function useful_sqlexpr(Contact $user, $table_name) {
-        if ($this->test(0))
-            return false;
+        if ($this->test(0)) {
+            return null;
+        }
         $where = [];
         if ($this->completeness & self::SUBMITTED) {
             $where[] = "reviewSubmitted is not null";
@@ -209,8 +209,9 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         }
         if ($this->has_contacts()) {
             $cm = $this->contact_match_sql("contactId");
-            if ($this->tokens)
+            if ($this->tokens) {
                 $cm = "($cm or reviewToken in (" . join(",", $this->tokens) . "))";
+            }
             $where[] = $cm;
         }
         if ($this->rfield) {
@@ -247,7 +248,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
             $where[] = "requestedBy=" . $user->contactId;
         }
         if (empty($where)) {
-            return false;
+            return null;
         } else {
             return join(" and ", $where);
         }
@@ -264,7 +265,7 @@ class ReviewSearchMatcher extends ContactCountMatcher {
         }
         $this->rfield_scorex = $this->rfield_scoret === 16 ? 0 : 3;
     }
-    function test_review(Contact $user, PaperInfo $prow, $rrow, PaperSearch $srch) {
+    function test_review(Contact $user, PaperInfo $prow, $rrow) {
         if ($this->review_type
             && $this->review_type !== $rrow->reviewType) {
             return false;
@@ -326,13 +327,12 @@ class ReviewSearchMatcher extends ContactCountMatcher {
             && !$this->ratings->test($user, $prow, $rrow)) {
             return false;
         }
-        if ($this->view_score !== null
-            && $this->view_score <= $user->view_score_bound($prow, $rrow)) {
-            return false;
-        }
         if ($this->rfield) {
+            if ($this->rfield->view_score <= $user->view_score_bound($prow, $rrow)) {
+                return false;
+            }
             $fid = $this->rfield->id;
-            $val = isset($rrow->$fid) ? $rrow->$fid : null;
+            $val = $rrow->$fid ?? null;
             if ($this->rfield->has_options) {
                 if ($this->rfield_scoret >= 8) {
                     if (!$val || $this->rfield_scorex < 0) {
@@ -369,13 +369,17 @@ class ReviewSearchMatcher extends ContactCountMatcher {
 }
 
 class Review_SearchTerm extends SearchTerm {
+    /** @var Contact */
+    private $user;
+    /** @var ReviewSearchMatcher */
     private $rsm;
     private static $recompleteness_map = [
         "c" => "complete", "i" => "incomplete", "p" => "partial"
     ];
 
-    function __construct(ReviewSearchMatcher $rsm) {
+    function __construct(Contact $user, ReviewSearchMatcher $rsm) {
         parent::__construct("re");
+        $this->user = $user;
         $this->rsm = $rsm;
         $this->rsm->finish();
     }
@@ -386,7 +390,7 @@ class Review_SearchTerm extends SearchTerm {
             "name" => $keyword,
             "parse_callback" => "Review_SearchTerm::parse",
             "retype" => $t,
-            "recompleteness" => get(self::$recompleteness_map, $c, $c),
+            "recompleteness" => self::$recompleteness_map[$c] ?? $c,
             "has" => ">0"
         ];
     }
@@ -439,7 +443,7 @@ class Review_SearchTerm extends SearchTerm {
             if (strcasecmp($contacts, "me") == 0)
                 $rsm->apply_tokens($srch->user->review_tokens());
         }
-        return new Review_SearchTerm($rsm);
+        return new Review_SearchTerm($srch->user, $rsm);
     }
 
     static function review_field_factory($keyword, Contact $user, $kwfj, $m) {
@@ -458,7 +462,6 @@ class Review_SearchTerm extends SearchTerm {
     static function parse_review_field($word, SearchWord $sword, PaperSearch $srch) {
         $f = $sword->kwdef->review_field;
         $rsm = new ReviewSearchMatcher(">0");
-        $rsm->view_score = $f->view_score;
 
         $contactword = "";
         while (preg_match('/\A([^<>].*?|[<>].+?)(:|[=!<>]=?|≠|≤|≥)(.*)\z/s', $word, $m)) {
@@ -486,13 +489,13 @@ class Review_SearchTerm extends SearchTerm {
                 $val = Text::star_text_pregexes($word, $sword->quoted);
             }
             $rsm->apply_text_field($f, $val);
-            return new Review_SearchTerm($rsm);
+            return new Review_SearchTerm($srch->user, $rsm);
         }
     }
     private static function impossible_score_match(ReviewField $f) {
         $t = new False_SearchTerm;
         $r = $f->full_score_range();
-        $t->set_float("contradiction_warning", "$f->name_html scores range from $r[0] to $r[1].");
+        $t->set_float("warning", "{$f->name_html} scores range from $r[0] to $r[1].");
         $t->set_float("used_revadj", true);
         return $t;
     }
@@ -519,22 +522,25 @@ class Review_SearchTerm extends SearchTerm {
             if ($f->option_letter && !$srch->conf->opt("smartScoreCompare"))
                 $m[1] = CountMatcher::flip_countexpr_string($m[1]);
             $score = self::parse_score($f, $m[2]);
-            if ($score === false)
+            if ($score === false) {
                 return self::impossible_score_match($f);
+            }
             $rsm->apply_score_field($f, $score, 0, CountMatcher::$opmap[$m[1]]);
         } else if (preg_match('/\A(\d+|[A-Z]|none)\s*(|-|–|—|\.\.\.?|…)\s*(\d+|[A-Z]|none)\s*\z/si', $word, $m)) {
             $score1 = self::parse_score($f, $m[1]);
             $score2 = self::parse_score($f, $m[3]);
-            if ($score1 === false || $score2 === false)
+            if ($score1 === false || $score2 === false) {
                 return self::impossible_score_match($f);
-            if ($score1 > $score2)
+            }
+            if ($score1 > $score2) {
                 list($score1, $score2) = [$score2, $score1];
+            }
             $precise = $m[2] !== ".." && $m[2] !== "..." && $m[2] !== "…";
             $rsm->apply_score_field($f, $score1, $score2, $precise ? 16 : 8);
         } else {             // XXX
             return new False_SearchTerm;
         }
-        return new Review_SearchTerm($rsm);
+        return new Review_SearchTerm($srch->user, $rsm);
     }
 
 
@@ -555,12 +561,12 @@ class Review_SearchTerm extends SearchTerm {
         // We'll do the precise query later.
         // ">=0" is a useless constraint in SQL-land.
         $cexpr = $this->rsm->conservative_nonnegative_countexpr();
-        if ($cexpr === ">=0" || $sqi->negated) {
+        if ($cexpr === ">=0") {
             return "true";
         } else if ($this->rsm->review_type() == REVIEW_REQUEST) {
             return "exists (select * from ReviewRequest where paperId=Paper.paperId)";
         } else {
-            $wheres = $this->rsm->useful_sqlexpr($sqi->user, "r") ? : "true";
+            $wheres = $this->rsm->useful_sqlexpr($this->user, "r") ?? "true";
             if ($cexpr === ">0") {
                 return "exists (select * from PaperReview r where paperId=Paper.paperId and $wheres)";
             } else {
@@ -568,10 +574,10 @@ class Review_SearchTerm extends SearchTerm {
             }
         }
     }
-    function exec(PaperInfo $prow, PaperSearch $srch) {
+    function test(PaperInfo $prow, $rrow) {
         $this->rsm->prepare_reviews($prow);
-        if ($this->rsm->review_testable && $srch->test_review) {
-            return $this->rsm->test_review($srch->user, $prow, $srch->test_review, $srch);
+        if ($this->rsm->review_testable && $rrow) {
+            return $this->rsm->test_review($this->user, $prow, $rrow);
         } else {
             if ($this->rsm->review_type() === REVIEW_REQUEST) {
                 $rs = $prow->review_requests();
@@ -580,7 +586,7 @@ class Review_SearchTerm extends SearchTerm {
             }
             $n = 0;
             foreach ($rs as $rrow) {
-                $n += $this->rsm->test_review($srch->user, $prow, $rrow, $srch);
+                $n += $this->rsm->test_review($this->user, $prow, $rrow);
             }
             return $this->rsm->test_finish($n);
         }

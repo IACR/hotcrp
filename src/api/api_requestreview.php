@@ -1,5 +1,5 @@
 <?php
-// api_requestreview.php -- HotCRP user-related API calls
+// api_requestreview.php -- HotCRP review-request API calls
 // Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
 
 class RequestReview_API {
@@ -112,7 +112,7 @@ class RequestReview_API {
                 $msg = '<p>Proposed an external review from ' . $xreviewer->name_h(NAME_E) . ". An administrator must approve this proposal for it to take effect.</p>";
             }
             $user->log_activity("Review proposal added for $email", $prow);
-            $prow->conf->update_autosearch_tags($prow, "review");
+            $prow->conf->update_automatic_tags($prow, "review");
             HotCRPMailer::send_administrators("@proposereview", $prow,
                                               ["requester_contact" => $requester,
                                                "reviewer_contact" => $xreviewer,
@@ -214,7 +214,7 @@ class RequestReview_API {
             ]);
 
             $user->log_activity_for($requester, "Review proposal denied for $email", $prow);
-            $prow->conf->update_autosearch_tags($prow, "review");
+            $prow->conf->update_automatic_tags($prow, "review");
             return new JsonResult(["ok" => true, "action" => "deny"]);
         } else {
             Dbl::qx_raw("unlock tables");
@@ -252,7 +252,7 @@ class RequestReview_API {
 
         $u = $user->conf->cached_user_by_email($email);
         if (!$user->can_administer($prow)
-            && strcasecmp($email, $user->email) !== 0
+            && (!$user->email || strcasecmp($email, $user->email) !== 0)
             && (!$u || $user->capability("@ra{$prow->paperId}") != $u->contactId)) {
             return self::error_result(403, "email", "Permission error.");
         }
@@ -284,12 +284,12 @@ class RequestReview_API {
 
         $had_token = false;
         foreach ($rrows as $rrow) {
-            $user->conf->qe("insert into PaperReviewRefused set paperId=?, email=?, contactId=?, requestedBy=?, timeRequested=?, refusedBy=?, timeRefused=?, reason=?, refusedReviewType=?, reviewRound=?, data=?
+            $user->conf->qe("insert into PaperReviewRefused set paperId=?, email=?, contactId=?, requestedBy=?, timeRequested=?, refusedBy=?, timeRefused=?, reason=?, refusedReviewType=?, refusedReviewId=?, reviewRound=?, data=?
                 on duplicate key update reason=coalesce(values(reason),reason)",
                 $prow->paperId, $rrow->email, $rrow->contactId,
                 $rrow->requestedBy, $rrow->timeRequested,
                 $user->contactId, Conf::$now, $reason, $rrow->reviewType,
-                $rrow->reviewRound, $rrow->data_string());
+                $rrow->reviewId, $rrow->reviewRound, $rrow->data_string());
             $user->conf->qe("delete from PaperReview where paperId=? and reviewId=?",
                 $prow->paperId, $rrow->reviewId);
             if ($rrow->reviewType < REVIEW_SECONDARY && $rrow->requestedBy > 0) {
@@ -312,20 +312,15 @@ class RequestReview_API {
         if ($had_token) {
             $user->conf->update_rev_tokens_setting(-1);
         }
-        $prow->conf->update_autosearch_tags($prow, "review");
+        $prow->conf->update_automatic_tags($prow, "review");
 
         // send mail to requesters
         // XXX delay this mail by a couple minutes
         foreach ($rrows as $rrow) {
-            $requser = null;
-            if ($rrow->requestedBy > 0) {
-                $requser = $user->conf->user_by_id($rrow->requestedBy);
-            }
-            if ($requser) {
-                $reqprow = $user->conf->paper_by_id($prow->paperId, $requser);
+            if ($rrow->requestedBy > 0
+                && ($requser = $user->conf->user_by_id($rrow->requestedBy))) {
                 HotCRPMailer::send_to($requser, "@refusereviewrequest", [
-                    "prow" => $reqprow,
-                    "reviewer_contact" => $rrow, "reason" => $reason
+                    "prow" => $prow, "reviewer_contact" => $rrow, "reason" => $reason
                 ]);
             }
             $user->log_activity_for($rrow->contactId, "Review $rrow->reviewId declined", $prow);
@@ -393,7 +388,7 @@ class RequestReview_API {
             $user->log_activity("Review proposal retracted for $req->email", $prow);
         }
 
-        $prow->conf->update_autosearch_tags($prow, "review");
+        $prow->conf->update_automatic_tags($prow, "review");
 
         // send mail to reviewer
         $notified = false;

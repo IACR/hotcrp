@@ -131,7 +131,7 @@ class Options_SettingRenderer {
     static function validate_condition(SettingValues $sv, $expr, $field, $is_error) {
         $ps = new PaperSearch($sv->conf->root_user(), $expr);
         $fake_prow = new PaperInfo(null, null, $sv->conf);
-        if ($ps->term()->script_expression($fake_prow, $ps) === null) {
+        if ($ps->term()->script_expression($fake_prow) === null) {
             $method = $is_error ? "error_at" : "warning_at";
             $sv->$method($field, "Search too complex for field condition. (Not all search keywords are supported for field conditions.)");
         }
@@ -267,7 +267,6 @@ class Options_SettingRenderer {
             Ht::hidden("optfp_$xpos", $xpos, ["class" => "settings-opt-fp", "data-default-value" => $xpos]),
             '</div>';
 
-        Ht::stash_script('$(settings_option_move_enable)', 'settings_optvt');
         Ht::stash_html('<div id="option_caption_name" class="hidden"><p>Field names should be short and memorable (they are used as search keywords).</p></div><div id="option_caption_options" class="hidden"><p>Enter choices one per line.</p></div>', 'settings_option_caption');
 
         echo $t;
@@ -461,12 +460,12 @@ class Options_SettingParser extends SettingParser {
             $deleted_ids = array();
             foreach (Options_SettingRenderer::configurable_options($sv) as $o) {
                 $newo = $this->stashed_options[$o->id] ?? null;
-/*                if (!$newo
+                if (!$newo
                     || ($newo->type !== $o->type
                         && !$newo->change_type($o, true, true)
                         && !$o->change_type($newo, false, true))) {
                     $deleted_ids[] = $o->id;
-                } */
+                }
             }
             if (!empty($deleted_ids)) {
                 $sv->conf->qe("delete from PaperOption where optionId?a", $deleted_ids);

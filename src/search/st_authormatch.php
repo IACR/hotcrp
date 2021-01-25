@@ -3,19 +3,23 @@
 // Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
 
 class AuthorMatch_SearchTerm extends SearchTerm {
+    /** @var Contact */
+    private $user;
+    /** @var AuthorMatcher */
     private $matcher;
 
-    function __construct($type, $matcher) {
+    function __construct(Contact $user, $type, $matcher) {
         parent::__construct($type);
+        $this->user = $user;
         $this->matcher = $matcher;
     }
-    static function parse($word, SearchWord $sword) {
+    static function parse($word, SearchWord $sword, PaperSearch $srch) {
         $type = $sword->kwdef->name;
         if ($word === "any" && $sword->kwexplicit && !$sword->quoted) {
             $type = substr($type, 0, 2);
-            return new TextMatch_SearchTerm($type === "co" ? "co" : "au", true, false);
+            return new TextMatch_SearchTerm($srch->user, $type === "co" ? "co" : "au", true, false);
         } else if (($matcher = AuthorMatcher::make_string_guess($word))) {
-            return new AuthorMatch_SearchTerm($type, $matcher);
+            return new AuthorMatch_SearchTerm($srch->user, $type, $matcher);
         } else {
             return new False_SearchTerm;
         }
@@ -36,9 +40,10 @@ class AuthorMatch_SearchTerm extends SearchTerm {
             return "(Paper.authorInformation!='' or Paper.collaborators!='')";
         }
     }
-    function exec(PaperInfo $row, PaperSearch $srch) {
-        if (!$srch->user->allow_view_authors($row))
+    function test(PaperInfo $row, $rrow) {
+        if (!$this->user->allow_view_authors($row)) {
             return false;
+        }
         $anymatch = false;
         if ($this->type !== "comatch"
             && $row->field_match_pregexes($this->matcher->general_pregexes(), "authorInformation")) {
@@ -59,10 +64,10 @@ class AuthorMatch_SearchTerm extends SearchTerm {
     function extract_metadata($top, PaperSearch $srch) {
         parent::extract_metadata($top, $srch);
         if ($this->type !== "comatch") {
-            $srch->regex["au"][] = $this->matcher->general_pregexes();
+            $srch->add_field_highlighter("au", $this->matcher->general_pregexes());
         }
         if ($this->type !== "aumatch") {
-            $srch->regex["co"][] = $this->matcher->general_pregexes();
+            $srch->add_field_highlighter("co", $this->matcher->general_pregexes());
         }
     }
 }

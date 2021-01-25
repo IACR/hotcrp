@@ -162,12 +162,13 @@ class Fexpr implements JsonSerializable {
         return $lt;
     }
 
-    function view_score(Contact $user) {
-        $score = VIEWSCORE_AUTHOR;
+    /** @return bool */
+    function viewable_by(Contact $user) {
         foreach ($this->args as $e) {
-            $score = min($score, $e->view_score($user));
+            if (!$e->viewable_by($user))
+                return false;
         }
-        return $score;
+        return true;
     }
 
     static function cast_bool($t) {
@@ -270,6 +271,9 @@ class Constant_Fexpr extends Fexpr {
         }
         $this->_format = $format;
     }
+    function viewable_by(Contact $user) {
+        return true;
+    }
     function compile(FormulaCompiler $state) {
         return $this->x;
     }
@@ -317,11 +321,9 @@ class Ternary_Fexpr extends Fexpr {
     function typecheck_format() {
         return self::common_format([$this->args[1], $this->args[2]]);
     }
-    function view_score(Contact $user) {
-        $t = $this->args[0]->view_score($user);
-        $tt = $this->args[1]->view_score($user);
-        $tf = $this->args[2]->view_score($user);
-        return min($t, max($tt, $tf));
+    function viewable_by(Contact $user) {
+        return $this->args[2]->viewable_by($user)
+            || ($this->args[0]->viewable_by($user) && $this->args[1]->viewable_by($user));
     }
     function compile(FormulaCompiler $state) {
         $t = $state->_addltemp($this->args[0]->compile($state));
@@ -394,8 +396,8 @@ class Or_Fexpr extends Fexpr {
     function typecheck_format() {
         return self::common_format($this->args);
     }
-    function view_score(Contact $user) {
-        return $this->args[0]->view_score($user);
+    function viewable_by(Contact $user) {
+        return $this->args[0]->viewable_by($user) || $this->args[1]->viewable_by($user);
     }
     function compile(FormulaCompiler $state) {
         $t1 = $state->_addltemp($this->args[0]->compile($state));
@@ -439,15 +441,15 @@ class Additive_Fexpr extends Fexpr {
         return $this->typecheck_arguments($formula, true);
     }
     function typecheck_format() {
-        $a0 = $this->args[0];
-        $f0 = $a0->format();
-        $d0 = is_int($f0) && $f0 >= self::FDATE && $f0 <= self::FTIMEDELTA;
-        $a1 = $this->args[1];
-        $f1 = $a1->format();
-        $d1 = is_int($f1) && $f1 >= self::FDATE && $f1 <= self::FTIMEDELTA;
+        $fx0 = $this->args[0]->format();
+        $fx1 = $this->args[1]->format();
+        $f0 = is_int($fx0) ? $fx0 : 0;
+        $f1 = is_int($fx1) ? $fx1 : 0;
+        $d0 = $f0 >= self::FDATE && $f0 <= self::FTIMEDELTA;
+        $d1 = $f1 >= self::FDATE && $f1 <= self::FTIMEDELTA;
         if ((!$d0 && !$d1)
-            || (!$d0 && $f0)
-            || (!$d1 && $f1)) {
+            || (!$d0 && $fx0)
+            || (!$d1 && $fx1)) {
             return null;
         } else if ($this->op === "-"
                    && $d0 && !($f0 & self::FDELTABIT)
@@ -852,8 +854,8 @@ class Score_Fexpr extends Fexpr {
     function inferred_index() {
         return self::IDX_REVIEW;
     }
-    function view_score(Contact $user) {
-        return $this->field->view_score;
+    function viewable_by(Contact $user) {
+        return $this->field->view_score > $user->permissive_view_score_bound();
     }
     function compile(FormulaCompiler $state) {
         if ($this->field->view_score <= $state->user->permissive_view_score_bound()) {
@@ -889,6 +891,9 @@ class Let_Fexpr extends Fexpr {
         $ok1 = $this->args[1]->typecheck($formula);
         $this->_format = $ok0 && $ok1 ? $this->args[1]->format() : self::FERROR;
         return $ok0 && $ok1;
+    }
+    function viewable_by(Contact $user) {
+        return $this->args[1]->viewable_by($user);
     }
     function compile(FormulaCompiler $state) {
         $this->vardef->ltemp = $state->_addltemp($this->args[0]->compile($state));
@@ -2076,7 +2081,8 @@ class Formula implements JsonSerializable {
                                          $sortable) {
         $t = "";
         if ($user) {
-            $t .= "assert(\$contact->contactXid === $user->contactXid);\n  ";
+            $t .= "assert(\$contact->contactXid === {$user->contactXid});\n  ";
+            // $t .= "if (\$contact->contactXid !== {$user->contactXid}) { error_log(debug_string_backtrace()); }\n  ";
         }
         $t .= $state->statement_text();
         if ($expr !== null) {
@@ -2095,6 +2101,8 @@ class Formula implements JsonSerializable {
         return $t;
     }
 
+    /** @param int $sortable
+     * @return callable(PaperInfo,?int,Contact):mixed */
     private function _compile_function($sortable) {
         if ($this->check()) {
             $state = new FormulaCompiler($this->user);
@@ -2109,14 +2117,17 @@ class Formula implements JsonSerializable {
         return eval("return function ($args) {\n  $t};");
     }
 
+    /** @return callable(PaperInfo,?int,Contact):mixed */
     function compile_function() {
         return $this->_compile_function(0);
     }
 
+    /** @return callable(PaperInfo,?int,Contact):mixed */
     function compile_sortable_function() {
         return $this->_compile_function(1);
     }
 
+    /** @return callable(PaperInfo,?int,Contact):mixed */
     function compile_json_function() {
         return $this->_compile_function(2);
     }
@@ -2124,7 +2135,7 @@ class Formula implements JsonSerializable {
     static function compile_indexes_function(Contact $user, $index_types) {
         $state = new FormulaCompiler($user);
         $g = $state->loop_variable($index_types);
-        $t = "assert(\$contact->contactXid === $user->contactXid);\n  "
+        $t = "assert(\$contact->contactXid === {$user->contactXid});\n  "
             . join("\n  ", $state->gstmt)
             . "\n  return array_keys($g);\n";
         $args = '$prow, $contact';
@@ -2289,12 +2300,9 @@ class Formula implements JsonSerializable {
         }
     }
 
-    function view_score(Contact $user) {
-        if ($this->check($this->user ?? $user)) {
-            return $this->_parse->fexpr->view_score($user);
-        } else {
-            return VIEWSCORE_PC;
-        }
+    function viewable_by(Contact $user) {
+        return $this->check($this->user ?? $user)
+            && $this->_parse->fexpr->viewable_by($user);
     }
 
     function column_header() {

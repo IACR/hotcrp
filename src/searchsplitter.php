@@ -8,82 +8,94 @@ class SearchSplitter {
     /** @var bool */
     private $utf8q;
     /** @var int */
-    public $pos;
-    /** @var array{int, int} */
-    public $strspan;
+    public $pos = 0;
+    /** @var int */
+    private $len;
+    /** @var int */
+    public $last_pos = 0;
+
     /** @param string $str */
     function __construct($str) {
         $this->str = $str;
+        $this->len = strlen($str);
         $this->utf8q = strpos($str, chr(0xE2)) !== false;
-        $this->pos = 0;
-        $this->set_span_and_pos("");
+        $this->set_span_and_pos(0);
     }
     /** @return bool */
     function is_empty() {
-        return $this->str === "";
+        return $this->pos >= $this->len;
     }
     /** @return string */
-    function shift() {
+    function rest() {
+        return substr($this->str, $this->pos);
+    }
+    /** @return string */
+    function shift_keyword() {
         if ($this->utf8q
-            && preg_match('/\A([-_.a-zA-Z0-9]+:|["“”][^"“”]+["“”]:|)\s*((?:["“”][^"“”]*(?:["“”]|\z)|[^"“”\s()\[\]]*)*)/su', $this->str, $m)) {
-            $result = preg_replace('/[“”]/u', "\"", $m[1] . $m[2]);
-        } else if (!$this->utf8q
-                   && preg_match('/\A([-_.a-zA-Z0-9]+:|"[^"]+":|)\s*((?:"[^"]*(?:"|\z)|[^"\s()\[\]]*)*)/s', $this->str, $m)) {
-            $result = $m[1] . $m[2];
+            ? preg_match('/\G(?:[-_.a-zA-Z0-9]+|["“”][^"“”]+["“”]):/su', $this->str, $m, 0, $this->pos)
+            : preg_match('/\G(?:[-_.a-zA-Z0-9]+|"[^"]+"):/s', $this->str, $m, 0, $this->pos)) {
+            $this->set_span_and_pos(strlen($m[0]));
+            return $this->utf8q ? preg_replace('/[“”]/u', '"', $m[0]) : $m[0];
         } else {
-            $this->pos += strlen($this->str);
-            $this->str = "";
-            $this->strspan = [$this->pos, $this->pos];
             return "";
         }
-        $this->set_span_and_pos($m[0]);
-        return $result;
+    }
+    /** @param string $exceptions
+     * @return string */
+    function shift($exceptions = null) {
+        if ($exceptions === null) {
+            $exceptions = '\(\)\[\]';
+        } else if ($exceptions !== "()" && $exceptions !== "") {
+            $exceptions = preg_quote($exceptions);
+        }
+        if ($this->utf8q
+            ? preg_match("/\\G(?:[\"“”][^\"“”]*(?:[\"“”]|\\z)|[^\"“”\\s{$exceptions}]*)*/su", $this->str, $m, 0, $this->pos)
+            : preg_match("/\\G(?:\"[^\"]*(?:\"|\\z)|[^\"\\s{$exceptions}]*)*/s", $this->str, $m, 0, $this->pos)) {
+            $this->set_span_and_pos(strlen($m[0]));
+            return $this->utf8q ? preg_replace('/[“”]/u', '"', $m[0]) : $m[0];
+        } else {
+            $this->last_pos = $this->pos = $this->len;
+            return "";
+        }
     }
     /** @param string $str */
     function shift_past($str) {
-        assert(str_starts_with($this->str, $str));
-        $this->set_span_and_pos($str);
+        assert(substr_compare($this->str, $str, $this->pos, strlen($str)) === 0);
+        $this->set_span_and_pos(strlen($str));
     }
     /** @return bool */
     function skip_whitespace() {
-        $this->set_span_and_pos("");
-        return $this->str !== "";
+        $this->set_span_and_pos(0);
+        return $this->pos < $this->len;
     }
     /** @return string */
     function shift_balanced_parens() {
-        $result = substr($this->str, 0, self::span_balanced_parens($this->str));
-        $this->set_span_and_pos($result);
-        return $result;
-    }
-    /** @param string $s
-     * @return list<string> */
-    static function split_balanced_parens($s) {
-        $splitter = new SearchSplitter($s);
-        $w = [];
-        while ($splitter->skip_whitespace()) {
-            $w[] = $splitter->shift_balanced_parens();
-        }
-        return $w;
+        $pos0 = $this->pos;
+        $pos1 = self::span_balanced_parens($this->str, $pos0);
+        $this->set_span_and_pos($pos1 - $pos0);
+        return substr($this->str, $pos0, $pos1 - $pos0);
     }
     /** @param string $re
      * @param list<string> &$m @phan-output-reference */
     function match($re, &$m = null) {
-        return preg_match($re, $this->str, $m);
+        return preg_match($re, $this->str, $m, 0, $this->pos);
     }
     /** @param string $substr */
     function starts_with($substr) {
-        return str_starts_with($this->str, $substr);
+        return substr_compare($this->str, $substr, $this->pos, strlen($substr)) === 0;
     }
-    private function set_span_and_pos($prefix) {
-        $this->strspan = [$this->pos, $this->pos + strlen($prefix)];
-        $next = substr($this->str, strlen($prefix));
+    /** @param int $len */
+    private function set_span_and_pos($len) {
+        $this->last_pos = $this->pos = $this->pos + $len;
         if ($this->utf8q) {
-            $next = preg_replace('/\A\s+/u', "", $next);
+            if (preg_match('/\G\s+/u', $this->str, $m, 0, $this->pos)) {
+                $this->pos += strlen($m[0]);
+            }
         } else {
-            $next = ltrim($next);
+            while ($this->pos < $this->len && ctype_space($this->str[$this->pos])) {
+                ++$this->pos;
+            }
         }
-        $this->pos += strlen($this->str) - strlen($next);
-        $this->str = $next;
     }
     /** @param string $str
      * @param int $pos
@@ -99,7 +111,7 @@ class SearchSplitter {
             // stop when done
             if ($plast === ""
                 && !$quote
-                && ($endf === null ? ctype_space($ch) : call_user_func($endf, $ch))) {
+                && ($endf === null ? ctype_space($ch) : call_user_func($endf, $ch, $pos))) {
                 break;
             }
             // translate “” -> "
@@ -140,5 +152,15 @@ class SearchSplitter {
             ++$pos;
         }
         return $pos;
+    }
+    /** @param string $s
+     * @return list<string> */
+    static function split_balanced_parens($s) {
+        $splitter = new SearchSplitter($s);
+        $w = [];
+        while ($splitter->skip_whitespace()) {
+            $w[] = $splitter->shift_balanced_parens();
+        }
+        return $w;
     }
 }
