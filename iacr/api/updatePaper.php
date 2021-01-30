@@ -21,7 +21,7 @@ $msg = get_paper_message($Opt['iacrType'],
                          $_POST['paperId'],
                          $_POST['email'],
                          'hc',
-                         $Opt['shortName']);
+                         $Opt['dbName']);
 
 if (!hash_equals(get_hmac($msg), $_POST['auth'])) {
   showError('Bad auth token');

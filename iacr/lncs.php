@@ -7,8 +7,8 @@ $dbname = $Opt['dbName'];
 
 require "/var/www/util/hotcrp/hmac.php";
 // The download URL for the zip archive of final papers.
-$url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['shortName'] . "&year=" . $Opt['year'];
-$url .= "&auth=" . get_hmac(get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']));
+$url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['dbName'] . "&year=" . $Opt['year'];
+$url .= "&auth=" . get_hmac(get_conf_message($Opt['dbName'], $Opt['iacrType'], $Opt['year']));
 $shortName = $Opt['shortName'];
 ?>
 <div class="container-fluid float-left">
@@ -48,7 +48,7 @@ try {
         several items:
       </p>
       <ol>
-        <li><a style="font-weight: 600;" target="_blank" href="$url" download="$shortName.zip">Download Zip archive</a>  with a bundle of all final versions of papers.</li>
+        <li><a style="font-weight: 600;" target="_blank" href="$url" download="$dbName.zip">Download Zip archive</a>  with a bundle of all final versions of papers.</li>
         <li><a style="font-weight: 600" target="_blank" href="getSpreadsheet.php" download="author_emails.tsv">TSV spreadsheet of author emails</a> and disambiguated names of authors (in a spreadsheet TSV)
              
         </li>

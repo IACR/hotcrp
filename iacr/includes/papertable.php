@@ -39,12 +39,12 @@ function echo_iacr_button($val, Conf $conf, $paperId) {
                                  $paperId,
                                  $email,
                                  'hc',
-                                 $conf->opt['shortName']);
+                                 $conf->opt['dbName']);
   $querydata = array('venue' => $conf->opt['iacrType'],
                      'year' => $conf->opt['year'],
                      'paperId' => $paperId,
                      'email' => $email,
-                     'shortName' => $conf->opt['shortName'],
+                     'shortName' => $conf->opt['dbName'],
                      'auth' => get_hmac($paper_msg),
                      'app' => 'hc');
   switch($val) {

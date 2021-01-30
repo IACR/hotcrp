@@ -8,7 +8,7 @@ if (!isset($_GET['auth'])) {
   showError('Unauthenticated request');
   exit;
 }
-$msg = get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']);
+$msg = get_conf_message($Opt['dbName'], $Opt['iacrType'], $Opt['year']);
 
 if (!validate_hmac($_GET['auth'], $msg)) {
   showError('Bad auth token');
