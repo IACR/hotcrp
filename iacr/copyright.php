@@ -7,9 +7,9 @@ try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $dbuser, $dbpassword);
   // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId=6 is from create_conf.py when
   // the conference is first set up. It indicates that a final version was uploaded.
-  $sql = "select paperId,title FROM copyright WHERE shortName=:shortName";
+  $sql = "select paperId,title FROM copyright WHERE shortName=:dbName";
   $stmt = $db->prepare($sql);
-  $stmt->bindParam(':shortName', $Opt['shortName']);
+  $stmt->bindParam(':dbName', $Opt['dbName']);
   if (!$stmt->execute()) {
     echo 'Unable to execute query';
     exit();

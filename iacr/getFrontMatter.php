@@ -62,8 +62,8 @@ EOF;
   }
   // Output table of contents. We take it from www.iacr.org
   // instead of HotCRP because final versions are uploaded there.
-  $url = 'https://www.iacr.org/submit/api/?action=view&venue=' . $Opt['iacrType'] . '&year=' . $Opt['year'] . '&shortName=' . $Opt['shortName'];
-  $msg = get_conf_message($Opt['shortName'], $Opt['iacrType'], $Opt['year']);
+  $url = 'https://www.iacr.org/submit/api/?action=view&venue=' . $Opt['iacrType'] . '&year=' . $Opt['year'] . '&shortName=' . $Opt['dbName'];
+  $msg = get_conf_message($Opt['dbName'], $Opt['iacrType'], $Opt['year']);
   $url = $url . '&auth=' . get_hmac($msg);
   $ch = curl_init();
   curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
