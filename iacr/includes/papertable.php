@@ -3,27 +3,44 @@
 // It is intended for handling of special IACR paper options in the submission
 // form. These are created by create_conf.py, and have an id as follows:
 //
+abstract class IACROption {
+  const COPYRIGHT = 105;
+  const FINAL_PAPER = 106;
+  const SLIDES = 107;
+  const VIDEO = 108;
+  const RUMP_NOTE = 109;
+  const RUMP_MINUTES = 110;
+  const SUPPLEMENTARY_MATERIAL = 111;
+  const LONG_PAPER = 112;
+  const RESUBMISSION = 113;
+  const COMMENTS_TO_EDITOR = 114;
+  const SPEAKER = 115;
+};
+// Old values used to be:
 // 5: copyright     (required for authors, may not be deleted)
 // 6: upload paper  (required for authors, may not be deleted)
 // 7: upload slides (optional for authors, may not be deleted)
 // 8: upload video. (optional for authors, may be deleted)
-
+// Because these were changed, it isn't really feasible to do
+// updates on instances created before this switch.
 /**
  * Called with a PaperOption to determine if it requires special
- * handling. If the chair deletes the video option, then ID 8 might be
- * replaced by something with a new name, so we check for that.
+ * handling for a button to perform an external action.
  */
 function iacr_paper_option(PaperOption $opt) {
-   return iacr_required_paper_option($opt->id) ||
-          ($opt->id == 8 && $opt->name == "Upload video");
+  return ($opt->id == IACROption::COPYRIGHT ||
+          $opt->id == IACROption::FINAL_PAPER ||
+          $opt->id == IACROption::VIDEO ||
+          $opt->id == IACROption::SLIDES);
 }
 
 /**
- * These options may not be deleted by the administrator. The slides
- * option is not mandantory for authors.
+ * These options may not be deleted by the administrator. Slides and
+ * video are optional and may be deleted by the admin. If those are
+ * omitted they cannot be restored unless we hand code the option.
  */
 function iacr_required_paper_option($val) {
-  return ($val == 5 || $val === 6 || $val == 7);
+  return ($val == IACROption::COPYRIGHT || $val === IACROption::FINAL_PAPER);
 }
 
 /**
