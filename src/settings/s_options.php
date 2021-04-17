@@ -257,7 +257,7 @@ class Options_SettingRenderer {
 
         /////////// For IACR options, we make the name readonly.
         $extras = ["placeholder" => "Field name", "size" => 50, "id" => "optn_$xpos", "style" => "font-weight:bold", "class" => "need-tooltip", "data-tooltip-info" => "settings-option", "data-tooltip-type" => "focus", "aria-label" => "Field name"];
-        if (iacr_paper_option($o)) {
+        if (has_iacr_button($o)) {
           $extras['readonly'] = true;
         }
         echo '<div class="', $sv->control_class("optn_$xpos", "f-i"), '">',
@@ -290,7 +290,7 @@ class Options_SettingRenderer {
             Ht::button(Icons::ui_movearrow(2), ["class" => "btn-licon ui js-settings-option-move movedown need-tooltip", "aria-label" => "Move down in display order"]),
             '</span>';
            if (!isset($sv->conf->opt['iacrType']) ||
-               !iacr_required_paper_option($o->id)) {
+               !is_iacr_required_paper_option($o)) {
                  // We only show the delete button for non-required options.
                  echo Ht::button(Icons::ui_trash(), ["class" => "btn-licon ui js-settings-option-move delete need-tooltip", "aria-label" => "Delete", "data-option-exists" => get($this->have_options, $o->id)]);
             }
