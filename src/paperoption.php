@@ -628,6 +628,9 @@ class PaperOption implements JsonSerializable {
     const COLLABORATORSID = -1007;
     const SUBMISSION_VERSION_ID = -1008;
 
+    /** @var ?string
+    * @readonly */
+    public $iacrSetting;
     /** @var Conf
      * @readonly */
     public $conf;
@@ -733,6 +736,7 @@ class PaperOption implements JsonSerializable {
         $this->_search_keyword = $args->search_keyword ?? $this->_json_key;
         $this->formid = $this->id > 0 ? "opt{$this->id}" : $this->_json_key;
 
+        $this->iacrSetting = $args->iacrSetting ?? null;
         $this->description = $args->description ?? null;
         $this->description_format = $args->description_format ?? null;
         $this->nonpaper = ($args->nonpaper ?? false) === true;
@@ -1086,6 +1090,9 @@ class PaperOption implements JsonSerializable {
             $j->type = $this->type;
         }
         $j->position = (int) $this->position;
+        if ($this->iacrSetting !== null) {
+            $j->iacrSetting = $this->iacrSetting;
+        }
         if ($this->description !== null) {
             $j->description = $this->description;
         }
@@ -1316,14 +1323,16 @@ class Checkbox_PaperOption extends PaperOption {
         }
     }
     function echo_web_edit(PaperTable $pt, $ov, $reqov) {
-        $cb = Ht::checkbox($this->formid, 1, !!$reqov->value, [
-            "id" => $this->readable_formid(),
-            "data-default-checked" => !!$ov->value,
-            "disabled" => !$this->test_editable($ov->prow)
-        ]);
+        $extras = array("id" => $this->readable_formid(),
+                        "data-default-checked" => !!$ov->value,
+                        "disabled" => !$this->test_editable($ov->prow));
+        if (has_iacr_button($this)) {
+          $extras["data-iacrcheckbox"] = true;
+        }
+        $cb = Ht::checkbox($this->formid, 1, !!$reqov->value, $extras);
         // For IACR options, we put out a button on the final versions.
-        if ($this->conf->opt["iacrType"] && iacr_paper_option($this)) {
-           echo_iacr_button($this->id, $pt->conf, $pt->prow->paperId);
+        if ($this->conf->opt["iacrType"] && has_iacr_button($this)) {
+           echo_iacr_button($this, $pt->conf, $pt->prow->paperId);
         }
         $pt->echo_editable_option_papt($this,
             '<span class="checkc">' . $cb . '</span>' . $pt->edit_title_html($this),
