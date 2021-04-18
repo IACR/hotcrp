@@ -38,7 +38,6 @@ function has_iacr_button(PaperOption $opt) {
            $opt->iacrSetting == IACRSetting.FINAL_PAPER ||
            $opt->iacrSetting == IACRSetting.SLIDES ||
            $opt->iacrSetting == IACRSetting.VIDEO));
-  })
 }
 
 /**
