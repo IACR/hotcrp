@@ -6,7 +6,7 @@
 // form. Options have a "iacrSetting" field in their json, which is serialized along with
 // other fields.
 //
-abstract class IACRSetting {
+class IACRSetting {
   const COPYRIGHT = 'copyright';
   const FINAL_PAPER = 'final_paper';
   const SLIDES = 'slides';
@@ -34,10 +34,10 @@ abstract class IACRSetting {
  */
 function has_iacr_button(PaperOption $opt) {
   return ($opt->iacrSetting != null &&
-          ($opt->iacrSetting == IACRSetting.COPYRIGHT ||
-           $opt->iacrSetting == IACRSetting.FINAL_PAPER ||
-           $opt->iacrSetting == IACRSetting.SLIDES ||
-           $opt->iacrSetting == IACRSetting.VIDEO));
+          ($opt->iacrSetting == IACRSetting::COPYRIGHT ||
+           $opt->iacrSetting == IACRSetting::FINAL_PAPER ||
+           $opt->iacrSetting == IACRSetting::SLIDES ||
+           $opt->iacrSetting == IACRSetting::VIDEO));
 }
 
 /**
