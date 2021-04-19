@@ -1,6 +1,6 @@
 <?php
 require 'lib.php';
-
+require_once '../finalLib.php';
 // This allows the submit server to update a paper to record
 // the final version was uploaded, or the slides were uploaded,
 // or a video was uploaded.
@@ -33,9 +33,15 @@ if (empty($_POST['action']) || $_POST['action'] !== 'finalPaper') {
   exit;
 }
 try {
-  // Note that the number "6" is the predefined option value defined in create_conf.py.
-  $Conf->q("INSERT INTO PaperOption set paperId=?,optionId=?,value=?", $_POST['paperId'], 6, 1);
-  echo json_encode(array("response" => "ok"));
+  // Note that the ID number is the predefined option value defined in create_conf.py.
+  // This used to be hard-coded.
+  $optionId = function getFinalPaperOptionId();
+  if (!$optionId) {
+    showError('Unable to update hotcrp: missing option');
+  } else {
+    $Conf->q("INSERT INTO PaperOption set paperId=?,optionId=?,value=?", $_POST['paperId'], $optionId, 1);
+    echo json_encode(array("response" => "ok"));
+  }
 } catch (PDOException $e) {
   showError('Database error: ' . $e->message());
 }

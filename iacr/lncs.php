@@ -1,11 +1,12 @@
 <?php
-include "../conf/options.php";
-include "../src/initweb.php";
-include "includes/header.inc";
-global $Opt;
+require_once "../conf/options.php";
+require_once "../src/initweb.php";
+require_once "includes/header.inc";
+global $Opt, $Conf;
+require_once "finalLib.php";
 $dbname = $Opt['dbName'];
 
-require "/var/www/util/hotcrp/hmac.php";
+require_once "/var/www/util/hotcrp/hmac.php";
 // The download URL for the zip archive of final papers.
 $url = "https://iacr.org/submit/api/?action=download&venue=" . $Opt['iacrType'] . "&shortName=" . $Opt['dbName'] . "&year=" . $Opt['year'];
 $url .= "&auth=" . get_hmac(get_conf_message($Opt['dbName'], $Opt['iacrType'], $Opt['year']));
@@ -21,10 +22,17 @@ $shortName = $Opt['shortName'];
 <?php
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
-  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId=6 is from create_conf.py when
+  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId is from create_conf.py when
   // the conference is first set up. It indicates that a final version was uploaded.
-  $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId=6)";
-  $stmt = $db->query($sql);
+  $optionId = getFinalPaperOptionId();
+  if (!$optionId) {
+    die('Missing iacrFinalPaperOption');
+    exit();
+  }
+  $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId = :optionId)";
+  $stmt = $db->prepare($sql);
+  $stmt->bindParam('optionId', $optionId);
+  $stmt->execute();
   $papers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   if ($papers && count($papers) > 0) {
     echo "<div class='alert alert-warning'><p>Warning: the following accepted papers appear to have not uploaded their final versions yet:</p><ul>";
