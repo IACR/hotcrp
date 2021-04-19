@@ -5,8 +5,7 @@ include "../src/initweb.php";
 include "includes/header.inc";
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $dbuser, $dbpassword);
-  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId=6 is from create_conf.py when
-  // the conference is first set up. It indicates that a final version was uploaded.
+  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper.
   $sql = "select paperId,title FROM copyright WHERE shortName=:dbName";
   $stmt = $db->prepare($sql);
   $stmt->bindParam(':dbName', $Opt['dbName']);

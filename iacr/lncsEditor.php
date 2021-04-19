@@ -1,6 +1,7 @@
 <?php
-include "../conf/options.php";
-include "../src/initweb.php";
+require_once "../conf/options.php";
+require_once "../src/initweb.php";
+require_once "finalLib.php";
 global $Opt;
 $dbName = $Opt['dbName'];
 $shortName = $Opt['shortName'];
@@ -151,10 +152,12 @@ $dbname = $Opt['dbName'];
 
 try {
   $db = new PDO("mysql:host=localhost;dbname=$dbname;charset=utf8", $Opt['dbUser'], $Opt['dbPassword']);
-  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId=6 is from create_conf.py when
-  // the conference is first set up. It indicates that a final version was uploaded.
-  $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId=6)";
-  $stmt = $db->query($sql);
+  // outcome>0 and timeWithdrawn = 0 corresponds to an accepted paper. optionId is determined when create_conf.py is
+  // used to set up the instance. It indicates that a final version was uploaded.
+  $optionId = getFinalPaperOptionId();
+  $sql = "select paperId,title from Paper where outcome>0 and timeWithdrawn = 0 and paperId not in (select paperId from PaperOption where optionId = :optionId)";
+  $stmt = $db->prepare($sql);
+  $stmt->bindParam(':optionId', $optionId);
   $papers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   if ($papers && count($papers) > 0) {
     echo "<div class='mt-5 alert alert-warning'><p>Warning: the following accepted papers appear to have not uploaded their final versions yet:</p><ul>";

@@ -1,7 +1,18 @@
 <?php
 require_once "../conf/options.php";
 require_once "../src/initweb.php";
-require "/var/www/util/hotcrp/hmac.php";
+require_once "/var/www/util/hotcrp/hmac.php";
+
+function getFinalPaperOptionId() {
+  global $Conf;
+  $paper_options = $Conf->options()->universal();
+  foreach($paper_options as $id => $papt) {
+    if ($papt->iacrSetting == 'final_paper') {
+      return $id;
+    }
+  }
+  return NULL;
+}
 
 function getLNCSFilename() {
   global $Me;
