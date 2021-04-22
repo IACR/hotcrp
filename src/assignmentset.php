@@ -1,6 +1,6 @@
 <?php
 // assignmentset.php -- HotCRP helper classes for assignments
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Assignable {
     /** @var string */
@@ -22,7 +22,7 @@ class Assignable {
     }
 }
 
-class AssignmentItem implements ArrayAccess {
+class AssignmentItem implements ArrayAccess, JsonSerializable {
     /** @var Assignable */
     public $before;
     /** @var ?Assignable */
@@ -38,6 +38,10 @@ class AssignmentItem implements ArrayAccess {
     function __construct($before, $existed) {
         $this->before = $before;
         $this->existed = $existed;
+    }
+    /** @return int */
+    function pid() {
+        return $this->before->pid;
     }
     /** @param string $offset
      * @return bool */
@@ -106,6 +110,21 @@ class AssignmentItem implements ArrayAccess {
     }
     function realize(AssignmentState $astate) {
         return call_user_func($astate->realizer($this->offsetGet("type")), $this, $astate);
+    }
+    function jsonSerialize() {
+        $x = [
+            "type" => $this->before->type,
+            "pid" => $this->before->pid,
+            "\$status" => $this->deleted
+                ? "DELETED"
+                : ($this->existed ? "INSERTED" : ($this->after ? "MODIFIED" : "UNCHANGED"))
+        ];
+        foreach (get_object_vars($this->after ?? $this->before) as $k => $v) {
+            if ($k !== "type" && $k !== "pid") {
+                $x[$k] = $v;
+            }
+        }
+        return $x;
     }
 }
 
@@ -520,8 +539,8 @@ class AssignerContacts {
     private $none_user;
     /** @var int */
     static private $next_fake_id = -10;
-    static public $query = "ContactInfo.contactId, firstName, lastName, unaccentedName, email, affiliation, collaborators, roles, contactTags";
-    static public $cdb_query = "contactDbId, firstName, lastName, email, affiliation, collaborators, 0 roles, '' contactTags";
+    static public $query = "ContactInfo.contactId, firstName, lastName, unaccentedName, email, affiliation, collaborators, roles, contactTags, primaryContactId";
+    static public $cdb_query = "contactDbId, firstName, lastName, email, affiliation, collaborators, 0 roles, '' contactTags, 0 primaryContactId";
     function __construct(Conf $conf, Contact $viewer) {
         global $Me;
         $this->conf = $conf;
@@ -630,7 +649,7 @@ class AssignerContacts {
     /** @return array<int,Contact> */
     function reviewer_users($pids) {
         $rset = $this->pc_users();
-        $result = $this->conf->qe("select " . AssignerContacts::$query . " from ContactInfo join PaperReview using (contactId) where (roles&" . Contact::ROLE_PC . ")=0 and paperId?a group by ContactInfo.contactId", $pids);
+        $result = $this->conf->qe("select " . AssignerContacts::$query . " from ContactInfo join PaperReview using (contactId) where (roles&" . Contact::ROLE_PC . ")=0 and paperId?a and reviewType>0 group by ContactInfo.contactId", $pids);
         while ($result && ($c = Contact::fetch($result, $this->conf))) {
             $rset[$c->contactId] = $this->store($c);
         }
@@ -1539,7 +1558,7 @@ class AssignmentSet {
             foreach ($pids as $p) {
                 $prow = $this->astate->prow($p);
                 if (!$prow) {
-                    $this->error(whyNotText($this->user->no_paper_whynot($p)));
+                    $this->error($this->user->no_paper_whynot($p)->unparse_html());
                 } else {
                     $ret = $this->apply_paper($prow, $contacts, $aparser, $req);
                     if ($ret === 1) {
@@ -1562,7 +1581,7 @@ class AssignmentSet {
         $err = $aparser->allow_paper($prow, $this->astate);
         if ($err !== true) {
             if ($err === false) {
-                $err = whyNotText($prow->make_whynot(["administer" => true]));
+                $err = $prow->make_whynot(["administer" => true])->unparse_html();
             }
             if (is_string($err)) {
                 $this->astate->paper_error($err);
@@ -1829,7 +1848,7 @@ class AssignmentSet {
         // Compute query last; unparse/account may show columns
         $q = $this->numjoin_assigned_pids(" ") ? : "NONE";
         if ($this->unparse_search) {
-            $q = "({$this->unparse_search}) THEN HEADING:none $q";
+            $q = "({$this->unparse_search}) THEN LEGEND:none $q";
         }
         foreach ($this->unparse_columns as $k => $v) {
             if ($v)
@@ -1914,7 +1933,7 @@ class AssignmentSet {
             $assigner->cleanup($this);
         }
         foreach ($this->cleanup_callbacks as $cb) {
-            call_user_func($cb[0], $this, $cb[1]);
+            call_user_func($cb[0], $cb[1]);
         }
         if (!empty($pids)) {
             $this->conf->update_automatic_tags(array_keys($pids), $this->assigned_types());

@@ -1,5 +1,5 @@
 // settings.js -- HotCRP JavaScript library for settings
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 function next_lexicographic_permutation(i, size) {
     var y = (i & -i) || 1, c = i + y, highbit = 1 << size;
@@ -32,16 +32,22 @@ $(function () { $(".js-settings-sub-nopapers").trigger("change"); });
 
 
 handle_ui.on("js-settings-option-type", function (event) {
-    var issel = /^(?:selector|radio)/.test(this.value);
-    foldup.call(this, null, {n: 4, f: !issel});
+    var v = this.value;
+    $(this).closest(".settings-opt").find(".has-optvt-condition").each(function () {
+        toggleClass(this, "hidden", this.getAttribute("data-optvt-condition").split(" ").indexOf(v) < 0);
+    });
 });
 
-handle_ui.on("js-settings-show-option-property", function () {
-    var prop = this.getAttribute("data-option-property"),
-        $j = $(this).closest(".settings-opt").find(".is-option-" + prop);
+handle_ui.on("js-settings-show-property", function () {
+    var prop = this.getAttribute("data-property"),
+        $j = $(this).closest(".settings-opt, .settings-rf").find(".is-property-" + prop);
     $j.removeClass("hidden");
-    if (document.activeElement === this)
-        $j.find("input, select, textarea").not("[type=hidden], :disabled").first().focus();
+    addClass(this, "btn-disabled");
+    tooltip.erase.call(this);
+    if (document.activeElement === this || document.activeElement === document.body) {
+        var $jx = $j.find("input, select, textarea").not("[type=hidden], :disabled");
+        $jx.length && setTimeout(function () { focus_at($jx[0]); }, 0);
+    }
 });
 
 handle_ui.on("js-settings-option-move", function (event) {
@@ -80,6 +86,7 @@ handle_ui.on("js-settings-option-new", function (event) {
     var odiv = $(h).appendTo("#settings_opts");
     odiv.find(".need-autogrow").autogrow();
     odiv.find(".need-tooltip").each(tooltip);
+    odiv.find(".js-settings-option-type").change();
     $("#optn_" + next)[0].focus();
     settings_option_positions();
 });
@@ -242,12 +249,10 @@ function options_to_text(fieldj) {
     var i, t = [];
     if (!fieldj.options)
         return "";
-    for (i = 0; i != fieldj.options.length; ++i)
+    for (i = 0; i !== fieldj.options.length; ++i)
         t.push(unparse_option(fieldj, i + 1) + ". " + fieldj.options[i]);
     if (fieldj.option_letter)
         t.reverse();
-    if (fieldj.allow_empty)
-        t.push("No entry");
     if (t.length)
         t.push(""); // get a trailing newline
     return t.join("\n");
@@ -263,113 +268,90 @@ function option_class_prefix(fieldj) {
 function fill_order() {
     var i, c = $("#reviewform_container")[0], n;
     for (i = 1, n = c.firstChild; n; ++i, n = n.nextSibling)
-        $(n).find(".rf_position").val(i);
+        $(n).find(".rf-position").val(i);
     c = $("#reviewform_removedcontainer")[0];
     for (n = c.firstChild; n; n = n.nextSibling)
-        $(n).find(".rf_position").val(0);
+        $(n).find(".rf-position").val(0);
     form_highlight("#settingsform");
 }
 
-function fill_field1(sel, value, order) {
+function fold_property(fid, property, $j, hideval) {
+    var $f = $("#rf_" + fid), hidden = true;
+    for (var i = 0; i !== $j.length; ++i) {
+        hidden = hidden && !input_differs($j[i]) && $($j[i]).val() == hideval[i];
+    }
+    $f.find(".is-property-" + property).toggleClass("hidden", hidden);
+    $f.find(".js-settings-show-property[data-property=\"".concat(property, "\"]")).toggleClass("btn-disabled", !hidden);
+}
+
+function fold_properties(fid) {
+    fold_property(fid, "description", $("#rf_description_" + fid), [""]);
+    fold_property(fid, "editing", $("#rf_ec_" + fid), ["all"]);
+}
+
+function fill_field_control(sel, value, order) {
     var $j = $(sel).val(value);
     order && $j.attr("data-default-value", value);
 }
 
-function fill_field(fid, fieldj, order) {
+function fill_field($f, fid, fieldj, order) {
     fieldj = fieldj || original[fid] || {};
-    fill_field1("#rf_" + fid + "_name", fieldj.name || "", order);
-    order && fill_field1("#rf_" + fid + "_position", fieldj.position || 0, order);
-    fill_field1("#rf_" + fid + "_description", fieldj.description || "", order);
-    fill_field1("#rf_" + fid + "_visibility", fieldj.visibility || "pc", order);
-    fill_field1("#rf_" + fid + "_options", options_to_text(fieldj), order);
-    fill_field1("#rf_" + fid + "_colorsflipped", fieldj.option_letter ? "1" : "", order);
-    fill_field1("#rf_" + fid + "_colors", option_class_prefix(fieldj), order);
-    fill_field1("#rf_" + fid + "_rounds", (fieldj.round_list || ["all"]).join(" "), order);
+    fill_field_control("#rf_name_" + fid, fieldj.name || "", order);
+    fill_field_control("#rf_description_" + fid, fieldj.description || "", order);
+    fill_field_control("#rf_visibility_" + fid, fieldj.visibility || "pc", order);
+    fill_field_control("#rf_options_" + fid, options_to_text(fieldj), order);
+    fill_field_control("#rf_required_" + fid, fieldj.required ? "1" : "0", order);
+    fill_field_control("#rf_colorsflipped_" + fid, fieldj.option_letter ? "1" : "", order);
+    fill_field_control("#rf_colors_" + fid, option_class_prefix(fieldj), order);
+    var ec, ecs = fieldj.exists_if != null ? fieldj.exists_if : "";
+    if (ecs === "" || ecs.toLowerCase() === "all") {
+        ec = "all";
+    } else if (/^round:[a-zA-Z][-_a-zA-Z0-9]*$/.test(ecs)
+               && $("#rf_ec_" + fid + " > option[value=\"" + ecs + "\"]").length) {
+        ec = ecs;
+    } else {
+        ec = "custom";
+    }
+    fill_field_control("#rf_ec_" + fid, ec, order);
+    fill_field_control("#rf_ecs_" + fid, ecs, order);
     $("#rf_" + fid + " textarea").trigger("change");
-    $("#rf_" + fid + "_view").html("").append(create_field_view(fid, fieldj));
-    $("#remove_" + fid).html(fieldj.has_any_nonempty ? "Delete from form and current reviews" : "Delete from form");
+    $("#rf_" + fid + "_view").html("").append(create_field_view(fieldj));
+    $("#rf_" + fid + "_delete").attr("aria-label", fieldj.has_any_nonempty ? "Delete from form and current reviews" : "Delete from form");
+    order && fill_field_control("#rf_position_" + fid, fieldj.position || 0, order);
+    fold_properties(fid);
     return false;
 }
 
 function remove() {
-    var $f = $(this).closest(".settings-revfield"),
+    var $f = $(this).closest(".settings-rf"),
         fid = $f.attr("data-revfield");
-    $f.find(".rf_position").val(0);
+    $f.find(".rf-position").val(0);
     $f.detach().hide().appendTo("#reviewform_removedcontainer");
-    $("#reviewform_removedcontainer").append('<div id="revfieldremoved_' + fid + '" class="settings-revfieldremoved"><span class="settings-revfn" style="text-decoration:line-through">' + escape_entities($f.find("#rf_" + fid + "_name").val()) + '</span>&nbsp; (field removed)</div>');
+    $("#reviewform_removedcontainer").append('<div id="revfieldremoved_' + fid + '" class="settings-rf-deleted"><span class="settings-revfn" style="text-decoration:line-through">' + escape_entities($f.find("#rf_name_" + fid).val()) + '</span>&nbsp; (field removed)</div>');
     fill_order();
 }
 
-var revfield_template = '<div id="rf_$" class="settings-revfield f-contain has-fold fold2c errloc_$" data-revfield="$">\
-<a href="" class="q settings-field-folder">\
-<span class="expander"><span class="in0 fx2">▼</span><span class="in1 fn2 need-tooltip" data-tooltip="Edit field" data-tooltip-dir="r">▶</span></span>\
-</a>\
-<div id="rf_$_view" class="settings-revfieldview fn2 ui js-foldup"></div>\
-<div id="rf_$_edit" class="settings-revfieldedit fx2">\
-  <div class="f-i">\
-    <input name="rf_$_name" id="rf_$_name" type="text" size="50" style="font-weight:bold" placeholder="Field name" />\
-  </div>\
-  <div class="f-horizontal">\
-    <div class="f-i">\
-      <label for="rf_$_visibility">Visibility</label>\
-      <span class="select"><select name="rf_$_visibility" id="rf_$_visibility" class="rf_visibility">\
-        <option value="au">Visible to authors</option>\
-        <option value="pc">Hidden from authors</option>\
-        <option value="audec">Hidden from authors until decision</option>\
-        <option value="admin">Administrators only</option>\
-      </select></span>\
-    </div>\
-    <div class="f-i reviewrow_options">\
-      <label for="rf_$_colors">Colors</label>\
-      <span class="select"><select name="rf_$_colors" id="rf_$_colors" class="rf_colors"></select></span>\
-<input type="hidden" name="rf_$_colorsflipped" id="rf_$_colorsflipped" value="" />\
-    </div>\
-    <div class="f-i reviewrow_rounds">\
-      <label for="rf_$_rounds">Rounds</label>\
-      <span class="select"><select name="rf_$_rounds" id="rf_$_rounds" class="rf_rounds"></select></span>\
-    </div>\
-  </div>\
-  <div class="f-i">\
-    <label for="rf_$_description">Description</label>\
-    <textarea name="rf_$_description" id="rf_$_description" class="w-text need-tooltip" rows="2" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
-  <div class="f-i reviewrow_options">\
-    <label for="rf_$_options">Choices</label>\
-    <textarea name="rf_$_options" id="rf_$_options" class="w-text need-tooltip" rows="6" data-tooltip-info="settings-review-form" data-tooltip-type="focus"></textarea></div>\
-  <div class="f-i">\
-    <button id="rf_$_moveup" class="btn-sm rf_moveup" type="button">Move up</button><span class="sep"></span>\
-<button id="rf_$_movedown" class="btn-sm rf_movedown" type="button">Move down</button><span class="sep"></span>\
-<button id="rf_$_remove" class="btn-sm rf_remove" type="button">Delete from form</button><span class="sep"></span>\
-<input type="hidden" name="rf_$_position" id="rf_$_position" class="rf_position" value="0" />\
-  </div>\
-</div></div>';
-
-var revfieldview_template = '<div style="line-height:1.35">\
-<span class="settings-revfn"></span>\
-<span class="settings-revrounds"></span>\
-<span class="field-visibility"></span>\
-<div class="settings-revdata"></div>\
-</div>';
-
 tooltip.add_builder("settings-review-form", function (info) {
+    var m = this.name.match(/^rf_(.*)_[a-z]\d+$/);
     return $.extend({
-        dir: "h", content: $(/^description/.test(this.name) ? "#review_form_caption_description" : "#review_form_caption_options").html()
+        anchor: "w", content: $("#settings-review-form-caption-" + m[1]).html(), className: "gray"
     }, info);
 });
 
 tooltip.add_builder("settings-option", function (info) {
-    var x = "#option_caption_options";
+    var x = "#option_caption_choices";
     if (/^optn/.test(this.name))
         x = "#option_caption_name";
     else if (/^optecs/.test(this.name))
         x = "#option_caption_condition_search";
-    return $.extend({dir: "h", content: $(x).html(), className: "gray"}, info);
+    return $.extend({anchor: "h", content: $(x).html(), className: "gray"}, info);
 });
 
 function option_value_html(fieldj, value) {
     var t, n;
     if (!value || value < 0)
         return ["", "No entry"];
-    t = '<span class="rev_num sv';
+    t = '<strong class="rev_num sv';
     if (value <= fieldj.options.length) {
         if (fieldj.options.length > 1)
             n = Math.floor((value - 1) * 8 / (fieldj.options.length - 1) + 1.5);
@@ -377,12 +359,12 @@ function option_value_html(fieldj, value) {
             n = 1;
         t += " " + (fieldj.option_class_prefix || "sv") + n;
     }
-    return [t + '">' + unparse_option(fieldj, value) + '.</span>',
+    return [t + '">' + unparse_option(fieldj, value) + '.</strong>',
             escape_entities(fieldj.options[value - 1] || "Unknown")];
 }
 
 function view_unfold(event) {
-    var $f = $(event.target).closest(".settings-revfield");
+    var $f = $(event.target).closest(".settings-rf");
     if ($f.hasClass("fold2c") || !form_differs($f))
         foldup.call(event.target, event, {n: 2});
     return false;
@@ -401,38 +383,46 @@ function field_visibility_text(visibility) {
         return "";
 }
 
-function create_field_view(fid, fieldj) {
-    var $f = $(revfieldview_template.replace(/\$/g, fid)), $x, i, j, x;
-    $f.find(".settings-revfn").text(fieldj.name || "<unnamed>");
+function create_field_view(fieldj) {
+    var hc = new HtmlCollector;
+    hc.push('<div>', '</div>');
 
-    $x = $f.find(".field-visibility");
-    x = field_visibility_text(fieldj.visibility);
-    x ? $x.text(x) : $x.remove();
+    hc.push('<h3 class="revet">', '</h3>');
+    hc.push('<label class="revfn'.concat(fieldj.required ? " field-required" : "", '">', escape_entities(fieldj.name || "<unnamed>"), '</label>'));
+    var t = field_visibility_text(fieldj.visibility), i;
+    if (t)
+        hc.push('<div class="field-visibility">'.concat(t, '</div>'));
+    hc.pop();
 
-    x = "";
-    if ((fieldj.round_list || []).length == 1)
-        x = "(" + fieldj.round_list[0] + " only)";
-    else if ((fieldj.round_list || []).length > 1)
-        x = "(" + commajoin(fieldj.round_list) + ")";
-    $x = $f.find(".settings-revrounds");
-    x ? $x.text(x) : $x.remove();
+    if (fieldj.exists_if && /^round:[a-zA-Z][-_a-zA-Z0-9]*$/.test(fieldj.exists_if)) {
+        hc.push('<p class="feedback is-warning">Present on ' + fieldj.exists_if.substring(6) + ' reviews</p>');
+    } else if (fieldj.exists_if) {
+        hc.push('<p class="feedback is-warning">Present on reviews matching “' + escape_entities(fieldj.exists_if) + '”</p>');
+    }
 
+    if (fieldj.description)
+        hc.push('<div class="field-d">'.concat(fieldj.description, '</div>'));
+
+    hc.push('<div class="revev">', '</div>');
     if (fieldj.options) {
-        x = [option_value_html(fieldj, 1).join(" "),
-             option_value_html(fieldj, fieldj.options.length).join(" ")];
-        fieldj.option_letter && x.reverse();
+        for (i = 0; i !== fieldj.options.length; ++i) {
+            var n = fieldj.option_letter ? fieldj.options.length - i : i + 1;
+            hc.push('<label class="checki"><span class="checkc"><input type="radio" disabled></span>'.concat(option_value_html(fieldj, n).join(" "), '</label>'));
+        }
+        if (!fieldj.required) {
+            hc.push('<label class="checki g"><span class="checkc"><input type="radio" disabled></span>No entry</label>');
+        }
     } else
-        x = ["Text field"];
-    $f.find(".settings-revdata").html(x.join(" … "));
+        hc.push('<textarea class="w-text" rows="2" disabled>(Text field)</textarea>');
 
-    return $f;
+    return $(hc.render());
 }
 
 function move_field(event) {
-    var isup = $(this).hasClass("rf_moveup"),
-        $f = $(this).closest(".settings-revfield").detach(),
+    var isup = $(this).hasClass("moveup"),
+        $f = $(this).closest(".settings-rf").detach(),
         fid = $f.attr("data-revfield"),
-        pos = $f.find(".rf_position").val() | 0,
+        pos = $f.find(".rf-position").val() | 0,
         $c = $("#reviewform_container")[0], $n, i;
     for (i = 1, $n = $c.firstChild;
          $n && i < (isup ? pos - 1 : pos + 1);
@@ -443,7 +433,7 @@ function move_field(event) {
 }
 
 function append_field(fid, pos) {
-    var $f = $("#rf_" + fid), i, $j;
+    var $f = $("#rf_" + fid), i, $j, $tmpl = $("#rf_template");
     $("#revfieldremoved_" + fid).remove();
 
     if ($f.length) {
@@ -452,21 +442,21 @@ function append_field(fid, pos) {
         return;
     }
 
-    $f = $(revfield_template.replace(/\$/g, fid));
+    $f = $($tmpl.html().replace(/\$/g, fid));
 
     if (fid.charAt(0) === "s") {
-        $j = $f.find(".rf_colors");
+        $j = $f.find("select[name^=\"rf_colors_\"]");
         for (i = 0; i < colors.length; i += 2)
             $j.append("<option value=\"" + colors[i] + "\">" + colors[i+1] + "</option>");
     } else
-        $f.find(".reviewrow_options").remove();
+        $f.find(".is-property-options").remove();
 
     var rnames = [];
     for (i in hotcrp_status.revs || {})
         rnames.push(i);
     if (rnames.length > 1) {
         var v, j, text;
-        $j = $f.find(".rf_rounds");
+        $j = $f.find("select[name$=\"rounds\"]");
         for (i = 0; i < (1 << rnames.length) - 1;
              i = next_lexicographic_permutation(i, rnames.length)) {
             text = [];
@@ -484,59 +474,13 @@ function append_field(fid, pos) {
         $f.find(".reviewrow_rounds").remove();
     }
 
-    $f.find(".rf_remove").on("click", remove);
-    $f.find(".rf_moveup, .rf_movedown").on("click", move_field);
+    $f.find(".js-settings-rf-delete").on("click", remove);
+    $f.find(".js-settings-rf-move").on("click", move_field);
     $f.appendTo("#reviewform_container");
 
-    fill_field(fid, original[fid], true);
+    fill_field($f, fid, original[fid], true);
     $f.find(".need-tooltip").each(tooltip);
 }
-
-function rfs(data) {
-    var i, fid, $j, m;
-    original = data.fields;
-    samples = data.samples;
-    stemplate = data.stemplate;
-    ttemplate = data.ttemplate;
-
-    fieldorder = [];
-    for (fid in original)
-        if (original[fid].position)
-            fieldorder.push(fid);
-    fieldorder.sort(function (a, b) {
-        return original[a].position - original[b].position;
-    });
-
-    // construct form
-    for (i = 0; i != fieldorder.length; ++i)
-        append_field(fieldorder[i], i + 1);
-    $("#reviewform_container").on("click", "a.settings-field-folder", view_unfold);
-    $("#reviewform_container").on("unfold", ".settings-revfield", function (evt, opts) {
-        $(this).find("textarea").css("height", "auto").autogrow();
-        $(this).find("input[type=text]").autogrow();
-    });
-
-    // highlight errors, apply request
-    for (i in data.req || {}) {
-        if (!$("#" + i).length
-            && (m = i.match(/^(?:rf_|)([st]\d+)(?:|_.*)$/))) {
-            add_field(m[1]);
-        }
-        $j = $("#" + i);
-        if (!text_eq($j.val(), data.req[i])) {
-            $j.val(data.req[i]);
-            foldup.call($j[0], null, {n: 2, f: false});
-        }
-    }
-    for (i in data.errf || {}) {
-        $j = $("#" + i).closest(".f-i");
-        if (!$j.length)
-            $j = $(".errloc_" + i);
-        $j.addClass("has-error");
-        foldup.call($j[0], null, {n: 2, f: false});
-    }
-    form_highlight("#settingsform");
-};
 
 function add_field(fid) {
     fieldorder.push(fid);
@@ -544,53 +488,91 @@ function add_field(fid) {
     original[fid].position = fieldorder.length;
     append_field(fid, fieldorder.length);
     foldup.call($("#rf_" + fid)[0], null, {n: 2, f: false});
-    $("#rf_" + fid + "_position").attr("data-default-value", "0");
+    $("#rf_position_" + fid).attr("data-default-value", "0");
     form_highlight("#settingsform");
     return true;
 }
+
+function rfs(data) {
+    var i, fid, $j, m, elt, entryi;
+    original = data.fields;
+    samples = data.samples;
+    stemplate = data.stemplate;
+    ttemplate = data.ttemplate;
+
+    fieldorder = [];
+    for (fid in original) {
+        if (original[fid].position)
+            fieldorder.push(fid);
+    }
+    fieldorder.sort(function (a, b) {
+        return original[a].position - original[b].position;
+    });
+
+    // construct form
+    for (i = 0; i != fieldorder.length; ++i) {
+        append_field(fieldorder[i], i + 1);
+    }
+    $("#reviewform_container").on("click", "a.settings-field-folder", view_unfold);
+    $("#reviewform_container").on("unfold", ".settings-rf", function (evt, opts) {
+        $(this).find("textarea").css("height", "auto").autogrow();
+        $(this).find("input[type=text]").autogrow();
+    });
+
+    // highlight errors, apply request
+    for (i in data.req || {}) {
+        m = i.match(/^rf_(?:[a-z]*_|)([st]\d+)$/);
+        if (m) {
+            $j = $("#" + i);
+            if (!$j[0]) {
+                add_field(m[1]);
+                $j = $("#" + i);
+            }
+            if ($j[0] && !text_eq($j.val(), data.req[i])) {
+                $j.val(data.req[i]);
+                foldup.call($j[0], null, {n: 2, f: false});
+                fold_properties(m[1]);
+            }
+        }
+    }
+    for (i in data.errf || {}) {
+        elt = document.getElementById(i);
+        entryi = elt.closest(".entryi") || elt;
+        removeClass(entryi, "hidden");
+        addClass(entryi, "has-error");
+        foldup.call(entryi, null, {n: 2, f: false});
+    }
+    for (i in data.message_list || []) {
+        m = data.message_list[i];
+        if (m.field
+            && m.message
+            && (elt = document.getElementById(m.field))
+            && (entryi = elt.closest(".entry"))) {
+            $(render_feedback(m.message, m.status)).prependTo(entryi);
+        }
+    }
+    form_highlight("#settingsform");
+};
 
 function add_dialog(fid, focus) {
     var $d, template = 0, has_options = fid.charAt(0) === "s";
     function render_template() {
         var $dtn = $d.find(".newreviewfield-template-name"),
-            $dt = $d.find(".newreviewfield-template"),
-            hc = new HtmlCollector;
+            $dt = $d.find(".newreviewfield-template");
         if (!template || !samples[template - 1] || !samples[template - 1].options != !has_options) {
             template = 0;
             $dtn.text("(Blank)");
+            $dt.html("");
         } else {
             var s = samples[template - 1];
-            $d.find(".newreviewfield-template-name").text(s.selector);
-            var hc = new HtmlCollector;
-            hc.push('<div><span class="settings-revfn">' + text_to_html(s.name) + '</span>', '<hr class="c" /></div>');
-            var x = field_visibility_text(s.visibility);
-            if (x)
-                hc.push('<span class="field-visibility">' + text_to_html(x) + '</span>');
-            hc.pop();
-            hc.push('<div class="settings-revhint">' + text_to_html(s.description || "") + '</div>');
-            if (s.options) {
-                x = [];
-                for (var i = 1; i <= s.options.length; ++i)
-                    x.push(i);
-                if (s.option_letter)
-                    x.reverse();
-                hc.push('<table class="settings-revoptions"><tbody>', '</tbody></table>');
-                for (var i = 0; i < x.length; ++i) {
-                    var ov = option_value_html(s, x[i]);
-                    hc.push('<tr><td class="nw">' + ov[0] + ' </td>' +
-                            '<td>' + ov[1] + '</td></tr>');
-                }
-                if (s.allow_empty)
-                    hc.push('<tr><td colspan="2">No entry</td></tr>');
-                hc.pop();
-            }
+            $dtn.text(s.selector);
+            $dt.html(create_field_view(s));
         }
-        $dt.html(hc.render());
     }
     function submit(event) {
         add_field(fid);
-        template && fill_field(fid, samples[template - 1], false);
-        $("#rf_" + fid + "_name")[0].focus();
+        template && fill_field($("#rf_" + fid), fid, samples[template - 1], false);
+        $("#rf_name_" + fid)[0].focus();
         $d.close();
         event.preventDefault();
     }

@@ -1,6 +1,6 @@
 <?php
 // ht.php -- HotCRP HTML helper functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Ht {
     public static $img_base = "";
@@ -16,13 +16,14 @@ class Ht {
     const ATTR_BOOL = 2;
     const ATTR_BOOLTEXT = 3;
     const ATTR_NOEMPTY = 4;
+    const ATTR_SPACESEP = 16;
     private static $_attr_type = [
         "accept-charset" => self::ATTR_SKIP,
         "action" => self::ATTR_SKIP,
         "async" => self::ATTR_BOOL,
         "autofocus" => self::ATTR_BOOL,
         "checked" => self::ATTR_BOOL,
-        "class" => self::ATTR_NOEMPTY,
+        "class" => self::ATTR_NOEMPTY | self::ATTR_SPACESEP,
         "data-default-checked" => self::ATTR_BOOLTEXT,
         "defer" => self::ATTR_BOOL,
         "disabled" => self::ATTR_BOOL,
@@ -44,7 +45,11 @@ class Ht {
         $x = "";
         if ($js) {
             foreach ($js as $k => $v) {
-                $t = self::$_attr_type[$k] ?? null;
+                $tf = self::$_attr_type[$k] ?? 0;
+                $t = $tf & 15;
+                if (is_array($v) && ($tf & self::ATTR_SPACESEP) !== 0) {
+                    $v = join(" ", $v);
+                }
                 if ($v === null
                     || $t === self::ATTR_SKIP
                     || ($v === false && $t !== self::ATTR_BOOLTEXT)
@@ -378,7 +383,7 @@ class Ht {
             . '>' . htmlspecialchars($value) . '</textarea>';
     }
 
-    static function actions($actions, $js = array(), $extra_text = "") {
+    static function actions($actions, $js = []) {
         if (empty($actions)) {
             return "";
         }
@@ -404,7 +409,7 @@ class Ht {
                 $t .= '</div>';
             }
         }
-        return $t . $extra_text . "</div>\n";
+        return $t . "</div>\n";
     }
 
     /** @param string|list<string> $html
@@ -598,7 +603,15 @@ class Ht {
      * @param int|string $status */
     static function msg($msg, $status) {
         if (is_int($status)) {
-            $status = $status >= 2 ? "error" : ($status > 0 ? "warning" : "info");
+            if ($status >= 2) {
+                $status = "error";
+            } else if ($status > 0) {
+                $status = "warning";
+            } else if ($status === -3) {
+                $status = "confirm";
+            } else {
+                $status = "info";
+            }
         }
         if (substr($status, 0, 1) === "x") {
             $status = substr($status, 1);
@@ -606,42 +619,47 @@ class Ht {
         if ($status === "merror") {
             $status = "error";
         }
-        if (is_array($msg)) {
-            $msg = join("", array_map(function ($x) {
-                if (str_starts_with($x, "<p") || str_starts_with($x, "<div"))
-                    return $x;
-                else
-                    return "<p>{$x}</p>";
-            }, $msg));
-        } else if ($msg !== ""
-                   && !str_starts_with($msg, "<p")
-                   && !str_starts_with($msg, "<div")) {
-            $msg = "<p>{$msg}</p>";
+        $mx = "";
+        foreach (is_array($msg) ? $msg : [$msg] as $x) {
+            if ($x !== "") {
+                if ($x[0] === "<"
+                    && (str_starts_with($x, "<p")
+                        || str_starts_with($x, "<div")
+                        || str_starts_with($x, "<form"))) {
+                    $mx .= $x;
+                } else {
+                    $mx .= "<p>{$x}</p>";
+                }
+            }
         }
-        if ($msg === "") {
+        if ($mx !== "") {
+            return "<div class=\"msg msg-{$status}\">{$mx}</div>";
+        } else {
             return "";
         }
-        return '<div class="msg msg-' . $status . '">' . $msg . '</div>';
     }
 
 
     /** @param string $field */
-    static function control_class($field, $rest = "") {
+    static function control_class($field, $rest = "", $prefix = "has-") {
         if (self::$_msgset) {
-            return self::$_msgset->control_class($field, $rest);
+            return self::$_msgset->control_class($field, $rest, $prefix);
         } else {
             return $rest;
         }
     }
+    /** @return MessageSet */
+    static function message_set() {
+        self::$_msgset || (self::$_msgset = new MessageSet);
+        return self::$_msgset;
+    }
     /** @param string $field */
     static function error_at($field, $msg = "") {
-        self::$_msgset || (self::$_msgset = new MessageSet);
-        self::$_msgset->error_at($field, $msg);
+        self::message_set()->error_at($field, $msg);
     }
     /** @param string $field */
     static function warning_at($field, $msg = "") {
-        self::$_msgset || (self::$_msgset = new MessageSet);
-        self::$_msgset->warning_at($field, $msg);
+        self::message_set()->warning_at($field, $msg);
     }
     /** @param string $field */
     static function problem_status_at($field) {
@@ -654,11 +672,15 @@ class Ht {
     }
     /** @param string $field
      * @return string */
-    static function render_feedback_at($field) {
+    static function feedback_at($field) {
         $t = "";
         foreach (self::message_list_at($field) as $mx) {
             $t .= '<p class="' . MessageSet::status_class($mx->status, "feedback", "is-") . '">' . $mx->message . '</p>';
         }
         return $t;
+    }
+    /** @deprecated */
+    static function render_feedback_at($field) {
+        return self::feedback_at($field);
     }
 }

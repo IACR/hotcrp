@@ -1,6 +1,6 @@
 <?php
 // src/partials/p_home.php -- HotCRP home page partials
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Home_Partial {
     private $_nh2 = 0;
@@ -130,8 +130,8 @@ class Home_Partial {
         }
     }
     static function render_info_accepted(Contact $user) {
-        assert($user->conf->can_all_author_view_decision());
-        if ($user->conf->can_all_author_view_decision()) {
+        assert($user->conf->time_all_author_view_decision());
+        if ($user->conf->time_all_author_view_decision()) {
             list($n, $nyes) = $user->conf->count_submitted_accepted();
             echo '<li>', $user->conf->_("%d papers accepted out of %d submitted.", $nyes, $n), '</li>';
         }
@@ -172,19 +172,19 @@ class Home_Partial {
             return;
         }
 
-        echo '<div class="homegrp" id="homelist">',
-            Ht::form($conf->hoturl("search"), ["method" => "get"]),
-            $this->render_h2_home('<a class="qq" href="' . $conf->hoturl("search") . '" id="homesearch-label">Search</a>');
-
-        $tOpt = PaperSearch::search_types($user);
-        echo Ht::entry("q", (string) $qreq->q,
-                       array("id" => "homeq", "size" => 32, "title" => "Enter paper numbers or search terms",
-                             "class" => "papersearch need-suggest", "placeholder" => "(All)",
-                             "aria-labelledby" => "homesearch-label")),
-            " &nbsp;in&nbsp; ",
-            PaperSearch::searchTypeSelector($tOpt, key($tOpt)), "
-        &nbsp; ", Ht::submit("Search"),
-            "</form></div>\n";
+        $tOpt = PaperSearch::viewable_limits($user);
+        echo '<div class="homegrp d-table" id="homelist">',
+            $this->render_h2_home('<a class="qq" href="' . $conf->hoturl("search") . '" id="homesearch-label">Search</a>'),
+            Ht::form($conf->hoturl("search"), ["method" => "get", "class" => "form-basic-search"]),
+            Ht::entry("q", (string) $qreq->q, [
+                "id" => "homeq", "size" => 32, "title" => "Enter paper numbers or search terms",
+                "class" => "papersearch need-suggest flex-grow-1",
+                "placeholder" => "(All)", "spellcheck" => false,
+                "aria-labelledby" => "homesearch-label"
+            ]), '<div class="form-basic-search-in"> in ',
+            PaperSearch::limit_selector($tOpt, key($tOpt), ["class" => "ml-1"]),
+            Ht::submit("Search", ["class" => "ml-3"]),
+            "</div></form></div>\n";
     }
 
     function render_reviews(Contact $user, Qrequest $qreq, $gx) {
@@ -293,16 +293,16 @@ class Home_Partial {
                     $rname .= " ";
                 }
                 if ($conf->time_review($round, $user->isPC, false)) {
-                    $dn = $conf->review_deadline($round, $user->isPC, false);
+                    $dn = $conf->review_deadline_name($round, $user->isPC, false);
                     if ($conf->setting($dn) <= 0) {
-                        $dn = $conf->review_deadline($round, $user->isPC, true);
+                        $dn = $conf->review_deadline_name($round, $user->isPC, true);
                     }
                     $d = $conf->unparse_setting_time_span($dn);
                     if ($d != "N/A") {
                         echo ' <em class="deadline">Please submit your ', $rname, ($this->_my_rinfo->num_needs_submit == 1 ? "review" : "reviews"), " by $d.</em><br>\n";
                     }
                 } else if ($conf->time_review($round, $user->isPC, true)) {
-                    $dn = $conf->review_deadline($round, $user->isPC, false);
+                    $dn = $conf->review_deadline_name($round, $user->isPC, false);
                     $d = $conf->unparse_setting_time_span($dn);
                     echo ' <em class="deadline"><strong class="overdue">', $rname, ($rname ? "reviews" : "Reviews"), ' are overdue.</strong> They were requested by ', $d, ".</em><br>\n";
                 } else {
@@ -310,7 +310,7 @@ class Home_Partial {
                 }
             }
         } else if ($user->isPC && $user->can_review_any()) {
-            $dn = $conf->review_deadline(null, $user->isPC, false);
+            $dn = $conf->review_deadline_name(null, $user->isPC, false);
             $d = $conf->unparse_setting_time_span($dn);
             if ($d != "N/A") {
                 echo " <em class=\"deadline\">The review deadline is $d.</em><br>\n";
@@ -337,7 +337,7 @@ class Home_Partial {
             echo $sep, '<a href="', $conf->hoturl("search", "q=lead%3Ame"), '" class="nw">Your discussion leads</a>';
             $sep = $xsep;
         }
-        if ($conf->deadlinesAfter("rev_open") || $user->privChair) {
+        if ($conf->time_after_setting("rev_open") || $user->privChair) {
             echo $sep, '<a href="', $conf->hoturl("offline"), '">Offline reviewing</a>';
             $sep = $xsep;
         }
@@ -362,10 +362,10 @@ class Home_Partial {
 
             $a = [];
             if ($row[0]) {
-                $a[] = Ht::link(plural($row[0], "positive rating"), $conf->hoturl("search", "q=re:me+rate:good"));
+                $a[] = Ht::link(plural($row[0], "positive rating"), $conf->hoturl("search", "q=rate:good:me"));
             }
             if ($row[1]) {
-                $a[] = Ht::link(plural($row[1], "negative rating"), $conf->hoturl("search", "q=re:me+rate:bad"));
+                $a[] = Ht::link(plural($row[1], "negative rating"), $conf->hoturl("search", "q=rate:bad:me"));
             }
             if (!empty($a)) {
                 echo '<div class="hint g">Your reviews have received ', commajoin($a), '.</div>';
@@ -444,7 +444,7 @@ class Home_Partial {
     function render_submissions(Contact $user, Qrequest $qreq, $gx) {
         $conf = $user->conf;
         if (!$user->is_author()
-            && $conf->timeStartPaper() <= 0
+            && $conf->time_start_paper() <= 0
             && !$user->privChair
             && $user->is_reviewer())
             return;
@@ -452,7 +452,7 @@ class Home_Partial {
         echo '<div class="homegrp" id="homeau">',
             $this->render_h2_home($user->is_author() ? "Your Submissions" : "Submissions");
 
-        $startable = $conf->timeStartPaper();
+        $startable = $conf->time_start_paper();
         if ($startable && !$user->has_email()) {
             echo '<em class="deadline">', $conf->unparse_setting_deadline_span("sub_reg"), "</em><br />\n<small>You must sign in to start a submission.</small>";
         } else if ($startable || $user->privChair) {
@@ -473,15 +473,15 @@ class Home_Partial {
 
         $deadlines = array();
         if ($plist && $plist->has("need_submit")) {
-            if (!$conf->timeFinalizePaper()) {
+            if (!$conf->time_finalize_paper(null)) {
                 // Be careful not to refer to a future deadline; perhaps an admin
                 // just turned off submissions.
-                if ($conf->deadlinesBetween("", "sub_sub", "sub_grace")) {
+                if ($conf->time_between_settings("", "sub_sub", "sub_grace") > 0) {
                     $deadlines[] = "The site is not open for submissions at the moment.";
                 } else {
                     $deadlines[] = 'The <a href="' . $conf->hoturl("deadlines") . '">submission deadline</a> has passed.';
                 }
-            } else if (!$conf->time_edit_paper()) {
+            } else if (!$conf->time_edit_paper(null)) {
                 $deadlines[] = 'The <a href="' . $conf->hoturl("deadlines") . '">update deadline</a> has passed, but you can still submit.';
                 $time = $conf->unparse_setting_time_span("sub_sub", " to submit papers");
                 if ($time != "N/A") {
@@ -495,7 +495,7 @@ class Home_Partial {
             }
         }
         if (!$startable && !count($deadlines)) {
-            if ($conf->deadlinesAfter("sub_open")) {
+            if ($conf->time_after_setting("sub_open")) {
                 $deadlines[] = 'The <a href="' . $conf->hoturl("deadlines") . '">deadline</a> for registering submissions has passed.';
             } else {
                 $deadlines[] = "The site is not open for submissions at the moment.";
@@ -504,7 +504,7 @@ class Home_Partial {
         // NB only has("accepted") if author can see an accepted paper
         if ($plist && $plist->has("accepted")) {
             $time = $conf->unparse_setting_time_span("final_soft");
-            if ($conf->deadlinesAfter("final_soft") && $plist->has("need_final")) {
+            if ($conf->time_after_setting("final_soft") && $plist->has("need_final")) {
                 $deadlines[] = "<strong class=\"overdue\">Final versions are overdue.</strong> They were requested by $time.";
             } else if ($time != "N/A") {
                 $deadlines[] = "Submit final versions of your accepted papers by $time.";

@@ -1,6 +1,6 @@
 <?php
 // test/setup.php -- HotCRP helper file to initialize tests
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once(preg_replace('/\/test\/[^\/]+/', '/src/siteloader.php', __FILE__));
 define("HOTCRP_OPTIONS", SiteLoader::find("test/options.php"));
@@ -138,7 +138,7 @@ class MailChecker {
     }
 }
 MailChecker::add_messagedb(file_get_contents(SiteLoader::find("test/emails.txt")));
-$Conf->add_hook((object) ["event" => "send_mail", "callback" => "MailChecker::send_hook", "priority" => 1000]);
+$Conf->add_hook((object) ["event" => "send_mail", "function" => "MailChecker::send_hook", "priority" => 1000]);
 
 function setup_assignments($assignments, Contact $user) {
     if (is_array($assignments)) {
@@ -382,6 +382,7 @@ function xassert_array_eqq($a, $b, $sort = false) {
     return $problem === "";
 }
 
+/** @return bool */
 function xassert_match($a, $b) {
     ++Xassert::$n;
     $ok = is_string($a) && preg_match($b, $a);
@@ -394,10 +395,30 @@ function xassert_match($a, $b) {
     return $ok;
 }
 
+/** @return bool */
+function xassert_int_list_eqq($a, $b) {
+    ++Xassert::$n;
+    $x = [];
+    foreach ([$a, $b] as $ids) {
+        $s = is_array($ids) ? join(" ", $ids) : $ids;
+        $x[] = preg_replace_callback('/(\d+)-(\d+)/', function ($m) {
+            return join(" ", range(+$m[1], +$m[2]));
+        }, $s);
+    }
+    $ok = $x[0] === $x[1];
+    if ($ok) {
+        ++Xassert::$nsuccess;
+    } else {
+        trigger_error("Assertion " . $x[0] . " === " . $x[1]
+                      . " failed at " . assert_location() . "\n", E_USER_WARNING);
+    }
+    return $ok;
+}
+
 /** @param Contact $user
  * @param string|array $query
  * @param string $cols
- * @return array<int,object> */
+ * @return array<int,array> */
 function search_json($user, $query, $cols = "id") {
     $pl = new PaperList("empty", new PaperSearch($user, $query));
     $pl->parse_view($cols);
@@ -413,21 +434,21 @@ function search_text_col($user, $query, $col = "id") {
     $pl->parse_view($col);
     $x = [];
     foreach ($pl->text_json() as $pid => $p) {
-        $x[] = $pid . " " . $p->$col . "\n";
+        $x[] = $pid . " " . $p[$col] . "\n";
     }
     return join("", $x);
 }
 
 /** @param Contact $user
  * @return bool */
-function assert_search_papers($user, $text, $result) {
-    if (is_array($result)) {
-        $result = join(" ", $result);
-    }
-    $result = preg_replace_callback('/(\d+)-(\d+)/', function ($m) {
-        return join(" ", range(+$m[1], +$m[2]));
-    }, $result);
-    return xassert_eqq(join(" ", array_keys(search_json($user, $text))), $result);
+function assert_search_papers($user, $query, $result) {
+    return xassert_int_list_eqq(array_keys(search_json($user, $query)), $result);
+}
+
+/** @param Contact $user
+ * @return bool */
+function assert_search_ids($user, $query, $result) {
+    return xassert_int_list_eqq((new PaperSearch($user, $query))->paper_ids(), $result);
 }
 
 /** @return bool */
@@ -435,6 +456,7 @@ function assert_query($q, $b) {
     return xassert_eqq(join("\n", Dbl::fetch_first_columns($q)), $b);
 }
 
+/** @return int */
 function tag_normalize_compare($a, $b) {
     $a_twiddle = strpos($a, "~");
     $b_twiddle = strpos($b, "~");
@@ -472,7 +494,8 @@ function paper_tag_normalize($prow) {
     return join(" ", $t);
 }
 
-/** @param Contact $who */
+/** @param Contact $who
+ * @return bool */
 function xassert_assign($who, $what, $override = false) {
     $assignset = new AssignmentSet($who, $override);
     $assignset->parse($what);
@@ -486,7 +509,8 @@ function xassert_assign($who, $what, $override = false) {
     return $ok;
 }
 
-/** @param Contact $who */
+/** @param Contact $who
+ * @return bool */
 function xassert_assign_fail($who, $what, $override = false) {
     $assignset = new AssignmentSet($who, $override);
     $assignset->parse($what);
@@ -495,43 +519,38 @@ function xassert_assign_fail($who, $what, $override = false) {
 
 /** @param Contact $user
  * @param ?PaperInfo $prow
- * @return object */
+ * @return array */
 function call_api($fn, $user, $qreq, $prow) {
     if (!($qreq instanceof Qrequest)) {
         $qreq = new Qrequest("POST", $qreq);
+        $qreq->approve_token();
     }
-    $uf = $user->conf->api($fn);
-    xassert($uf);
-    Conf::xt_resolve_require($uf);
-    JsonResultException::$capturing = true;
-    $result = null;
-    try {
-        $result = (object) call_user_func($uf->callback, $user, $qreq, $prow, $uf);
-    } catch (JsonResultException $jre) {
-        $result = (object) $jre->result;
-    }
-    JsonResultException::$capturing = false;
-    return $result;
+    $jr = $user->conf->call_api($fn, $user, $qreq, $prow);
+    return $jr->content;
 }
 
 /** @param int|PaperInfo $prow
- * @param Contact $user */
+ * @param Contact $user
+ * @return ?ReviewInfo */
 function fetch_review($prow, $user) {
     if (is_int($prow)) {
         $prow = $user->conf->checked_paper_by_id($prow, $user);
     }
-    return $prow->fresh_review_of_user($user);
+    return $prow->fresh_review_by_user($user);
 }
 
-/** @param Contact $user */
+/** @param Contact $user
+ * @return ?ReviewInfo */
 function save_review($paper, $user, $revreq, $rrow = null) {
-    global $Conf;
     $pid = is_object($paper) ? $paper->paperId : $paper;
     $prow = $user->conf->checked_paper_by_id($pid, $user);
-    $rf = $Conf->review_form();
+    $rf = Conf::$main->review_form();
     $tf = new ReviewValues($rf);
     $tf->parse_web(new Qrequest("POST", $revreq), false);
-    $tf->check_and_save($user, $prow, $rrow ? : fetch_review($prow, $user));
+    $tf->check_and_save($user, $prow, $rrow ?? fetch_review($prow, $user));
+    foreach ($tf->problem_list() as $mx) {
+        error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
+    }
     return fetch_review($prow, $user);
 }
 
@@ -548,7 +567,7 @@ function maybe_user($email) {
 function xassert_paper_status(PaperStatus $ps, $maxstatus = MessageSet::INFO) {
     if (!xassert($ps->problem_status() <= $maxstatus)) {
         foreach ($ps->problem_list() as $mx) {
-            error_log("! " . $mx->field . ($mx->message ? ": " . $mx->message : ""));
+            error_log("! {$mx->field}" . ($mx->message ? ": {$mx->message}" : ""));
         }
     }
 }

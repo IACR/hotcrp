@@ -1,6 +1,6 @@
 <?php
 // offline.php -- HotCRP offline review management page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 if (!$Me->email) {
@@ -18,8 +18,8 @@ if ($Qreq->post && $Qreq->post_empty())
 if (isset($Qreq->downloadForm)) {
     $Conf->make_csvg("review", CsvGenerator::TYPE_STRING)
         ->set_inline(false)
-        ->add_string($rf->textFormHeader("blank") . $rf->textForm(null, null, $Me, null) . "\n")
-        ->download();
+        ->add_string($rf->text_form_header(false) . $rf->text_form(null, null, $Me, null) . "\n")
+        ->emit();
     exit;
 }
 

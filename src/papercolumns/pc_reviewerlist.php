@@ -1,6 +1,6 @@
 <?php
 // pc_reviewerlist.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewerList_PaperColumn extends PaperColumn {
     private $pref = false;
@@ -48,7 +48,7 @@ class ReviewerList_PaperColumn extends PaperColumn {
         // see also search.php > getaction == "reviewers"
         $x = [];
         $pref = $pl->user->can_view_preference($row);
-        foreach ($row->reviews_by_display($pl->user) as $xrow) {
+        foreach ($row->reviews_as_display() as $xrow) {
             if ($pl->user->can_view_review_identity($row, $xrow)) {
                 $ranal = $pl->make_review_analysis($xrow, $row);
                 $t = $pl->user->reviewer_html_for($xrow) . " " . $ranal->icon_html(false);
@@ -67,7 +67,7 @@ class ReviewerList_PaperColumn extends PaperColumn {
     function text(PaperList $pl, PaperInfo $row) {
         $x = [];
         $pref = $pl->user->can_view_preference($row);
-        foreach ($row->reviews_by_display($pl->user) as $xrow) {
+        foreach ($row->reviews_as_display() as $xrow) {
             if ($pl->user->can_view_review_identity($row, $xrow)) {
                 $t = $pl->user->reviewer_text_for($xrow);
                 if ($pref) {

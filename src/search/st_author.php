@@ -1,6 +1,6 @@
 <?php
 // search/st_author.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Author_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -75,10 +75,12 @@ class Author_SearchTerm extends SearchTerm {
         }
         return $this->csm->test($n);
     }
-    function extract_metadata($top, PaperSearch $srch) {
-        parent::extract_metadata($top, $srch);
+    function configure_search($top, PaperSearch $srch) {
         if ($this->regex) {
             $srch->add_field_highlighter("au", $this->regex);
         }
+    }
+    function about_reviews() {
+        return self::ABOUT_NO;
     }
 }

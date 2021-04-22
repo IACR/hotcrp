@@ -1,6 +1,6 @@
 <?php
 // src/reviewtimes.php -- HotCRP review form definition page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewTimes {
     /** @var Conf */
@@ -41,7 +41,7 @@ class ReviewTimes {
 
         $this->dl = [];
         foreach ($this->conf->round_list() as $rn => $r) {
-            $dl = $this->conf->review_deadline($rn, true, false);
+            $dl = $this->conf->review_deadline_name($rn, true, false);
             $this->dl[$rn] = +$this->conf->setting($dl);
         }
 
@@ -53,7 +53,7 @@ class ReviewTimes {
                         || !$user->can_view_review_identity($prow, null)))) {
                 continue;
             }
-            foreach ($prow->reviews_by_id() as $rrow) {
+            foreach ($prow->all_reviews() as $rrow) {
                 if ($this->count_review($prow, $rrow)) {
                     $viewable = $user->privChair
                         || ($user->can_view_review_assignment($prow, $rrow)

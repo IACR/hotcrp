@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_tags.php -- HotCRP settings > tags page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Tags_SettingRenderer {
     static function render_tags($tl) {
@@ -44,7 +44,7 @@ class Tags_SettingRenderer {
     static function render(SettingValues $sv) {
         // Tags
         $tagmap = $sv->conf->tags();
-        echo "<h3 class=\"form-h\">Tags</h3>\n";
+        $sv->render_section("Tags");
 
         echo '<div class="form-g">';
         $sv->render_group("tags/main");
@@ -55,7 +55,7 @@ class Tags_SettingRenderer {
         echo "</div>\n";
     }
     static function render_tag_seeall(SettingValues $sv) {
-        echo '<div class="form-g-1">';
+        echo '<div class="form-g-2">';
         $sv->echo_checkbox('tag_seeall', "PC can see tags for conflicted submissions");
         echo '</div>';
     }
@@ -75,13 +75,13 @@ class Tags_SettingRenderer {
             $tag_colors_rows[] = "<tr class=\"{$k}tag\"><td class=\"remargin-left\"></td>"
                 . "<td class=\"pad taghl align-middle\">$k</td>"
                 . "<td class=\"lentry\">"
-                  . $sv->render_feedback_at("tag_color_$k", "mb-0")
-                  . $sv->render_entry("tag_color_$k", ["class" => "need-suggest tags"])
+                  . $sv->feedback_at("tag_color_$k", "mb-0")
+                  . $sv->entry("tag_color_$k", ["class" => "need-suggest tags"])
                 . "</td><td class=\"remargin-right\"></td></tr>";
         }
 
+        $sv->render_section("Colors and styles", "colors-and-styles");
         echo Ht::hidden("has_tag_color", 1),
-            '<h3 class="form-h" id="colors-and-styles">Colors and styles</h3>',
             "<p>Submissions tagged with a style name, or with an associated tag, appear in that style in lists. This also applies to PC tags.</p>",
             '<table class="demargin"><tr><th></th><th class="settings-simplehead" style="min-width:8rem">Style name</th><th class="settings-simplehead">Tags</th><th></th></tr>',
             join("", $tag_colors_rows), "</table>\n";
@@ -90,9 +90,12 @@ class Tags_SettingRenderer {
 
 
 class Tags_SettingParser extends SettingParser {
+    /** @var SettingValues */
     private $sv;
+    /** @var Tagger */
     private $tagger;
     private $diffs = [];
+    private $cleaned = false;
 
     function __construct(SettingValues $sv) {
         $this->sv = $sv;
@@ -101,15 +104,15 @@ class Tags_SettingParser extends SettingParser {
     static function parse_list(Tagger $tagger, SettingValues $sv, Si $si,
                                $checkf, $min_idx) {
         $ts = array();
-        foreach (preg_split('/\s+/', $sv->reqv($si->name)) as $t) {
-            if ($t !== "" && ($tx = $tagger->check($t, $checkf | Tagger::CHECKVERBOSE))) {
+        foreach (preg_split('/[\s,;]+/', $sv->reqv($si->name)) as $t) {
+            if ($t !== "" && ($tx = $tagger->check($t, $checkf))) {
                 list($tag, $idx) = Tagger::unpack($tx);
                 if ($min_idx) {
                     $tx = $tag . "#" . max($min_idx, (float) $idx);
                 }
                 $ts[$tag] = $tx;
             } else if ($t !== "") {
-                $sv->error_at($si, $tagger->error_html);
+                $sv->error_at($si, $tagger->error_html(true));
             }
         }
         return array_values($ts);
@@ -121,31 +124,31 @@ class Tags_SettingParser extends SettingParser {
         assert($this->sv === $sv);
         $change = false;
 
-        if ($si->name == "tag_chair" && $sv->has_reqv("tag_chair")) {
+        if ($si->name === "tag_chair" && $sv->has_reqv("tag_chair")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR, false);
             $change = $sv->update($si->name, join(" ", $ts));
         }
 
-        if ($si->name == "tag_sitewide" && $sv->has_reqv("tag_sitewide")) {
+        if ($si->name === "tag_sitewide" && $sv->has_reqv("tag_sitewide")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR, false);
             $change = $sv->update($si->name, join(" ", $ts));
         }
 
-        if ($si->name == "tag_vote" && $sv->has_reqv("tag_vote")) {
+        if ($si->name === "tag_vote" && $sv->has_reqv("tag_vote")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR, 1);
             if (($change = $sv->update("tag_vote", join(" ", $ts)))) {
                 $sv->request_write_lock("PaperTag");
             }
         }
 
-        if ($si->name == "tag_approval" && $sv->has_reqv("tag_approval")) {
+        if ($si->name === "tag_approval" && $sv->has_reqv("tag_approval")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
             if (($change = $sv->update("tag_approval", join(" ", $ts)))) {
                 $sv->request_write_lock("PaperTag");
             }
         }
 
-        if ($si->name == "tag_rank" && $sv->has_reqv("tag_rank")) {
+        if ($si->name === "tag_rank" && $sv->has_reqv("tag_rank")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
             if (count($ts) > 1) {
                 $sv->error_at("tag_rank", "Multiple ranking tags are not supported yet.");
@@ -154,18 +157,19 @@ class Tags_SettingParser extends SettingParser {
             }
         }
 
-        if ($si->name == "tag_color") {
-            $ts = array();
+        if ($si->name === "tag_color") {
+            $ts = [];
             foreach ($sv->conf->tags()->canonical_colors() as $k) {
                 if ($sv->has_reqv("tag_color_$k")) {
-                    foreach ($this->my_parse_list($sv->si("tag_color_$k"), Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE | Tagger::ALLOWSTAR, false) as $t)
+                    foreach ($this->my_parse_list($sv->si("tag_color_$k"), Tagger::NOPRIVATE | Tagger::NOVALUE | Tagger::ALLOWSTAR, false) as $t) {
                         $ts[] = $t . "=" . $k;
+                    }
                 }
             }
             $change = $sv->update("tag_color", join(" ", $ts));
         }
 
-        if ($si->name == "tag_au_seerev" && $sv->has_reqv("tag_au_seerev")) {
+        if ($si->name === "tag_au_seerev" && $sv->has_reqv("tag_au_seerev")) {
             $ts = $this->my_parse_list($si, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE, false);
             $change = $sv->update("tag_au_seerev", join(" ", $ts));
         }
@@ -177,15 +181,22 @@ class Tags_SettingParser extends SettingParser {
     }
 
     function save(SettingValues $sv, Si $si) {
-        if (!isset($this->diffs[$si->name])) {
-            return;
-        }
+        if (($si->name === "tag_vote" || $si->name === "tag_approval")
+            && ($this->diffs[$si->name] ?? false)
+            && !$this->cleaned) {
+            $old_votish = $new_votish = [];
+            foreach (Tagger::split_unpack(strtolower($sv->oldv("tag_vote") . " " . $sv->oldv("tag_approval"))) as $ti) {
+                $old_votish[] = $ti[0];
+            }
+            foreach (Tagger::split_unpack(strtolower($sv->newv("tag_vote") . " " . $sv->newv("tag_approval"))) as $ti) {
+                $new_votish[] = $ti[0];
+            }
+            $new_votish[] = "";
 
-        if ($si->name == "tag_vote" || $si->name === "tag_approval") {
-            // check allotments
+            // remove negative votes
             $pcm = $sv->conf->pc_members();
             $removals = [];
-            foreach (preg_split('/\s+/', $sv->savedv($si->name)) as $t) {
+            foreach ($new_votish as $t) {
                 list($tag, $index) = Tagger::unpack($t);
                 if ($tag !== false) {
                     $removals[] = "right(tag," . (strlen($tag) + 1) . ")='~" . sqlq($tag) . "'";
@@ -197,10 +208,15 @@ class Tags_SettingParser extends SettingParser {
                     $sv->warning_at($si->name, "Removed negative votes.");
                 }
             }
-            $sv->mark_invalidate_caches(["autosearch" => true]);
-        }
 
-        $sv->mark_invalidate_caches(["tags" => true]);
+            // remove no-longer-active voting tags
+            if (($removed_votish = array_diff($old_votish, $new_votish))) {
+                $result = $sv->conf->qe("delete from PaperTag where tag?a", array_values($removed_votish));
+            }
+
+            $sv->mark_invalidate_caches(["autosearch" => true]);
+            $this->cleaned = true;
+        }
     }
 
     static function crosscheck(SettingValues $sv) {

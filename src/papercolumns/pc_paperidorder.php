@@ -1,6 +1,6 @@
 <?php
 // pc_paperidorder.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class PaperIDOrder_PaperColumn extends PaperColumn {
     /** @var PaperID_SearchTerm */
@@ -14,11 +14,11 @@ class PaperIDOrder_PaperColumn extends PaperColumn {
         $ap = $this->order->position($a->paperId);
         $bp = $this->order->position($b->paperId);
         if ($ap !== false && $bp !== false) {
-            return $ap < $bp ? -1 : ($ap > $bp ? 1 : 0);
+            return $ap <=> $bp;
         } else if ($ap !== false || $bp !== false) {
             return $ap === false ? 1 : -1;
         } else {
-            return $a->paperId - $b->paperId;
+            return $a->paperId <=> $b->paperId;
         }
     }
 }

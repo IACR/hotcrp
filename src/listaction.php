@@ -1,6 +1,6 @@
 <?php
 // listaction.php -- HotCRP helper class for paper search actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ListAction {
     public $subname;
@@ -20,7 +20,7 @@ class ListAction {
         foreach ($gex->members("__expand") as $gj) {
             if (!isset($gj->allow_if) || $gex->allowed($gj->allow_if, $gj)) {
                 Conf::xt_resolve_require($gj);
-                call_user_func($gj->expand_callback, $gex, $gj);
+                call_user_func($gj->expand_function, $gex, $gj);
             }
         }
         return $gex;
@@ -55,16 +55,16 @@ class ListAction {
         if (is_array($selection)) {
             $selection = new SearchSelection($selection);
         }
-        if (!$uf || !Conf::xt_resolve_require($uf) || !is_string($uf->callback)) {
+        if (!$uf || !Conf::xt_resolve_require($uf) || !is_string($uf->function)) {
             return new JsonResult(404, "Function not found.");
         } else if (($uf->paper ?? false) && $selection->is_empty()) {
             return new JsonResult(400, "No papers selected.");
-        } else if ($uf->callback[0] === "+") {
-            $class = substr($uf->callback, 1);
+        } else if ($uf->function[0] === "+") {
+            $class = substr($uf->function, 1);
             /** @phan-suppress-next-line PhanTypeExpectedObjectOrClassName */
             $action = new $class($user->conf, $uf);
         } else {
-            $action = call_user_func($uf->callback, $user->conf, $uf);
+            $action = call_user_func($uf->function, $user->conf, $uf);
         }
         if (!$action || !$action->allow($user, $qreq)) {
             return new JsonResult(403, "Permission error.");
@@ -87,7 +87,8 @@ class ListAction {
                 json_exit($res);
             }
         } else if ($res instanceof CsvGenerator) {
-            csv_exit($res);
+            $res->emit();
+            exit;
         }
     }
 
@@ -111,7 +112,7 @@ class ListAction {
                             "title" => "You cannot override your conflict with this paper"];
             } else {
                 $any_this_paper = false;
-                foreach ($prow->reviews_by_display($user) as $rrow) {
+                foreach ($prow->reviews_as_display() as $rrow) {
                     $cid = $rrow->contactId;
                     if ($rrow->reviewToken) {
                         if (!array_key_exists($cid, $token_users)) {

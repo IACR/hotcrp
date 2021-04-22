@@ -1,6 +1,6 @@
 <?php
 // search/st_reviewtoken.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewToken_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -22,7 +22,7 @@ class ReviewToken_SearchTerm extends SearchTerm {
         } else if (($token = decode_token($word, "V"))) {
             return new ReviewToken_SearchTerm($srch->user, $token, null);
         } else {
-            $srch->warn("“" . htmlspecialchars($word) . "” is not a valid review token.");
+            $srch->warning("“" . htmlspecialchars($word) . "” is not a valid review token.");
             return new False_SearchTerm;
         }
     }
@@ -30,15 +30,16 @@ class ReviewToken_SearchTerm extends SearchTerm {
         $sqi->add_review_signature_columns();
         $thistab = "ReviewTokens_" . $this->token;
         $where = "reviewToken" . ($this->token ? "={$this->token}" : "!=0");
-        $sqi->add_table($thistab, ["left join", "(select r.paperId, count(r.reviewId) count from PaperReview r where $where group by paperId)"]);
-        if ($this->any !== false)
+        $sqi->add_table($thistab, ["left join", "(select r.paperId, count(r.reviewId) count from PaperReview r where $where and reviewType>0 group by paperId)"]);
+        if ($this->any !== false) {
             return "coalesce({$thistab}.count,0)>0";
-        else
+        } else {
             return "coalesce({$thistab}.count,0)=0";
+        }
     }
     function test(PaperInfo $prow, $rrow) {
         $nr = $nt = 0;
-        foreach ($prow->reviews_by_id() as $rrow) {
+        foreach ($prow->all_reviews() as $rrow) {
             if ($this->user->can_view_review_assignment($prow, $rrow)) {
                 ++$nr;
                 if ($this->token
@@ -54,5 +55,8 @@ class ReviewToken_SearchTerm extends SearchTerm {
         } else {
             return $nt !== 0;
         }
+    }
+    function about_reviews() {
+        return self::ABOUT_MANY;
     }
 }

@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_subform.php -- HotCRP settings > submission form page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class BanalSettings {
     static function render($suffix, $sv) {
@@ -225,17 +225,17 @@ class BanalSettings {
 
 class SubForm_SettingRenderer {
     static function render(SettingValues $sv) {
-        echo "<h3 class=\"form-h\">Abstract and PDF</h3>\n";
+        $sv->render_section("Abstract and PDF");
 
         echo '<div id="foldpdfupload" class="fold2o fold3o">';
         echo '<div class="f-i">',
             $sv->label("sub_noabstract", "Abstract requirement", ["class" => "n"]),
-            $sv->render_select("sub_noabstract", [0 => "Abstract required to register submission", 2 => "Abstract optional", 1 => "No abstract"]),
+            $sv->select("sub_noabstract", [0 => "Abstract required to register submission", 2 => "Abstract optional", 1 => "No abstract"]),
             '</div>';
 
         echo '<div class="f-i">',
             $sv->label("sub_nopapers", "PDF requirement", ["class" => "n"]),
-            $sv->render_select("sub_nopapers", [0 => "PDF required to complete submission", 2 => "PDF optional", 1 => "No PDF allowed"], ["class" => "uich js-settings-sub-nopapers"]),
+            $sv->select("sub_nopapers", [0 => "PDF required to complete submission", 2 => "PDF optional", 1 => "No PDF allowed"], ["class" => "uich js-settings-sub-nopapers"]),
             '<div class="f-h fx3">Registering a submission never requires a PDF.</div></div>';
 
         if (is_executable("src/banal")) {
@@ -246,8 +246,8 @@ class SubForm_SettingRenderer {
 
         echo '</div>';
 
-        echo "<h3 class=\"form-h\">Conflicts and collaborators</h3>\n",
-            '<div id="foldpcconf" class="form-g fold',
+        $sv->render_section("Conflicts and collaborators");
+        echo '<div id="foldpcconf" class="form-g fold',
             ($sv->curv("sub_pcconf") ? "o" : "c"), "\">\n";
         $sv->echo_checkbox("sub_pcconf", "Collect authors’ PC conflicts", ["class" => "uich js-foldup"]);
         $cflt = array();
@@ -260,12 +260,12 @@ class SubForm_SettingRenderer {
         echo "</div>\n";
 
         echo '<div class="form-g">';
-        $sv->echo_message_minor("msg.conflictdef", "Definition of conflict of interest");
+        $sv->echo_message_minor("conflict_description", "Definition of conflict of interest");
         echo "</div>\n";
 
         echo '<div class="form-g">', $sv->label("sub_pcconfvis", "When can reviewers see conflict information?"),
             '&nbsp; ',
-            $sv->render_select("sub_pcconfvis", [1 => "Never", 0 => "When authors or tracker are visible", 2 => "Always"]),
+            $sv->select("sub_pcconfvis", [1 => "Never", 0 => "When authors or tracker are visible", 2 => "Always"]),
             '</div>';
     }
 }

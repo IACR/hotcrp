@@ -1,6 +1,6 @@
 <?php
 // test06.php -- HotCRP review and some setting tests
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 /** @phan-file-suppress PhanUndeclaredProperty */
 
 declare(strict_types=1);
@@ -165,8 +165,8 @@ xassert(!$tf->has_problem_at("reviewerEmail"));
 // Add “no entry”
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s01_name" => "Overall merit",
-    "rf_s01_options" => "1. Reject\n2. Weak reject\n3. Weak accept\n4. Accept\n5. Strong accept\nNo entry\n"
+    "rf_name_s01" => "Overall merit",
+    "rf_options_s01" => "1. Reject\n2. Weak reject\n3. Weak accept\n4. Accept\n5. Strong accept\nNo entry\n"
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -175,7 +175,7 @@ xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 $tf = ReviewValues::make_text($Conf->review_form(), preg_replace('/^4/m', 'No entry', $review1A), "review1A-6.txt");
 xassert($tf->parse_text(false));
 xassert($tf->check_and_save($user_mgbaker));
-xassert_eqq(join(" ", $tf->updated), "#1A");
+xassert_eqq(join(" ", $tf->updated ?? []), "#1A");
 xassert(!$tf->has_problem_at("overAllMerit"));
 //error_log(var_export($tf->message_list(), true));
 
@@ -194,8 +194,8 @@ assert_search_papers($user_chair, "ovemer:4", "1");
 // “4” is no longer a valid overall-merit score
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s01_name" => "Overall merit",
-    "rf_s01_options" => "1. Reject\n2. Weak reject\n3. Weak accept\nNo entry\n"
+    "rf_name_s01" => "Overall merit",
+    "rf_options_s01" => "1. Reject\n2. Weak reject\n3. Weak accept\nNo entry\n"
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -210,8 +210,8 @@ assert_search_papers($user_chair, "has:revexp", "1");
 // Stop displaying reviewer expertise
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s02_name" => "Reviewer expertise",
-    "rf_s02_position" => 0
+    "rf_name_s02" => "Reviewer expertise",
+    "rf_position_s02" => 0
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -219,9 +219,9 @@ xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 // Add reviewer expertise back
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s02_name" => "Reviewer expertise",
-    "rf_s02_options" => "1. No familiarity\n2. Some familiarity\n3. Knowledgeable\n4. Expert",
-    "rf_s02_position" => 1.5
+    "rf_name_s02" => "Reviewer expertise",
+    "rf_options_s02" => "1. No familiarity\n2. Some familiarity\n3. Knowledgeable\n4. Expert",
+    "rf_position_s02" => 1.5
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -259,28 +259,28 @@ assert_search_papers($user_chair, "compc:author", "");
 // Add extension fields
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s03_name" => "Score 3", "rf_s03_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s03_position" => 2.03,
-    "rf_s04_name" => "Score 4", "rf_s04_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s04_position" => 2.04,
-    "rf_s05_name" => "Score 5", "rf_s05_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s05_position" => 2.05,
-    "rf_s06_name" => "Score 6", "rf_s06_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s06_position" => 2.06,
-    "rf_s07_name" => "Score 7", "rf_s07_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s07_position" => 2.07,
-    "rf_s08_name" => "Score 8", "rf_s08_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s08_position" => 2.08,
-    "rf_s09_name" => "Score 9", "rf_s09_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s09_position" => 2.09,
-    "rf_s10_name" => "Score 10", "rf_s10_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s10_position" => 2.10,
-    "rf_s11_name" => "Score 11", "rf_s11_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s11_position" => 2.11,
-    "rf_s12_name" => "Score 12", "rf_s12_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s12_position" => 2.12,
-    "rf_s13_name" => "Score 13", "rf_s13_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s13_position" => 2.13,
-    "rf_s14_name" => "Score 14", "rf_s14_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s14_position" => 2.14,
-    "rf_s15_name" => "Score 15", "rf_s15_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s15_position" => 2.15,
-    "rf_s16_name" => "Score 16", "rf_s16_options" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_s16_position" => 2.16,
-    "rf_t04_name" => "Text 4", "rf_t04_position" => 5.04,
-    "rf_t05_name" => "Text 5", "rf_t05_position" => 5.05,
-    "rf_t06_name" => "Text 6", "rf_t06_position" => 5.06,
-    "rf_t07_name" => "Text 7", "rf_t07_position" => 5.07,
-    "rf_t08_name" => "Text 8", "rf_t08_position" => 5.08,
-    "rf_t09_name" => "Text 9", "rf_t09_position" => 5.09,
-    "rf_t10_name" => "Text 10", "rf_t10_position" => 5.10,
-    "rf_t11_name" => "Text 11", "rf_t11_position" => 5.11
+    "rf_name_s03" => "Score 3", "rf_options_s03" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s03" => 2.03,
+    "rf_name_s04" => "Score 4", "rf_options_s04" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s04" => 2.04,
+    "rf_name_s05" => "Score 5", "rf_options_s05" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s05" => 2.05,
+    "rf_name_s06" => "Score 6", "rf_options_s06" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s06" => 2.06,
+    "rf_name_s07" => "Score 7", "rf_options_s07" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s07" => 2.07,
+    "rf_name_s08" => "Score 8", "rf_options_s08" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s08" => 2.08,
+    "rf_name_s09" => "Score 9", "rf_options_s09" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s09" => 2.09,
+    "rf_name_s10" => "Score 10", "rf_options_s10" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s10" => 2.10,
+    "rf_name_s11" => "Score 11", "rf_options_s11" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s11" => 2.11,
+    "rf_name_s12" => "Score 12", "rf_options_s12" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s12" => 2.12,
+    "rf_name_s13" => "Score 13", "rf_options_s13" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s13" => 2.13,
+    "rf_name_s14" => "Score 14", "rf_options_s14" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s14" => 2.14,
+    "rf_name_s15" => "Score 15", "rf_options_s15" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s15" => 2.15,
+    "rf_name_s16" => "Score 16", "rf_options_s16" => "1. Yes\n2. No\n3. Maybe\nNo entry\n", "rf_position_s16" => 2.16,
+    "rf_name_t04" => "Text 4", "rf_position_t04" => 5.04,
+    "rf_name_t05" => "Text 5", "rf_position_t05" => 5.05,
+    "rf_name_t06" => "Text 6", "rf_position_t06" => 5.06,
+    "rf_name_t07" => "Text 7", "rf_position_t07" => 5.07,
+    "rf_name_t08" => "Text 8", "rf_position_t08" => 5.08,
+    "rf_name_t09" => "Text 9", "rf_position_t09" => 5.09,
+    "rf_name_t10" => "Text 10", "rf_position_t10" => 5.10,
+    "rf_name_t11" => "Text 11", "rf_position_t11" => 5.11
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -327,17 +327,17 @@ xassert_eqq((string) $rrow->s16, "3");
 // Remove some fields and truncate their options
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s15_name" => "Score 15", "rf_s15_position" => 0,
-    "rf_s16_name" => "Score 16", "rf_s16_options" => "1. Yes\n2. No\nNo entry\n",
-    "rf_t10_name" => "Text 10", "rf_t10_position" => 0
+    "rf_name_s15" => "Score 15", "rf_position_s15" => 0,
+    "rf_name_s16" => "Score 16", "rf_options_s16" => "1. Yes\n2. No\nNo entry\n",
+    "rf_name_t10" => "Text 10", "rf_position_t10" => 0
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
 
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_s15_name" => "Score 15", "rf_s15_options" => "1. Yes\n2. No\nNo entry\n", "rf_s15_position" => 100,
-    "rf_t10_name" => "Text 10", "rf_t10_position" => 101
+    "rf_name_s15" => "Score 15", "rf_options_s15" => "1. Yes\n2. No\nNo entry\n", "rf_position_s15" => 100,
+    "rf_name_t10" => "Text 10", "rf_position_t10" => 101
 ]);
 xassert($sv->execute());
 xassert_eqq(join(" ", $sv->updated_fields()), "review_form");
@@ -646,10 +646,10 @@ xassert_eqq($rrow18d2->t01, $gettysburg);
 // offline review parsing for UTF-8 review questions
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_t04_name" => "Questions for authors’ response",
-    "rf_t04_description" => "Specific questions that could affect your accept/reject decision. Remember that the authors have limited space and must respond to all reviewers.",
-    "rf_t04_visibility" => "au",
-    "rf_t04_position" => 5
+    "rf_name_t04" => "Questions for authors’ response",
+    "rf_description_t04" => "Specific questions that could affect your accept/reject decision. Remember that the authors have limited space and must respond to all reviewers.",
+    "rf_visibility_t04" => "au",
+    "rf_position_t04" => 5
 ]);
 xassert($sv->execute());
 
@@ -672,8 +672,8 @@ xassert_eqq($rrow->t04, "That was the stuff I want to add for the authors’ res
 
 $sv = SettingValues::make_request($user_chair, [
     "has_review_form" => 1,
-    "rf_t04_name" => "Questions for authors’ response (hidden from authors)",
-    "rf_t04_forcename" => 1
+    "rf_name_t04" => "Questions for authors’ response (hidden from authors)",
+    "rf_forcename_t04" => 1
 ]);
 xassert($sv->execute());
 
@@ -685,6 +685,15 @@ xassert($tf->check_and_save($user_diot));
 
 $rrow = fetch_review($paper18, $user_diot);
 xassert_eqq($rrow->t04, "Whence the stuff I want to add for the authors’ response.\n");
+
+$review18A4 = file_get_contents(SiteLoader::find("test/review18A-4.txt"));
+$tf = ReviewValues::make_text($Conf->review_form(), $review18A4, "review18A-4.txt");
+xassert($tf->parse_text(false));
+xassert($tf->check_and_save($user_diot));
+
+$rrow = fetch_review($paper18, $user_diot);
+xassert(str_ends_with($rrow->t01, "\n==+== Want to make sure this works\n"));
+xassert_eqq($rrow->t04, "Whitherto the stuff I want to add for the authors’ response.\n");
 
 // check some review visibility policies
 $user_external = Contact::create($Conf, null, ["email" => "external@_.com", "name" => "External Reviewer"]);
@@ -746,7 +755,7 @@ function save_round_settings($map) {
     foreach ($Conf->round_list() as $rname) {
         $settings[] = isset($map[$rname]) ? $map[$rname] : null;
     }
-    $Conf->save_setting("round_settings", 1, json_encode_db($settings));
+    $Conf->save_refresh_setting("round_settings", 1, json_encode_db($settings));
 }
 save_round_settings(["R1" => ["extrev_view" => 0]]);
 Contact::update_rights();
@@ -854,9 +863,9 @@ assert_search_papers($user_chair, "ovemer:2..1", "17 18");
 assert_search_papers($user_chair, "ovemer:3..1", "1 17 18");
 
 // new external reviewer does not get combined email
-$Conf->save_setting("round_settings", null);
-$Conf->save_setting("extrev_view", 1);
-$Conf->save_setting("pcrev_editdelegate", 2);
+$Conf->save_refresh_setting("round_settings", null);
+$Conf->save_refresh_setting("extrev_view", 1);
+$Conf->save_refresh_setting("pcrev_editdelegate", 2);
 Contact::update_rights();
 MailChecker::clear();
 
@@ -874,6 +883,37 @@ MailChecker::check_db("test06-external2-approval17");
 
 save_review(17, $user_lixia, ["ready" => true], fetch_review(17, $user_external2));
 MailChecker::check_db("test06-external2-submit17");
+
+// review requests
+assert_search_papers($user_chair, "has:proposal", "");
+assert_search_papers($user_lixia, "has:proposal", "");
+assert_search_papers($user_mgbaker, "has:proposal", "");
+assert_search_papers($user_mjh, "has:proposal", "");
+assert_search_papers($user_chair, "re:proposal", "");
+assert_search_papers($user_lixia, "re:proposal", "");
+assert_search_papers($user_mgbaker, "re:proposal", "");
+assert_search_papers($user_mjh, "re:proposal", "");
+
+$Conf->save_refresh_setting("extrev_chairreq", 1);
+Contact::update_rights();
+
+$xqreq = new Qrequest("POST", ["email" => "external3@_.com", "name" => "Amy March", "affiliation" => "Transcendent"]);
+$result = RequestReview_API::requestreview($user_lixia, $xqreq, $paper17);
+$result = JsonResult::make($result);
+MailChecker::check_db("test06-external3-request17");
+
+assert_search_papers($user_chair, "has:proposal", "17");
+assert_search_papers($user_lixia, "has:proposal", "17");
+assert_search_papers($user_mgbaker, "has:proposal", "17");
+assert_search_papers($user_mjh, "has:proposal", "");
+assert_search_papers($user_chair, "re:proposal", "17");
+assert_search_papers($user_lixia, "re:proposal", "17");
+assert_search_papers($user_mgbaker, "re:proposal", "17");
+assert_search_papers($user_mjh, "re:proposal", "");
+
+assert_search_papers($user_chair, "has:proposal admin:me", "17");
+assert_search_papers($user_lixia, "has:proposal admin:me", "");
+assert_search_papers($user_mgbaker, "has:proposal", "17");
 
 // `r` vs. `rout`
 assert_search_papers($user_mgbaker, ["t" => "r", "q" => ""], "1 13 17");
@@ -893,19 +933,19 @@ assert_search_papers($user_mgbaker, "(internet OR datagram) 13 19", "13 19");
 
 // author review visibility
 xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
-$Conf->save_setting("au_seerev", 2);
+$Conf->save_refresh_setting("au_seerev", 2);
 xassert($user_mjh->can_view_review($paper17, $rrow17m));
 xassert_assign_fail($user_mgbaker, "paper,tag\n17,perm:author-read-review\n");
 xassert_assign_fail($user_mjh, "paper,tag\n17,perm:author-read-review\n");
 xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#-1\n");
-$paper17->invalidate_tags();
+$paper17 = $Conf->checked_paper_by_id(17);
 xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
-$Conf->save_setting("au_seerev", null);
+$Conf->save_refresh_setting("au_seerev", null);
 xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#1\n");
-$paper17->invalidate_tags();
+$paper17 = $Conf->checked_paper_by_id(17);
 xassert($user_mjh->can_view_review($paper17, $rrow17m));
 xassert_assign($Admin, "paper,tag\n17,perm:author-read-review#clear\n");
-$paper17->invalidate_tags();
+$paper17 = $Conf->checked_paper_by_id(17);
 xassert(!$user_mjh->can_view_review($paper17, $rrow17m));
 
 // paper options

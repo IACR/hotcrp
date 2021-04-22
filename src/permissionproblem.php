@@ -1,14 +1,16 @@
 <?php
 // permissionproblem.php -- HotCRP helper class for permission errors
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
-class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
+class PermissionProblem extends Exception
+    implements ArrayAccess, IteratorAggregate, Countable, JsonSerializable {
     /** @var Conf */
     public $conf;
     /** @var array<string,mixed> */
     private $_a;
     /** @param ?array<string,mixed> $a */
     function __construct(Conf $conf, $a = null) {
+        parent::__construct("HotCRP permission problem");
         $this->conf = $conf;
         $this->_a = $a ?? [];
     }
@@ -94,12 +96,18 @@ class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, Js
             $this->_a["option_title"]  =  $quote($option->title());
         }
         if (isset($this->_a["invalidId"])) {
-            $x = $this->_a["invalidId"] . "Id";
-            if (isset($this->_a[$x])) {
-                $ms[] = $this->conf->_("Invalid " . $this->_a["invalidId"] . " number “%s”.", $quote($this->_a[$x]));
+            $id = $this->_a["invalidId"];
+            $idname = $id === "paper" ? "submission" : $id;
+            if (isset($this->_a["{$id}Id"])) {
+                $ms[] = $this->conf->_("Invalid {$idname} ID “%s”.", $quote($this->_a["{$id}Id"]));
             } else {
-                $ms[] = $this->conf->_("Invalid " . $this->_a["invalidId"] . " number.");
+                $ms[] = $this->conf->_("Invalid {$idname} ID.");
             }
+        }
+        if (isset($this->_a["missingId"])) {
+            $id = $this->_a["missingId"];
+            $idname = $id === "paper" ? "submission" : $id;
+            $ms[] = $this->conf->_("Missing {$idname} ID.");
         }
         if (isset($this->_a["noPaper"])) {
             $ms[] = $this->conf->_("Submission #%d does not exist.", $paperId);
@@ -156,7 +164,7 @@ class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, Js
             $ms[] = $this->conf->_("The authors’ response is not yet ready for reviewers to view.");
         }
         if (isset($this->_a["reviewsOutstanding"])) {
-            $ms[] = $this->conf->_("You will get access to the reviews once you complete your assigned reviews. If you can’t complete your reviews, please let the organizers know via the “Refuse review” links.");
+            $ms[] = $this->conf->_("You will get access to the reviews once you complete your assigned reviews. If you can’t complete your reviews, please inform the organizers.");
             if ($format === 5) {
                 $ms[] = $this->conf->_("<a href=\"%s\">List assigned reviews</a>", $this->conf->hoturl("search", "q=&amp;t=r"));
             }
@@ -175,20 +183,13 @@ class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, Js
             }
             $start = $open_dname ? $this->conf->setting($open_dname, -1) : 1;
             if ($dname === "extrev_chairreq") {
-                $end_dname = $this->conf->review_deadline($this->_a["reviewRound"] ?? null, false, true);
+                $end_dname = $this->conf->review_deadline_name($this->_a["reviewRound"] ?? null, false, true);
             } else {
                 $end_dname = $dname;
             }
             $end = $this->conf->setting($end_dname, -1);
             if ($dname == "au_seerev") {
-                if ($this->conf->au_seerev == Conf::AUSEEREV_UNLESSINCOMPLETE) {
-                    $ms[] = $this->conf->_("You will get access to the reviews for this submission when you have completed your own reviews.");
-                    if ($format === 5) {
-                        $ms[] = $this->conf->_("<a href=\"%s\">List your incomplete reviews</a>", $this->conf->hoturl("search", "t=rout&amp;q="));
-                    }
-                } else {
-                    $ms[] = $this->conf->_c("etime", "Action not available.", $dname, $paperId);
-                }
+                $ms[] = $this->conf->_c("etime", "Action not available.", $dname, $paperId);
             } else if ($start <= 0 || $start == $end) {
                 $ms[] = $this->conf->_c("etime", "Action not available.", $open_dname, $paperId);
             } else if ($start > 0 && Conf::$now < $start) {
@@ -210,6 +211,9 @@ class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, Js
         }
         if (isset($this->_a["conflict"])) {
             $ms[] = $this->conf->_("You have a conflict with #%d.", $paperId);
+        }
+        if (isset($this->_a["nonPC"])) {
+            $ms[] = $this->conf->_("You aren’t a member of the PC for submission #%d.", $paperId);
         }
         if (isset($this->_a["externalReviewer"])) {
             $ms[] = $this->conf->_("External reviewers cannot view other reviews.");
@@ -250,6 +254,10 @@ class PermissionProblem implements ArrayAccess, IteratorAggregate, Countable, Js
             $ms[] = $this->conf->_("<a href=\"%s\">List the submissions you can view</a>", $this->conf->hoturl("search", "q="));
         }
         return join(" ", $ms);
+    }
+    /** @return string */
+    function unparse_text() {
+        return $this->unparse(0);
     }
     /** @return string */
     function unparse_html() {

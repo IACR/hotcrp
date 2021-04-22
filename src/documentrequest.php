@@ -200,8 +200,9 @@ class DocumentRequest implements JsonSerializable {
 
     function perm_view_document(Contact $user) {
         if ($this->paperId < 0) {
-            if (($this->opt->visibility === "admin" && !$user->privChair)
-                || ($this->opt->visibility !== "all" && !$user->isPC)) {
+            $vis = $this->opt->visibility();
+            if (($vis === PaperOption::VIS_ADMIN && !$user->privChair)
+                || ($vis !== PaperOption::VIS_SUB && !$user->isPC)) {
                 return $this->prow->make_whynot(["permission" => "view_option", "option" => $this->opt]);
             } else {
                 return null;
@@ -255,28 +256,17 @@ class DocumentRequest implements JsonSerializable {
     /** @param array $opts
      * @return array */
     static function add_connection_options($opts = []) {
-        $ifnonematch = $range = $ifrange = null;
-        if (function_exists("getallheaders")) {
-            foreach (getallheaders() as $k => $v) {
-                if (strcasecmp($k, "If-None-Match") === 0) {
-                    $ifnonematch = $v;
-                } else if (strcasecmp($k, "Range") === 0) {
-                    $range = $v;
-                } else if (strcasecmp($k, "If-Range") === 0) {
-                    $ifrange = $v;
-                }
-            }
-        } else {
-            $ifnonematch = $_SERVER["HTTP_IF_NONE_MATCH"] ?? null;
-            $range = $_SERVER["HTTP_RANGE"] ?? null;
-            $ifrange = $_SERVER["HTTP_IF_RANGE"] ?? null;
-        }
-        if ($ifnonematch !== null && !array_key_exists("if-none-match", $opts)) {
+        $ifnonematch = $_SERVER["HTTP_IF_NONE_MATCH"] ?? null;
+        $range = $_SERVER["HTTP_RANGE"] ?? null;
+        $ifrange = $_SERVER["HTTP_IF_RANGE"] ?? null;
+        if ($ifnonematch !== null
+            && !array_key_exists("if-none-match", $opts)) {
             $opts["if-none-match"] = $ifnonematch;
         }
         if ($range !== null
             && !array_key_exists("range", $opts)
-            && preg_match('/\Abytes\s*=\s*(?:(?:\d+-\d+|-\d+|\d+-)\s*,?\s*)+\z/', $range)) {
+            && preg_match('/\Abytes\s*=\s*(?:(?:\d+-\d+|-\d+|\d+-)\s*,?\s*)+\z/', $range)
+            && $_SERVER["REQUEST_METHOD"] === "GET") {
             $opts["range"] = [];
             $lastr = null;
             preg_match_all('/\d+-\d+|-\d+|\d+-/', $range, $m);
@@ -291,7 +281,7 @@ class DocumentRequest implements JsonSerializable {
                         && $lastr[0] !== null
                         && $lastr[1] !== null
                         && $r1 >= $lastr[0]
-                        && $r1 - $lastr[1] <= 500) {
+                        && $r1 - $lastr[1] <= 100) {
                         $nr = count($opts["range"]);
                         $opts["range"][$nr - 1][1] = $lastr[1] = $r2;
                     } else {
@@ -302,14 +292,14 @@ class DocumentRequest implements JsonSerializable {
                     break;
                 }
             }
-            if (count($opts["range"] ?? []) > 1) {
-                error_log(Navigation::self() . ": multiple range request “{$range}”");
-            }
         }
-        if ($ifrange !== null && !array_key_exists("if-range", $opts)) {
+        if ($ifrange !== null
+            && !array_key_exists("if-range", $opts)
+            && $_SERVER["REQUEST_METHOD"] === "GET") {
             $opts["if-range"] = $ifrange;
         }
-        if ($_SERVER["REQUEST_METHOD"] === "HEAD" && !array_key_exists("head", $opts)) {
+        if ($_SERVER["REQUEST_METHOD"] === "HEAD"
+            && !array_key_exists("head", $opts)) {
             $opts["head"] = true;
         }
         return $opts;

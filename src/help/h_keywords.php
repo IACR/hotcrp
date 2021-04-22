@@ -1,16 +1,16 @@
 <?php
 // src/help/h_keywords.php -- HotCRP help functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Keywords_HelpTopic {
     static function render(HelpRenderer $hth) {
         // how to report author searches?
-        if ($hth->conf->subBlindNever()) {
+        if ($hth->conf->submission_blindness() === Conf::BLIND_NEVER) {
             $aunote = "";
-        } else if (!$hth->conf->subBlindAlways()) {
-            $aunote = "<br /><span class=\"hint\">Search uses fields visible to the searcher. For example, PC member searches do not examine anonymous authors.</span>";
+        } else if ($hth->conf->submission_blindness() === Conf::BLIND_ALWAYS) {
+            $aunote = "<br><span class=\"hint\">Search uses fields visible to the searcher. For example, PC member searches do not examine authors.</span>";
         } else {
-            $aunote = "<br /><span class=\"hint\">Search uses fields visible to the searcher. For example, PC member searches do not examine authors.</span>";
+            $aunote = "<br><span class=\"hint\">Search uses fields visible to the searcher. For example, PC member searches do not examine anonymous authors.</span>";
         }
 
         // does a reviewer tag exist?
@@ -125,14 +125,17 @@ class Keywords_HelpTopic {
         echo $hth->search_trow("re:secondary", "at least one secondary reviewer");
         echo $hth->search_trow("re:external", "at least one external reviewer");
         echo $hth->search_trow("re:primary:fdabek:complete", "“fdabek” has completed a primary review");
-        if ($roundname)
-            echo $hth->search_trow("re:$roundname", "review in round “" . htmlspecialchars($roundname) . "”");
+        if ($roundname) {
+            echo $hth->search_trow("round:$roundname", "review in round “" . htmlspecialchars($roundname) . "”");
+            echo $hth->search_trow("round:{$roundname}:jinyang", "review in round “" . htmlspecialchars($roundname) . "” by reviewer “jinyang”");
+        }
         echo $hth->search_trow("re:auwords<100", "has a review with less than 100 words in author-visible fields");
         if ($hth->conf->setting("rev_tokens")) {
             echo $hth->search_trow("retoken:J88ADNAB", "has a review with token J88ADNAB");
         }
         if ($hth->conf->setting("rev_ratings") != REV_RATINGS_NONE) {
-            echo $hth->search_trow("rate:+", "review was rated positively (“rate:-” and “rate:boring” also work; can combine with “re:”)");
+            echo $hth->search_trow("rate:good", "has a positively-rated review (“rate:bad”, “rate:biased”, etc. also work)");
+            echo $hth->search_trow("rate:good:me", "has a positively-rated review by you");
         }
 
         echo $hth->tgroup("Comments");

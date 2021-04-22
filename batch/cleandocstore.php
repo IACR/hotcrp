@@ -1,6 +1,6 @@
 <?php
 // cleandocstore.php -- HotCRP maintenance script
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
@@ -89,7 +89,7 @@ class Batch_CleanDocstore {
             if ($b->treeid & 1) {
                 $bage = $bage > 604800 ? 100000000 : $bage * 2;
             }
-            return $aage > $bage ? -1 : ($aage == $bage ? 0 : 1);
+            return $bage <=> $aage;
         });
         if (empty($fmatches)) {
             return null;

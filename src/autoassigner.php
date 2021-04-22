@@ -1,6 +1,6 @@
 <?php
 // autoassigner.php -- HotCRP helper classes for autoassignment
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class AutoassignerCosts implements JsonSerializable {
     public $assignment = 100;
@@ -233,9 +233,11 @@ class Autoassigner {
 
 
     private function balance_reviews($reviewtype) {
-        $q = "select contactId, count(reviewId) from PaperReview where contactId ?a";
+        $q = "select contactId, count(reviewId) from PaperReview where contactId?a";
         if ($reviewtype) {
             $q .= " and reviewType={$reviewtype}";
+        } else {
+            $q .= " and reviewType>0";
         }
         $result = $this->conf->qe($q . " group by contactId", array_keys($this->acs));
         while (($row = $result->fetch_row())) {
@@ -330,7 +332,7 @@ class Autoassigner {
             }
         }
         if (!empty($missing_bp)) {
-            $result = $this->conf->qe("select contactId, paperId from PaperReview where paperId?a and contactId?a", $this->papersel, array_keys($missing_bp));
+            $result = $this->conf->qe("select contactId, paperId from PaperReview where paperId?a and contactId?a and reviewType>0", $this->papersel, array_keys($missing_bp));
             while (($row = $result->fetch_row())) {
                 $cid = (int) $row[0];
                 $pid = (int) $row[1];
@@ -368,7 +370,7 @@ class Autoassigner {
             }
             foreach ($this->acs as $cid => $ac) {
                 if ($prow->has_conflict($cid)
-                    || !($rrow = $prow->review_of_user($cid))
+                    || !($rrow = $prow->review_by_user($cid))
                     || ($scoreinfo !== "xa" && $rrow->reviewStatus < ReviewInfo::RS_COMPLETED)
                     || ($score && !$rrow->$score)) {
                     $scorearr[$prow->paperId][$cid] = -1;
@@ -969,10 +971,10 @@ class Autoassigner {
                            "# hotcrp_assign_show pcconf", "all,cleartag,$tag");
         $curgroup = -1;
         $index = 0;
-        $search = array("HEADING:none");
+        $search = array("LEGEND:none");
         foreach ($result[0] as $pid) {
             if ($groupmap[$pid] != $curgroup && $curgroup != -1) {
-                $search[] = "THEN HEADING:none";
+                $search[] = "THEN LEGEND:none";
             }
             $curgroup = $groupmap[$pid];
             $index += Tagger::value_increment($sequential);

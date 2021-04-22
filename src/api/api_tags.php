@@ -1,6 +1,6 @@
 <?php
 // api/api_tags.php -- HotCRP tags API call
-// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2021 Eddie Kohler; see LICENSE.
 
 class Tags_API {
     /** @param ?PaperInfo $prow */
@@ -31,8 +31,8 @@ class Tags_API {
                 && $want_perm) {
                 if (!$prow->conf->is_known_perm_tag($ti[0])) {
                     $rep[] = (object) ["status" => 1, "message" => "#{$ti[0]}: Unknown permission."];
-                } else if ($ti[1] != -1 && $ti[1] != 1) {
-                    $rep[] = (object) ["status" => 1, "message" => "#{$ti[0]}: Permission tags should have value 1 (allow) or -1 (deny)."];
+                } else if ($ti[1] != -1 && $ti[1] != 0) {
+                    $rep[] = (object) ["status" => 1, "message" => "#{$ti[0]}#{$ti[1]}: Permission tags should have value 0 (allow) or -1 (deny)."];
                 }
             }
             if (str_starts_with($ti[0], $mypfx)
@@ -164,10 +164,10 @@ class Tags_API {
     static function votereport_api(Contact $user, Qrequest $qreq, PaperInfo $prow) {
         $tagger = new Tagger($user);
         if (!($tag = $tagger->check($qreq->tag, Tagger::NOVALUE))) {
-            json_exit(["ok" => false, "error" => $tagger->error_html]);
+            return ["ok" => false, "error" => $tagger->error_html()];
         }
         if (!$user->can_view_peruser_tag($prow, $tag)) {
-            json_exit(["ok" => false, "error" => "Permission error."]);
+            return ["ok" => false, "error" => "Permission error."];
         }
         $votemap = [];
         preg_match_all('/ (\d+)~' . preg_quote($tag) . '#(\S+)/i', $prow->all_tags_text(), $m);
@@ -187,9 +187,9 @@ class Tags_API {
             }
         }
         if (empty($result)) {
-            json_exit(["ok" => true, "result" => ""]);
+            return ["ok" => true, "result" => ""];
         } else {
-            json_exit(["ok" => true, "result" => '<span class="nw">' . join(',</span> <span class="nw">', $result) . '</span>']);
+            return ["ok" => true, "result" => '<span class="nw">' . join(',</span> <span class="nw">', $result) . '</span>'];
         }
     }
 }

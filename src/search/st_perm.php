@@ -1,6 +1,6 @@
 <?php
 // search/st_perm.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Perm_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -21,7 +21,7 @@ class Perm_SearchTerm extends SearchTerm {
                    || strcasecmp($word, "author-write-final") === 0) {
             return new Perm_SearchTerm($srch->user, "author-write-final");
         } else {
-            $srch->warn("Unknown permission.");
+            $srch->warning("Unknown permission.");
             return new False_SearchTerm;
         }
     }

@@ -1,6 +1,6 @@
 <?php
 // contactlist.php -- HotCRP helper class for producing lists of contacts
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ContactList {
     const FIELD_SELECTOR = 1000;
@@ -162,44 +162,36 @@ class ContactList {
     }
 
     function _sortLastVisit($a, $b) {
-        if ($a->activity_at != $b->activity_at) {
-            return $a->activity_at < $b->activity_at ? 1 : -1;
-        } else {
-            return $this->_sortBase($a, $b);
-        }
+        return $b->activity_at <=> $a->activity_at ? : $this->_sortBase($a, $b);
     }
 
     function _sortReviews($a, $b) {
         $ac = $this->_rect_data[$a->contactId] ?? [0, 0];
         $bc = $this->_rect_data[$b->contactId] ?? [0, 0];
-        $x = $bc[1] - $ac[1] ? : $bc[0] - $ac[0];
-        return $x ? : $this->_sortBase($a, $b);
+        return $bc[1] <=> $ac[1] ? : ($bc[0] <=> $ac[0] ? : $this->_sortBase($a, $b));
     }
 
     function _sortLeads($a, $b) {
-        $cid = $b->contactId;
-        $x = ($this->_lead_data[$b->contactId] ?? 0) - ($this->_lead_data[$a->contactId] ?? 0);
-        return $x ? : $this->_sortBase($a, $b);
+        return ($this->_lead_data[$b->contactId] ?? 0) <=> ($this->_lead_data[$a->contactId] ?? 0) ? : $this->_sortBase($a, $b);
     }
 
     function _sortShepherds($a, $b) {
-        $x = ($this->_shepherd_data[$b->contactId] ?? 0) - ($this->_shepherd_data[$a->contactId] ?? 0);
-        return $x ? : $this->_sortBase($a, $b);
+        return ($this->_shepherd_data[$b->contactId] ?? 0) <=> ($this->_shepherd_data[$a->contactId] ?? 0) ? : $this->_sortBase($a, $b);
     }
 
     function _sortReviewRatings($a, $b) {
         list($ag, $ab) = $this->_rating_data[$a->contactId] ?? [0, 0];
         list($bg, $bb) = $this->_rating_data[$b->contactId] ?? [0, 0];
-        if ($ag - $ab === 0) {
+        if ($ag + $ab === 0) {
             if ($bg + $bb !== 0) {
                 return 1;
             }
         } else if ($bg + $bb === 0) {
             return -1;
         } else if ($ag - $ab !== $bg - $bb) {
-            return $ag - $ab > $bg - $bb ? -1 : 1;
+            return $bg - $bb <=> $ag - $ab;
         } else if ($ag + $ab !== $bg + $bb) {
-            return $ag + $ab > $bg + $bb ? -1 : 1;
+            return $bg + $bb <=> $ag + $ab;
         }
         return $this->_sortBase($a, $b);
     }
@@ -414,9 +406,8 @@ class ContactList {
             }
         }
         if ($limit === "req") {
-            $args["myReviewRequests"] = true;
-        }
-        if ($limit === "au") {
+            $args["myReviewRequests"] = $args["finalized"] = true;
+        } else if ($limit === "au") {
             $args["finalized"] = true;
         } else if ($limit === "aurej") {
             $args["rejected"] = true;
@@ -480,7 +471,7 @@ class ContactList {
             foreach ($prows as $prow) {
                 if ($this->user->can_view_review_assignment($prow, null)
                     && $this->user->can_view_review_identity($prow, null)) {
-                    foreach ($prow->reviews_by_id() as $rrow) {
+                    foreach ($prow->all_reviews() as $rrow) {
                         if ($this->user->can_view_review_assignment($prow, $rrow)
                             && $this->user->can_view_review_identity($prow, $rrow)) {
                             $this->collect_review_data($prow, $rrow, $repapers, $review_limit, $scores);
@@ -497,7 +488,7 @@ class ContactList {
                     $pids[] = $prow->paperId;
                 }
             }
-            $result = $this->conf->qe("select paperId, reviewId, " . $this->conf->query_ratings() . " ratingSignature from PaperReview where paperId ?a group by paperId, reviewId", $pids);
+            $result = $this->conf->qe("select paperId, reviewId, " . $this->conf->query_ratings() . " ratingSignature from PaperReview where paperId?a and reviewType>0 group by paperId, reviewId", $pids);
             while (($row = $result->fetch_row())) {
                 $ratings[$row[0]][$row[1]] = $row[2];
             }
@@ -505,9 +496,12 @@ class ContactList {
             $this->_rating_data = [];
             foreach ($prows as $prow) {
                 if ($this->user->can_view_review_ratings($prow)) {
-                    foreach ($prow->reviews_by_id() as $rrow) {
+                    $allow_admin = $this->user->allow_administer($prow);
+                    foreach ($prow->all_reviews() as $rrow) {
                         if (isset($ratings[$prow->paperId][$rrow->reviewId])
-                            && $this->user->can_view_review_ratings($prow, $rrow)) {
+                            && ($allow_admin
+                                || ($this->user->can_view_review_ratings($prow, $rrow)
+                                    && $this->user->can_view_review_identity($prow, $rrow)))) {
                             $rrow->ratingSignature = $ratings[$prow->paperId][$rrow->reviewId];
                             $cid = $rrow->contactId;
                             $this->_rating_data[$cid] = $this->_rating_data[$cid] ?? [0, 0];
@@ -646,11 +640,11 @@ class ContactList {
                 $a = $b = [];
                 if ($c[0]) {
                     $a[] = "{$c[0]} positive";
-                    $b[] = "<a href=\"" . $this->conf->hoturl("search", "q=re:" . urlencode($row->email) . "+rate:good") . "\">+{$c[0]}</a>";
+                    $b[] = "<a href=\"" . $this->conf->hoturl("search", "q=rate:good:" . urlencode($row->email)) . "\">+{$c[0]}</a>";
                 }
                 if ($c[1]) {
                     $a[] = "{$c[1]} negative";
-                    $b[] = "<a href=\"" . $this->conf->hoturl("search", "q=re:" . urlencode($row->email) . "+rate:bad") . "\">&minus;{$c[1]}</a>";
+                    $b[] = "<a href=\"" . $this->conf->hoturl("search", "q=rate:bad:" . urlencode($row->email)) . "\">&minus;{$c[1]}</a>";
                 }
                 return '<span class="hastitle" title="' . join(", ", $a) . '">' . join(" ", $b) . '</span>';
             } else {
@@ -683,7 +677,7 @@ class ContactList {
                 foreach ($reords as $reord) {
                     if ($last !== $reord[0])  {
                         if ($reord[2]) {
-                            $url = $this->conf->hoturl("paper", "p={$reord[0]}#r{$reord[0]}" . unparseReviewOrdinal($reord[2]));
+                            $url = $this->conf->hoturl("paper", "p={$reord[0]}#r{$reord[0]}" . unparse_latin_ordinal($reord[2]));
                         } else {
                             $url = $this->conf->hoturl("review", "p={$reord[0]}&amp;r={$reord[1]}");
                         }
@@ -785,15 +779,15 @@ class ContactList {
             $types["pcinfo"] = "PC info";
         }
         $lllgroups[] = ["", "Download",
-            Ht::select("getaction", $types, null, ["class" => "want-focus"])
-            . "&nbsp; " . Ht::submit("getgo", "Go")];
+            Ht::select("getfn", $types, null, ["class" => "want-focus"])
+            . "&nbsp; " . Ht::submit("fn", "Go", ["value" => "get"])];
 
         if ($this->user->privChair) {
             $lllgroups[] = ["", "Tag",
-                Ht::select("tagtype", array("a" => "Add", "d" => "Remove", "s" => "Define"), $this->qreq->tagtype)
+                Ht::select("tagfn", ["a" => "Add", "d" => "Remove", "s" => "Define"], $this->qreq->tagfn)
                 . ' &nbsp;tag(s) &nbsp;'
-                . Ht::entry("tag", $this->qreq->tag, ["size" => 15, "class" => "want-focus js-autosubmit", "data-autosubmit-type" => "tagact"])
-                . ' &nbsp;' . Ht::submit("tagact", "Go")];
+                . Ht::entry("tag", $this->qreq->tag, ["size" => 15, "class" => "want-focus js-autosubmit", "data-autosubmit-type" => "tag"])
+                . ' &nbsp;' . Ht::submit("fn", "Go", ["value" => "tag"])];
 
             $mods = ["disableaccount" => "Disable", "enableaccount" => "Enable"];
             if ($this->user->can_change_password(null)) {
@@ -801,8 +795,8 @@ class ContactList {
             }
             $mods["sendaccount"] = "Send account information";
             $lllgroups[] = ["", "Modify",
-                Ht::select("modifytype", $mods, null, ["class" => "want-focus"])
-                . "&nbsp; " . Ht::submit("modifygo", "Go")];
+                Ht::select("modifyfn", $mods, null, ["class" => "want-focus"])
+                . "&nbsp; " . Ht::submit("fn", "Go", ["value" => "modify"])];
         }
 
         return "  <tfoot class=\"pltable" . ($hascolors ? " pltable-colored" : "")

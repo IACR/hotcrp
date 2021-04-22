@@ -1,6 +1,6 @@
 <?php
 // log.php -- HotCRP action log
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 if (!$Me->is_manager()) {
@@ -361,7 +361,7 @@ class LogRowGenerator {
         unset($this->need_users[0]);
         $this->need_users = array_diff_key($this->need_users, $this->users);
         if (!empty($this->need_users)) {
-            $result = $this->conf->qe("select contactId, firstName, lastName, affiliation, email, contactTags, roles from ContactInfo where contactId?a", array_keys($this->need_users));
+            $result = $this->conf->qe("select contactId, firstName, lastName, affiliation, email, roles, contactTags, disabled, primaryContactId from ContactInfo where contactId?a", array_keys($this->need_users));
             while (($user = Contact::fetch($result, $this->conf))) {
                 $this->users[$user->contactId] = $user;
                 unset($this->need_users[$user->contactId]);
@@ -559,7 +559,8 @@ if ($Qreq->download) {
             ]);
         }
     }
-    csv_exit($csvg);
+    $csvg->emit();
+    exit;
 }
 
 if ($first_timestamp) {
@@ -604,30 +605,31 @@ function searchbar(LogRowGenerator $lrg, $page) {
         $dplaceholder = $Conf->unparse_time((int) $first_timestamp);
     }
 
-    echo Ht::form(hoturl("log"), ["method" => "get", "id" => "searchform"]);
-    if ($Qreq->forceShow)
+    echo Ht::form(hoturl("log"), ["method" => "get", "id" => "searchform", "class" => "clearfix"]);
+    if ($Qreq->forceShow) {
         echo Ht::hidden("forceShow", 1);
+    }
     echo '<div class="d-inline-block" style="padding-right:2rem">',
         '<div class="', Ht::control_class("q", "entryi medium"),
         '"><label for="q">Concerning action(s)</label><div class="entry">',
-        Ht::render_feedback_at("q"),
+        Ht::feedback_at("q"),
         Ht::entry("q", $Qreq->q, ["id" => "q", "size" => 40]),
         '</div></div><div class="', Ht::control_class("p", "entryi medium"),
         '"><label for="p">Concerning paper(s)</label><div class="entry">',
-        Ht::render_feedback_at("p"),
-        Ht::entry("p", $Qreq->p, ["id" => "p", "class" => "need-suggest papersearch", "autocomplete" => "off", "size" => 40]),
+        Ht::feedback_at("p"),
+        Ht::entry("p", $Qreq->p, ["id" => "p", "class" => "need-suggest papersearch", "autocomplete" => "off", "size" => 40, "spellcheck" => false]),
         '</div></div><div class="', Ht::control_class("u", "entryi medium"),
         '"><label for="u">Concerning user(s)</label><div class="entry">',
-        Ht::render_feedback_at("u"),
+        Ht::feedback_at("u"),
         Ht::entry("u", $Qreq->u, ["id" => "u", "size" => 40]),
         '</div></div><div class="', Ht::control_class("n", "entryi medium"),
         '"><label for="n">Show</label><div class="entry">',
         Ht::entry("n", $Qreq->n, ["id" => "n", "size" => 4, "placeholder" => 50]),
         '  records at a time',
-        Ht::render_feedback_at("n"),
+        Ht::feedback_at("n"),
         '</div></div><div class="', Ht::control_class("date", "entryi medium"),
         '"><label for="date">Starting at</label><div class="entry">',
-        Ht::render_feedback_at("date"),
+        Ht::feedback_at("date"),
         Ht::entry("date", $date, ["id" => "date", "size" => 40, "placeholder" => $dplaceholder]),
         '</div></div></div>',
         Ht::submit("Show"),

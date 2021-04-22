@@ -56,7 +56,7 @@ class TagSearchMatcher {
         $checktag = substr($xtag, (int) $twiddle);
         $tagger = new Tagger($this->user);
         if (!$tagger->check($checktag, Tagger::NOVALUE | ($allow_star_any ? Tagger::ALLOWRESERVED | Tagger::ALLOWSTAR : 0))) {
-            $this->_errors[] = $tagger->error_html;
+            $this->_errors[] = $tagger->error_html();
             return false;
         }
 
@@ -215,7 +215,7 @@ class TagSearchMatcher {
             foreach ($this->_tagpat as $tp) {
                 $res[] = str_replace('\\*', '.*', preg_quote($tp));
             }
-            return Dbl::format_query($this->user->conf->dblink, "$table.tag regexp ?",
+            return Dbl::format_query($this->user->conf->dblink, "$table.tag regexp _utf8 ? COLLATE utf8_general_ci",
                     count($res) > 1 ? "^(" . join("|", $res) . ")$" : "^{$res[0]}$");
         } else {
             return null;
@@ -227,7 +227,7 @@ class TagSearchMatcher {
         if (($setp = $this->sqlexpr_tagpart($table)) !== null) {
             $s = [$setp];
             foreach ($this->_valm as $valm) {
-                $s[] = "$table.tagIndex" . $valm->countexpr();
+                $s[] = "$table.tagIndex" . $valm->comparison();
             }
             return "(" . join(" and ", $s) . ")";
         } else {

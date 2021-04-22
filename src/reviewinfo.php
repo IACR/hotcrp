@@ -1,6 +1,6 @@
 <?php
 // reviewinfo.php -- HotCRP class representing reviews
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewInfo implements JsonSerializable {
     /** @var Conf */
@@ -41,6 +41,8 @@ class ReviewInfo implements JsonSerializable {
     public $reviewNeedsSubmit;
     /** @var int */
     public $reviewViewScore;
+    /** @var bool */
+    public $reviewViewScore_recomputed = false;
     /** @var int */
     public $reviewStatus;
 
@@ -122,6 +124,10 @@ class ReviewInfo implements JsonSerializable {
     public $affiliation;
     /** @var ?string */
     public $email;
+    /** @var ?bool */
+    public $nameAmbiguous;
+    /** @var ?int */
+    public $roles;
     /** @var ?string */
     public $contactTags;
     /** @var ?int */
@@ -166,19 +172,42 @@ class ReviewInfo implements JsonSerializable {
         "technicalMerit", "interestToCommunity", "longevity", "grammar",
         "likelyPresentation", "suitableForShort", "potential", "fixability"
     ];
+    /** @var array<string,ReviewFieldInfo> */
+    static private $field_info_map = [];
     const MIN_SFIELD = 12;
 
     const RATING_GOODMASK = 1;
     const RATING_BADMASK = 126;
+    const RATING_ANYMASK = 127;
     // See also script.js:unparse_ratings
+    /** @var array<int,string>
+     * @readonly */
     static public $rating_options = [
         1 => "good review", 2 => "needs work",
         4 => "too short", 8 => "too vague", 16 => "too narrow",
         32 => "disrespectful", 64 => "not correct"
     ];
+    /** @var array<int,string>
+     * @readonly */
     static public $rating_bits = [
-        1 => "good", 2 => "bad", 4 => "short", 8 => "vague",
+        1 => "good", 2 => "needswork", 4 => "short", 8 => "vague",
         16 => "narrow", 32 => "disrespectful", 64 => "wrong"
+    ];
+    /** @var list<string>
+     * @readonly */
+    static public $rating_match_strings = [
+        "good", "good-review", "goodreview",
+        "needs-work", "needswork", "needs", "work",
+        "too-short", "tooshort", "short",
+        "too-vague", "toovague", "vague",
+        "too-narrow", "toonarrow", "narrow",
+        "disrespectful", "respect", "bias", "biased",
+        "not-correct", "incorrect", "notcorrect", "wrong"
+    ];
+    /** @var list<int>
+     * @readonly */
+    static public $rating_match_bits = [
+        1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 8, 8, 8, 16, 16, 16, 32, 32, 32, 32, 64, 64, 64, 64
     ];
 
     static private $type_map = [
@@ -194,22 +223,50 @@ class ReviewInfo implements JsonSerializable {
         REVIEW_META => "metareview"
     ];
 
+    /** @param string $str
+     * @return null|int|false */
     static function parse_type($str) {
         $str = strtolower($str);
         if ($str === "review" || $str === "" || $str === "all" || $str === "any") {
             return null;
         }
         if (str_ends_with($str, "review")) {
-            $str = substr($str, 0, -6);
+            $str = substr($str, 0, $str[strlen($str) - 7] === "-" ? -7 : -6);
         }
         return self::$type_map[$str] ?? false;
     }
+
+    /** @param int $type
+     * @return string */
     static function unparse_assigner_action($type) {
         return self::$type_revmap[$type] ?? "clearreview";
     }
 
-    private function merge($recomputing_view_scores, PaperInfo $prow = null,
-                           Conf $conf = null) {
+
+    /** @return ReviewInfo */
+    static function make_blank(PaperInfo $prow = null, Contact $user) {
+        $rrow = new ReviewInfo;
+        $rrow->conf = $user->conf;
+        $rrow->prow = $prow;
+        $rrow->paperId = $prow ? $prow->paperId : 0;
+        $rrow->reviewId = 0;
+        $rrow->contactId = $user->contactId;
+        $rrow->reviewToken = 0;
+        $rrow->reviewType = $user->isPC ? REVIEW_PC : REVIEW_EXTERNAL;
+        $rrow->reviewRound = $user->conf->assignment_round(!$user->isPC);
+        $rrow->requestedBy = 0;
+        $rrow->reviewBlind = $user->conf->review_blindness() !== Conf::BLIND_NEVER ? 1 : 0;
+        $rrow->reviewModified = 0;
+        $rrow->reviewOrdinal = 0;
+        $rrow->timeDisplayed = 0;
+        $rrow->timeApprovalRequested = 0;
+        $rrow->reviewNeedsSubmit = 0;
+        $rrow->reviewViewScore = -3;
+        $rrow->reviewStatus = self::RS_EMPTY;
+        return $rrow;
+    }
+
+    private function merge($is_full, PaperInfo $prow = null, Conf $conf = null) {
         $this->conf = $conf ?? $prow->conf;
         $this->prow = $prow;
         $this->paperId = (int) $this->paperId;
@@ -303,10 +360,15 @@ class ReviewInfo implements JsonSerializable {
             }
         }
 
-        if (!$recomputing_view_scores
-            && $this->reviewViewScore == self::VIEWSCORE_RECOMPUTE) {
-            assert($this->reviewViewScore != self::VIEWSCORE_RECOMPUTE);
-            $conf->review_form()->compute_view_scores();
+        if ($this->roles !== null) {
+            $this->roles = (int) $this->roles;
+        }
+
+        if ($this->reviewViewScore == self::VIEWSCORE_RECOMPUTE) {
+            $this->reviewViewScore_recomputed = true;
+            if ($is_full) {
+                $this->reviewViewScore = $conf->review_form()->nonempty_view_score($this);
+            }
         }
     }
 
@@ -322,12 +384,11 @@ class ReviewInfo implements JsonSerializable {
     }
 
     /** @return ?ReviewInfo */
-    static function fetch($result, PaperInfo $prow = null, Conf $conf = null,
-                          $recomputing_view_scores = false) {
+    static function fetch($result, PaperInfo $prow = null, Conf $conf = null) {
         $rrow = $result ? $result->fetch_object("ReviewInfo") : null;
         '@phan-var ?ReviewInfo $rrow';
         if ($rrow) {
-            $rrow->merge($recomputing_view_scores, $prow, $conf);
+            $rrow->merge(true, $prow, $conf);
         }
         return $rrow;
     }
@@ -363,7 +424,7 @@ class ReviewInfo implements JsonSerializable {
         $rrow->reviewViewScore = (int) $vals[14];
         for ($i = 15; isset($vals[$i]); ++$i) {
             $eq = strpos($vals[$i], "=");
-            $f = self::field_info(substr($vals[$i], 0, $eq), $prow->conf);
+            $f = self::field_info(substr($vals[$i], 0, $eq));
             $fid = $f->id;
             $rrow->$fid = (int) substr($vals[$i], $eq + 1);
             $prow->_mark_has_score($fid);
@@ -402,6 +463,18 @@ class ReviewInfo implements JsonSerializable {
     function is_subreview() {
         return $this->reviewType === REVIEW_EXTERNAL
             && $this->reviewStatus < ReviewInfo::RS_COMPLETED;
+    }
+
+    /** @param bool $hard
+     * @return string */
+    function deadline_name($hard = false) {
+        return $this->conf->review_deadline_name($this->reviewRound, $this->reviewType >= REVIEW_PC, $hard);
+    }
+
+    /** @param bool $hard
+     * @return ?int */
+    function deadline($hard = false) {
+        return $this->conf->setting($this->deadline_name($hard));
     }
 
     /** @return ?int */
@@ -485,43 +558,80 @@ class ReviewInfo implements JsonSerializable {
     }
 
     /** @return string */
-    function unparse_ordinal() {
-        return unparseReviewOrdinal($this);
+    function unparse_ordinal_id() {
+        if ($this->reviewOrdinal) {
+            return $this->paperId . unparse_latin_ordinal($this->reviewOrdinal);
+        } else if ($this->reviewId) {
+            return "{$this->paperId}r{$this->reviewId}";
+        } else if ($this->paperId) {
+            return "{$this->paperId}rnew";
+        } else {
+            return "new";
+        }
     }
 
 
-    /** @param Contact $c */
-    function assign_name($c) {
+    /** @return bool */
+    function has_nonempty_field(ReviewField $f) {
+        return $f->test_exists($this)
+            && ($x = $this->{$f->id} ?? null) !== null
+            && $x !== ""
+            && (!$f->has_options || (int) $x !== 0);
+    }
+
+    /** @return array<string,ReviewField> */
+    function viewable_fields(Contact $user) {
+        $bound = $user->view_score_bound($this->prow, $this);
+        $fs = [];
+        foreach ($this->conf->all_review_fields() as $fid => $f) {
+            if ($f->view_score > $bound
+                && $f->test_exists($this))
+                $fs[$fid] = $f;
+        }
+        return $fs;
+    }
+
+
+    /** @param Contact $c
+     * @param list<Contact> &$assigned */
+    function assign_name($c, &$assigned) {
         $this->firstName = $c->firstName;
         $this->lastName = $c->lastName;
         $this->affiliation = $c->affiliation;
         $this->email = $c->email;
+        $this->roles = $c->roles;
         $this->contactTags = $c->contactTags;
+        $this->nameAmbiguous = false;
+        foreach ($assigned as $pc) {
+            if ($pc->firstName === $c->firstName && $pc->lastName === $c->lastName) {
+                $pc->nameAmbiguous = $c->nameAmbiguous = true;
+            }
+        }
+        $assigned[] = $c;
     }
 
     /** @param string $id
      * @return ?ReviewFieldInfo */
-    static function field_info($id, Conf $conf) {
-        if (strlen($id) === 3 && ctype_digit(substr($id, 1))) {
-            $n = intval(substr($id, 1), 10);
-            $json_storage = $id;
-            if ($id[0] === "s" && isset(self::$new_score_fields[$n])) {
-                $fid = self::$new_score_fields[$n];
-                return new ReviewFieldInfo($fid, $id, true, $fid, null);
-            } else if ($id[0] === "s" || $id[0] === "t") {
-                return new ReviewFieldInfo($id, $id, $id[0] === "s", null, $id);
-            } else {
-                return null;
+    static function field_info($id) {
+        $m = self::$field_info_map[$id] ?? null;
+        if (!$m && !array_key_exists($id, self::$field_info_map)) {
+            if (strlen($id) === 3 && ctype_digit(substr($id, 1))) {
+                $n = intval(substr($id, 1), 10);
+                $json_storage = $id;
+                if ($id[0] === "s" && isset(self::$new_score_fields[$n])) {
+                    $fid = self::$new_score_fields[$n];
+                    $m = new ReviewFieldInfo($fid, $id, true, $fid, null);
+                } else if ($id[0] === "s" || $id[0] === "t") {
+                    $m = new ReviewFieldInfo($id, $id, $id[0] === "s", null, $id);
+                }
+            } else if (($short_id = self::$text_field_map[$id] ?? null)) {
+                $m = new ReviewFieldInfo($short_id, $short_id, false, null, $short_id);
+            } else if (($short_id = self::$score_field_map[$id] ?? null)) {
+                $m = new ReviewFieldInfo($id, $short_id, true, $id, null);
             }
-        } else if (isset(self::$text_field_map[$id])) {
-            $short_id = self::$text_field_map[$id];
-            return new ReviewFieldInfo($short_id, $short_id, false, null, $short_id);
-        } else if (isset(self::$score_field_map[$id])) {
-            $short_id = self::$score_field_map[$id];
-            return new ReviewFieldInfo($id, $short_id, true, $id, null);
-        } else {
-            return null;
+            self::$field_info_map[$id] = $m;
         }
+        return $m;
     }
 
     /** @return bool */
@@ -613,7 +723,7 @@ class ReviewInfo implements JsonSerializable {
 
     /** @param int|Contact $user
      * @return ?int */
-    function rating_of_user($user) {
+    function rating_by_rater($user) {
         $this->ensure_ratings();
         $cid = is_object($user) ? $user->contactId : $user;
         $str = ",$cid ";
@@ -625,6 +735,15 @@ class ReviewInfo implements JsonSerializable {
         }
     }
 
+    /** @param int|Contact $user
+     * @return ?int
+     * @deprecated */
+    function rating_of_user($user) {
+        return $this->rating_by_rater($user);
+    }
+
+    /** @param int $rating
+     * @return string */
     static function unparse_rating($rating) {
         if (isset(self::$rating_bits[$rating])) {
             return self::$rating_bits[$rating];
@@ -632,25 +751,56 @@ class ReviewInfo implements JsonSerializable {
             return "none";
         } else {
             $a = [];
-            foreach (self::$rating_bits as $k => $v)
+            foreach (self::$rating_bits as $k => $v) {
                 if ($rating & $k)
                     $a[] = $v;
+            }
             return join(" ", $a);
         }
     }
 
+    /** @param string $s
+     * @return ?int */
     static function parse_rating($s) {
         if (ctype_digit($s)) {
             $n = intval($s);
-            if ($n >= 0 && $n < 127)
-                return $n ? : null;
+            return $n >= 0 && $n <= 127 ? $n : null;
+        } else {
+            $n = 0;
+            foreach (preg_split('/\s+/', $s) as $word) {
+                if (($k = array_search($word, ReviewInfo::$rating_bits)) !== false) {
+                    $n |= $k;
+                } else if ($word !== "" && $word !== "none") {
+                    return null;
+                }
+            }
+            return $n;
         }
+    }
+
+    /** @param string $s
+     * @return ?int */
+    static function parse_rating_search($s) {
+        assert(count(self::$rating_match_bits) === count(self::$rating_match_strings));
         $n = 0;
-        foreach (preg_split('/\s+/', $s) as $word) {
-            if (($k = array_search($word, ReviewInfo::$rating_bits)) !== false) {
-                $n |= $k;
-            } else if ($word !== "" && $word !== "none") {
-                return false;
+        foreach (preg_split('/\s+/', SearchWord::unquote(strtolower($s))) as $w) {
+            if ($w === "none") {
+                return 0;
+            } else if ($w === "any") {
+                $n |= ReviewInfo::RATING_ANYMASK;
+            } else if ($w === "good" || $w === "+") {
+                $n |= ReviewInfo::RATING_GOODMASK;
+            } else if ($w === "bad" || $w === "-" || $w === "\xE2\x88\x92" /* MINUS */) {
+                $n |= ReviewInfo::RATING_BADMASK;
+            } else if ($w !== "") {
+                $re = '/\A' . str_replace('\*', '.*', preg_quote(str_replace("_", "-", $w))) . '\z/';
+                $matches = preg_grep($re, self::$rating_match_strings);
+                if (empty($matches) && strpos($w, "*") === false) {
+                    return null;
+                }
+                foreach ($matches as $i => $m) {
+                    $n |= self::$rating_match_bits[$i];
+                }
             }
         }
         return $n;

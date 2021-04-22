@@ -1,6 +1,6 @@
 <?php
 // src/partials/p_signin.php -- HotCRP password reset partials
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Signin_Partial {
     public $_reset_cap;
@@ -35,7 +35,7 @@ class Signin_Partial {
         if ($qreq->cancel) {
             $info = ["ok" => false];
             foreach ($gx->members("signin/request") as $gj) {
-                $info = call_user_func($gj->signin_callback, $user, $qreq, $info, $gj);
+                $info = call_user_func($gj->signin_function, $user, $qreq, $info, $gj);
             }
             Navigation::redirect();
         } else if ($user->conf->opt("httpAuthLogin")) {
@@ -46,7 +46,7 @@ class Signin_Partial {
             } else if (!$qreq->start) {
                 $info = ["ok" => true];
                 foreach ($gx->members("signin/request") as $gj) {
-                    $info = call_user_func($gj->signin_callback, $user, $qreq, $info, $gj);
+                    $info = call_user_func($gj->signin_function, $user, $qreq, $info, $gj);
                 }
                 if ($info["ok"] || isset($info["redirect"])) {
                     Navigation::redirect($info["redirect"] ?? "");
@@ -134,7 +134,7 @@ class Signin_Partial {
                 $usuf = count($su) > 1 ? "u/{$i}/" : "";
                 $links[] = '<a href="' . htmlspecialchars($nav->base_path_relative . $usuf) . '">' . htmlspecialchars($email) . '</a>';
             }
-            echo '<p class="is-warning"><span class="warning-mark"></span> ', $user->conf->_("You are already signed in as %s. Use this form to add another account.", commajoin($links)), '</p>';
+            echo '<p class="is-warning"><span class="warning-mark"></span> ', $user->conf->_("You are already signed in as %s. Use this form to add another account to this browser session.", commajoin($links)), '</p>';
         }
         echo '<p class="mb-5">',
             $user->conf->_("Sign in to submit or review papers."), '</p>';
@@ -144,7 +144,7 @@ class Signin_Partial {
         $is_external_login = $user->conf->external_login();
         echo '<div class="', Ht::control_class("email", "f-i fx"), '">',
             Ht::label($is_external_login ? "Username" : "Email", "signin_email"),
-            Ht::render_feedback_at("email"),
+            Ht::feedback_at("email"),
             Ht::entry("email", (string) $qreq->email, [
                 "size" => 36, "id" => "signin_email", "class" => "fullw",
                 "autocomplete" => "username", "tabindex" => 1,
@@ -165,7 +165,7 @@ class Signin_Partial {
         }
         $password_reset = $user->session("password_reset");
         echo Ht::label("Password", "signin_password"),
-            Ht::render_feedback_at("password"),
+            Ht::feedback_at("password"),
             Ht::password("password",
                 Ht::problem_status_at("password") !== 1 ? "" : $qreq->password, [
                 "size" => 36, "id" => "signin_password", "class" => "fullw",
@@ -265,8 +265,8 @@ class Signin_Partial {
             '<label for="', $k, '">',
             ($k === "email" ? "Email" : "Email or password reset code"),
             '</label>',
-            Ht::render_feedback_at("resetcap"),
-            Ht::render_feedback_at("email"),
+            Ht::feedback_at("resetcap"),
+            Ht::feedback_at("email"),
             Ht::entry($k, $qreq[$k], [
                 "size" => 36, "id" => $k, "class" => "fullw",
                 "autocomplete" => $k === "email" ? $k : null,
@@ -390,7 +390,7 @@ class Signin_Partial {
     }
     function render_forgot_form_actions() {
         echo '<div class="popup-actions">',
-            Ht::submit("Reset password", ["class" => $this->_reset_user ? "btn-danger" : "btn-primary"]),
+            Ht::submit("Reset password", ["class" => $this->_reset_user ? "btn-success" : "btn-primary"]),
             Ht::submit("cancel", "Cancel", ["class" => "uic js-no-signin", "formnovalidate" => true]),
             '</div>';
     }
@@ -519,13 +519,13 @@ class Signin_Partial {
     static function render_reset_form_password() {
         echo '<div class="', Ht::control_class("password", "f-i"), '">',
             '<label for="password">New password</label>',
-            Ht::render_feedback_at("password"),
+            Ht::feedback_at("password"),
             Ht::password("password", "", ["class" => "fullw", "size" => 36, "id" => "password", "autocomplete" => "new-password", "autofocus" => true]),
             '</div>',
 
             '<div class="', Ht::control_class("password2", "f-i"), '">',
             '<label for="password2">Repeat new password</label>',
-            Ht::render_feedback_at("password2"),
+            Ht::feedback_at("password2"),
             Ht::password("password2", "", ["class" => "fullw", "size" => 36, "id" => "password2", "autocomplete" => "new-password"]),
             '</div>';
     }

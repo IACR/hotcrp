@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getreviewforms.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class GetReviewForms_ListAction extends GetReviewBase_ListAction {
     private $all;
@@ -17,12 +17,12 @@ class GetReviewForms_ListAction extends GetReviewBase_ListAction {
             // blank form
             return $user->conf->make_csvg("review", CsvGenerator::TYPE_STRING)
                 ->set_inline(false)
-                ->add_string($rf->textFormHeader("blank") . $rf->textForm(null, null, $user, null) . "\n");
+                ->add_string($rf->text_form_header(false) . $rf->text_form(null, null, $user, null) . "\n");
         }
 
         $texts = $errors = [];
         foreach ($ssel->paper_set($user) as $prow) {
-            $whyNot = $user->perm_review($prow, null);
+            $whyNot = $user->perm_edit_review($prow, null);
             if ($whyNot
                 && !isset($whyNot["deadline"])
                 && !isset($whyNot["reviewNotAssigned"])) {
@@ -37,17 +37,17 @@ class GetReviewForms_ListAction extends GetReviewBase_ListAction {
                     }
                 }
                 if (!$this->all || !$user->allow_administer($prow)) {
-                    $rrows = $prow->full_reviews_of_user($user);
+                    $rrows = $prow->full_reviews_by_user($user);
                 } else {
                     $prow->ensure_full_reviews();
-                    $rrows = $prow->reviews_by_display($user);
+                    $rrows = $prow->reviews_as_display();
                 }
                 $time = null;
                 if (empty($rrows)) {
                     $rrows[] = null;
                 }
                 foreach ($rrows as $rrow) {
-                    $t .= $rf->textForm($prow, $rrow, $user, null) . "\n";
+                    $t .= $rf->text_form($prow, $rrow, $user, null) . "\n";
                     if ($rrow) {
                         $time = max($time ?? 0, $rrow->mtime($user));
                     }

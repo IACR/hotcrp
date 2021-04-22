@@ -1,4 +1,7 @@
 <?php
+// search.php -- HotCRP batch search script
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+
 require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
 $arg = Getopt::rest($argv, "hn:t:f:N", ["help", "name:", "type:", "field:", "show:", "header", "no-header", "sitename"]);
@@ -23,7 +26,7 @@ require_once(SiteLoader::find("src/init.php"));
 
 $user = $Conf->root_user();
 $t = $arg["t"] ?? "s";
-$searchtypes = PaperSearch::search_types($user, $t);
+$searchtypes = PaperSearch::viewable_limits($user, $t);
 if (!isset($searchtypes[$t])) {
     fwrite(STDERR, "batch/search.php: No search collection ‘{$t}’.\n");
     exit(1);

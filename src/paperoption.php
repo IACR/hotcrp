@@ -1,6 +1,6 @@
 <?php
 // paperoption.php -- HotCRP helper class for paper options
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 global $ConfSitePATH, $Opt;
 if (isset($Opt["iacrType"])) {
@@ -334,8 +334,7 @@ class PaperOptionList implements IteratorAggregate {
     function assign_search_keywords($nonpaper, AbbreviationMatcher $am) {
         $cb = [$this, "option_by_id"];
         foreach ($this->option_json_map() as $id => $oj) {
-            if ((($oj->nonpaper ?? false) === true) === $nonpaper
-                && ($oj->search_keyword ?? null) === null) {
+            if ((($oj->nonpaper ?? false) === true) === $nonpaper) {
                 if ($oj->name ?? null) {
                     $e = AbbreviationEntry::make_lazy($oj->name, $cb, [$id], Conf::MFLAG_OPTION);
                     $s = $am->ensure_entry_keyword($e, AbbreviationMatcher::KW_CAMEL, Conf::MFLAG_OPTION) ?? false;
@@ -397,16 +396,17 @@ class PaperOptionList implements IteratorAggregate {
                 $this->populate_intrinsic($id);
             }
             return $this->_imap[$id];
-        }
-        if (!array_key_exists($id, $this->_omap)) {
-            $this->_omap[$id] = null;
-            if (($oj = ($this->option_json_map())[$id] ?? null)
-                && Conf::xt_enabled($oj)
-                && $this->conf->xt_allowed($oj)) {
-                $this->_omap[$id] = PaperOption::make($oj, $this->conf);
+        } else {
+            if (!array_key_exists($id, $this->_omap)) {
+                $this->_omap[$id] = null;
+                if (($oj = ($this->option_json_map())[$id] ?? null)
+                    && Conf::xt_enabled($oj)
+                    && $this->conf->xt_allowed($oj)) {
+                    $this->_omap[$id] = PaperOption::make($oj, $this->conf);
+                }
             }
+            return $this->_omap[$id];
         }
-        return $this->_omap[$id];
     }
 
     /** @param int $id
@@ -533,8 +533,11 @@ class PaperOptionList implements IteratorAggregate {
     }
 
     function invalidate_options() {
-        $this->_jmap = $this->_ijmap = $this->_olist = $this->_olist_nonfinal = $this->_nonpaper_am = null;
-        $this->_omap = $this->_imap = [];
+        if ($this->_jmap !== null || $this->_ijmap !== null) {
+            $this->_jmap = $this->_ijmap = null;
+            $this->_omap = $this->_imap = [];
+            $this->_olist = $this->_olist_nonfinal = $this->_nonpaper_am = null;
+        }
     }
 
     /** @param int $id */
@@ -672,9 +675,11 @@ class PaperOption implements JsonSerializable {
     /** @var bool
      * @readonly */
     public $include_empty;
-    /** @var string
+    /** @var int
      * @readonly */
-    public $visibility; // "rev", "nonblind", "conflict", "admin"
+    private $_visibility;
+    /** @var int
+     * @readonly */
     private $display;
     public $display_expand;
     public $display_group;
@@ -689,6 +694,13 @@ class PaperOption implements JsonSerializable {
     /** @var ?PaperSearch */
     private $_editable_search;
     public $max_size;
+
+    const VIS_SUB = 0;         // visible if paper is visible (= all)
+    const VIS_AUTHOR = 1;      // visible if authors are visible
+    const VIS_CONFLICT = 2;    // visible if conflicts are visible
+    const VIS_REVIEW = 3;      // visible after submitted review or reviews visible
+    const VIS_ADMIN = 4;       // visible only to admins
+    static private $visibility_map = ["all", "nonblind", "conflict", "review", "admin"];
 
     const DISP_TOPICS = 0;
     const DISP_PROMINENT = 1;
@@ -746,10 +758,19 @@ class PaperOption implements JsonSerializable {
         $this->include_empty = ($args->include_empty ?? false) === true;
 
         $vis = $args->visibility ?? $args->view_type ?? null;
-        if (!in_array($vis, ["rev", "nonblind", "conflict", "admin"])) {
-            $vis = "rev";
+        if ($vis === null || $vis === "all" || $vis === "rev") {
+            $this->_visibility = self::VIS_SUB;
+        } else if ($vis === "nonblind") {
+            $this->_visibility = self::VIS_AUTHOR;
+        } else if ($vis === "conflict") {
+            $this->_visibility = self::VIS_CONFLICT;
+        } else if ($vis === "review") {
+            $this->_visibility = self::VIS_REVIEW;
+        } else if ($vis === "admin") {
+            $this->_visibility = self::VIS_ADMIN;
+        } else {
+            $this->_visibility = self::VIS_SUB;
         }
-        $this->visibility = $vis;
 
         $disp = $args->display ?? null;
         if ($args->near_submission ?? false) {
@@ -819,19 +840,19 @@ class PaperOption implements JsonSerializable {
     static function make($args, Conf $conf) {
         assert(is_object($args));
         Conf::xt_resolve_require($args);
-        $callback = $args->callback ?? null;
-        if (!$callback) {
-            $callback = self::$callback_map[$args->type ?? ""] ?? null;
+        $fn = $args->function ?? $args->callback ?? null; /* XXX */
+        if (!$fn) {
+            $fn = self::$callback_map[$args->type ?? ""] ?? null;
         }
-        if (!$callback) {
-            $callback = "+Unknown_PaperOption";
+        if (!$fn) {
+            $fn = "+Unknown_PaperOption";
         }
-        if ($callback[0] === "+") {
-            $class = substr($callback, 1);
+        if ($fn[0] === "+") {
+            $class = substr($fn, 1);
             /** @phan-suppress-next-line PhanTypeExpectedObjectOrClassName */
             return new $class($conf, $args);
         } else {
-            return call_user_func($callback, $conf, $args);
+            return call_user_func($fn, $conf, $args);
         }
     }
 
@@ -842,11 +863,7 @@ class PaperOption implements JsonSerializable {
         $ap = $ap !== false ? $ap : PHP_INT_MAX;
         $bp = $b->display_position();
         $bp = $bp !== false ? $bp : PHP_INT_MAX;
-        if ($ap != $bp) {
-            return $ap < $bp ? -1 : 1;
-        } else {
-            return strcasecmp($a->title, $b->title) ? : $a->id - $b->id;
-        }
+        return $ap <=> $bp ? : (strcasecmp($a->title, $b->title) ? : $a->id <=> $b->id);
     }
 
     /** @param PaperOption $a
@@ -856,11 +873,7 @@ class PaperOption implements JsonSerializable {
         $ap = $ap !== false ? $ap : PHP_INT_MAX;
         $bp = $b->form_position();
         $bp = $bp !== false ? $bp : PHP_INT_MAX;
-        if ($ap != $bp) {
-            return $ap < $bp ? -1 : 1;
-        } else {
-            return strcasecmp($a->title, $b->title) ? : $a->id - $b->id;
-        }
+        return $ap <=> $bp ? : (strcasecmp($a->title, $b->title) ? : $a->id <=> $b->id);
     }
 
     static function make_readable_formid($s) {
@@ -954,6 +967,7 @@ class PaperOption implements JsonSerializable {
         return $this->id ? $this->json_key() : "paper";
     }
 
+    /** @return int */
     function display() {
         return $this->display;
     }
@@ -962,6 +976,14 @@ class PaperOption implements JsonSerializable {
     }
     function display_position() {
         return $this->display_position;
+    }
+    /** @return int */
+    function visibility() {
+        return $this->_visibility;
+    }
+    /** @return string */
+    function unparse_visibility() {
+        return self::$visibility_map[$this->_visibility];
     }
 
     /** @return bool */
@@ -1046,7 +1068,7 @@ class PaperOption implements JsonSerializable {
         } else if ($av === null || $bv === null) {
             return $av === null ? -1 : 1;
         } else {
-            return $av < $bv ? -1 : ($av > $bv ? 1 : 0);
+            return $av <=> $bv;
         }
     }
     function value_check(PaperValue $ov, Contact $user) {
@@ -1106,8 +1128,8 @@ class PaperOption implements JsonSerializable {
             $j->final = true;
         }
         $j->display = $this->display_name();
-        if ($this->visibility !== "rev") {
-            $j->visibility = $this->visibility;
+        if ($this->_visibility !== self::VIS_SUB) {
+            $j->visibility = self::$visibility_map[$this->_visibility];
         }
         if ($this->exists_if !== null) {
             $j->exists_if = $this->exists_if;
@@ -1503,12 +1525,12 @@ class Selector_PaperOption extends PaperOption {
         if (empty($vs)) {
             $pfx = htmlspecialchars($this->search_keyword()) . " (" . $this->title_html() . ")";
             if ($sword->cword === "") {
-                $srch->warn("$pfx search: Selector missing.");
+                $srch->warning("$pfx search: Selector missing.");
             } else if (($vs2 = $this->selector_abbrev_matcher()->find_all($sword->cword))) {
                 $ts = array_map(function ($x) { return "“" . htmlspecialchars($this->selector[$x - 1]) . "”"; }, $vs2);
-                $srch->warn("$pfx search: “" . htmlspecialchars($sword->cword) . "” matches more than one choice. Try " . commajoin($ts, " or ") . ", or use “" . htmlspecialchars($sword->cword) . "*” to match them all.");
+                $srch->warning("$pfx search: “" . htmlspecialchars($sword->cword) . "” matches more than one choice. Try " . commajoin($ts, " or ") . ", or use “" . htmlspecialchars($sword->cword) . "*” to match them all.");
             } else {
-                $srch->warn("$pfx search: No choice matches “" . htmlspecialchars($sword->cword) . "”.");
+                $srch->warning("$pfx search: No choice matches “" . htmlspecialchars($sword->cword) . "”.");
             }
             return null;
         } else if (in_array($sword->compar, ["", "=", "!="], true)) {
@@ -1896,7 +1918,7 @@ class Numeric_PaperOption extends PaperOption {
     }
     function parse_search(SearchWord $sword, PaperSearch $srch) {
         if (preg_match('/\A[-+]?(?:\d+|\d+\.\d*|\.\d+)\z/', $sword->cword)) {
-            return new OptionValue_SearchTerm($srch->user, $this, CountMatcher::comparator_value($sword->compar), (float) $sword->cword);
+            return new OptionValue_SearchTerm($srch->user, $this, CountMatcher::parse_relation($sword->compar), (float) $sword->cword);
         } else {
             return null;
         }
@@ -2169,8 +2191,9 @@ class Attachments_PaperOption extends PaperOption {
             if ($fr->for_page() && $this->display_position() < 2000) {
                 $fr->title = false;
                 $v = '<div class="pgsm';
-                if ($fr->table && $fr->table->user->view_option_state($ov->prow, $this) === 1)
+                if ($fr->table && $fr->user->view_option_state($ov->prow, $this) === 1) {
                     $v .= ' fx8';
+                }
                 $fr->value = $v . '">' . $fr->value . '</div>';
             }
         } else if ($fr->verbose()) {

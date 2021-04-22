@@ -1,9 +1,8 @@
 <?php
 // assign.php -- HotCRP per-paper assignment/conflict management page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
-require_once("src/papertable.php");
 if (!$Me->email) {
     $Me->escape();
 }
@@ -21,20 +20,23 @@ function assign_show_header() {
 // grab paper row
 /** @return PaperInfo */
 function assign_load() {
-    global $Conf, $Me, $Qreq;
-    $prow = PaperTable::fetch_paper_request($Qreq, $Me);
-    if ($prow === null) {
+    global $Conf, $Me, $Qreq, $paperTable;
+    try {
+        $pr = new PaperRequest($Me, $Qreq, true);
+        $prow = $Conf->paper = $pr->prow;
+        if (($whynot = $Me->perm_request_review($prow, null, false))) {
+            $paperTable = new PaperTable($Me, $Qreq, $prow, "assign");
+            throw $whynot;
+        }
+        return $prow;
+    } catch (Redirection $redir) {
+        assert(PaperRequest::simple_qreq($Qreq));
+        $Conf->redirect($redir->url);
+    } catch (PermissionProblem $perm) {
         assign_show_header();
-        $whynot = $Qreq->checked_annex("paper_whynot", "PermissionProblem");
-        Conf::msg_error($whynot->set("listViewable", true)->unparse_html());
+        Conf::msg_error($perm->unparse_html());
         $Conf->footer();
         exit;
-    } else if (($whynot = $Me->perm_request_review($prow, null, false))) {
-        Conf::msg_error($whynot->unparse_html());
-        $Conf->redirect($prow->hoturl());
-        exit;
-    } else {
-        return $prow;
     }
 }
 $prow = assign_load();
@@ -149,11 +151,15 @@ if ((isset($Qreq->requestreview) || isset($Qreq->approvereview))
         unset($Qreq->email, $Qreq->firstName, $Qreq->lastName, $Qreq->affiliation, $Qreq->round, $Qreq->reason, $Qreq->override);
         $Conf->redirect_self($Qreq);
     } else {
-        if (isset($result->content["errf"])
-            && isset($result->content["errf"]["override"])) {
-            $result->content["error"] .= "<p>To request a review anyway, either retract the refusal or submit again with “Override” checked.</p>";
+        $emx = null;
+        foreach ($result->content["message_list"] ?? [] as $mx) {
+            if ($mx->field === "email") {
+                $emx = $mx;
+            } else if ($mx->field === "override" && $emx) {
+                $emx->message .= "<p>To request a review anyway, either retract the refusal or submit again with “Override” checked.</p>";
+            }
         }
-        $result->export_errors();
+        $result->export_messages($Conf);
         assign_load();
     }
 }
@@ -168,7 +174,7 @@ if ((isset($Qreq->deny) || isset($Qreq->denyreview))
         unset($Qreq->email, $Qreq->firstName, $Qreq->lastName, $Qreq->affiliation, $Qreq->round, $Qreq->reason, $Qreq->override, $Qreq->deny, $Qreq->denyreview);
         $Conf->redirect_self($Qreq);
     } else {
-        $result->export_errors();
+        $result->export_messages($Conf);
         assign_load();
     }
 }
@@ -187,7 +193,7 @@ if (isset($Qreq->retractreview)
         unset($Qreq->email, $Qreq->firstName, $Qreq->lastName, $Qreq->affiliation, $Qreq->round, $Qreq->reason, $Qreq->override, $Qreq->retractreview);
         $Conf->redirect_self($Qreq);
     } else {
-        $result->export_errors();
+        $result->export_messages($Conf);
         assign_load();
     }
 }
@@ -203,7 +209,7 @@ if (isset($Qreq->undeclinereview)
         unset($Qreq->email, $Qreq->firstName, $Qreq->lastName, $Qreq->affiliation, $Qreq->round, $Qreq->reason, $Qreq->override, $Qreq->unrefusereview);
         $Conf->redirect_self($Qreq);
     } else {
-        $result->export_errors();
+        $result->export_messages($Conf);
         assign_load();
     }
 }
@@ -211,9 +217,9 @@ if (isset($Qreq->undeclinereview)
 
 
 // paper table
-$paperTable = new PaperTable($prow, $Qreq, "assign");
+$paperTable = new PaperTable($Me, $Qreq, $prow, "assign");
 $paperTable->initialize(false, false);
-$paperTable->resolveReview(false);
+$paperTable->resolve_review(false);
 $allow_view_authors = $Me->allow_view_authors($prow);
 
 assign_show_header();
@@ -253,13 +259,7 @@ foreach ($prow->review_refusals() as $rrow) {
     }
 }
 usort($requests, function ($a, $b) {
-    if ($a[0] !== $b[0]) {
-        return $a[0] - $b[0];
-    } else if ($a[1] !== $b[1]) {
-        return $a[1] < $b[1] ? -1 : 1;
-    } else {
-        return $a[2] - $b[2];
-    }
+    return $a[0] <=> $b[0] ? : ($a[1] <=> $b[1] ? : $a[2] <=> $b[2]);
 });
 
 if (!empty($requests)) {
@@ -318,7 +318,7 @@ foreach ($requests as $req) {
     if ($req[0] <= 1) {
         $namex .= ' ' . review_type_icon($rrowid->isPC ? REVIEW_PC : REVIEW_EXTERNAL, true);
     }
-    if ($rrow->reviewRound > 0 && $Me->can_view_review_round($prow, $rrow)) {
+    if ($rrow->reviewRound > 0 && $Me->can_view_review_meta($prow, $rrow)) {
         $namex .= '&nbsp;<span class="revround" title="Review round">'
             . htmlspecialchars($Conf->round_name($rrow->reviewRound))
             . "</span>";
@@ -479,7 +479,7 @@ if ($Me->can_administer($prow)) {
 
         // first, name and assignment
         $ct = $prow->conflict_type($pc);
-        $rrow = $prow->review_of_user($pc);
+        $rrow = $prow->review_by_user($pc);
         if (Conflict::is_author($ct)) {
             $revtype = -2;
         } else {
@@ -501,8 +501,8 @@ if ($Me->can_administer($prow)) {
         if (Conflict::is_conflicted($ct)) {
             echo '" data-conflict-type="1';
         }
-        if (!$revtype && $prow->review_refusals_of_user($pc)) {
-            echo '" data-assignment-refused="1';
+        if (!$revtype && $prow->review_refusals_by_user($pc)) {
+            echo '" data-assignment-declined="1';
         }
         if ($rrow && $rrow->reviewRound && ($rn = $rrow->round_name())) {
             echo '" data-review-round="', htmlspecialchars($rn);
@@ -548,7 +548,7 @@ if ($Me->can_administer($prow)) {
     }
 
     echo "</div>\n",
-        '<div class="aab aabr aabig">',
+        '<div class="aab aabig">',
         '<div class="aabut">', Ht::submit("update", "Save assignments", ["class" => "btn-primary"]), '</div>',
         '<div class="aabut">', Ht::submit("cancel", "Cancel"), '</div>',
         '<div id="assresult" class="aabut"></div>',
@@ -572,7 +572,7 @@ if ($Me->allow_administer($prow)) {
 }
 echo '</p>';
 
-if (($rrow = $prow->review_of_user($Me))
+if (($rrow = $prow->review_by_user($Me))
     && $rrow->reviewType == REVIEW_SECONDARY
     && ($round_name = $Conf->round_name($rrow->reviewRound))) {
     echo Ht::hidden("round", $round_name);
@@ -622,7 +622,7 @@ if ($Me->can_administer($prow)) {
         ' </span>Override deadlines and declined requests</label>';
 }
 
-echo '<div class="aab aabr">',
+echo '<div class="aab">',
     '<div class="aabut aabutsp">', Ht::submit("requestreview", "Request review", ["class" => "btn-primary"]), '</div>',
     '<div class="aabut"><a class="ui x js-request-review-preview-email" href="">Preview request email</a></div>',
     "</div>\n\n";

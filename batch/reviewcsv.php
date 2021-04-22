@@ -1,7 +1,10 @@
 <?php
+// reviewcsv.php -- HotCRP review export script
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+
 require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
-$arg = Getopt::rest($argv, "hn:t:xwacN", ["help", "name:", "type:", "narrow", "wide", "all", "no-header", "comments", "sitename"]);
+$arg = Getopt::rest($argv, "hn:t:xwacN", ["help", "name:", "type:", "narrow", "wide", "all", "no-header", "comments", "sitename", "no-text", "no-score"]);
 if (isset($arg["h"]) || isset($arg["help"])) {
     fwrite(STDOUT, "Usage: php batch/reviewcsv.php [-n CONFID] [-t COLLECTION] [-acx] [QUERY...]
 Output a CSV file containing all reviews for the papers matching QUERY.
@@ -12,6 +15,8 @@ Options include:
   -a, --all              Include all reviews, not just submitted reviews.
   -c, --comments         Include comments.
   -N, --sitename         Include site name and class in CSV.
+  --no-text              Omit text fields.
+  --no-score             Omit score fields.
   --no-header            Omit CSV header.
   QUERY...               A search term.\n");
     exit(0);
@@ -26,12 +31,18 @@ if ($comments && !$narrow) {
     fwrite(STDERR, "batch/reviewcsv.php: ‘--wide’ and ‘--narrow’ contradict.\n");
     exit(1);
 }
+$no_text = isset($arg["no-text"]);
+$no_score = isset($arg["no-score"]);
+if ($comments && $no_text) {
+    fwrite(STDERR, "batch/reviewcsv.php: ‘-c’ and ‘--no-text’ contradict.\n");
+    exit(1);
+}
 
 require_once(SiteLoader::find("src/init.php"));
 
 $user = $Conf->root_user();
 $t = $arg["t"] ?? "s";
-$searchtypes = PaperSearch::search_types($user, $t);
+$searchtypes = PaperSearch::viewable_limits($user, $t);
 if (!isset($searchtypes[$t])) {
     fwrite(STDERR, "batch/reviewcsv.php: No search collection ‘{$t}’.\n");
     exit(1);
@@ -47,7 +58,7 @@ $header = [];
 if (isset($arg["N"]) || isset($arg["sitename"])) {
     array_push($header, "sitename", "siteclass");
 }
-array_push($header, "pid", "review", "email", "round");
+array_push($header, "pid", "review", "email", "round", "submitted_at");
 if ($all || $comments) {
     $header[] = "status";
 }
@@ -78,7 +89,7 @@ foreach ($search->sorted_paper_ids() as $pid) {
     $prow = $pset[$pid];
     $prow->ensure_full_reviews();
     $prow->ensure_reviewer_names();
-    foreach ($comments ? $prow->viewable_reviews_and_comments($user) : $prow->reviews_by_display($user) as $xrow) {
+    foreach ($comments ? $prow->viewable_reviews_and_comments($user) : $prow->reviews_by_display() as $xrow) {
         $crow = $xrow instanceof CommentInfo ? $xrow : null;
         $rrow = $xrow instanceof ReviewInfo ? $xrow : null;
         if (($crow && !$all && ($crow->commentType & COMMENTTYPE_DRAFT))
@@ -105,22 +116,27 @@ foreach ($search->sorted_paper_ids() as $pid) {
             } else {
                 $rs .= "comment";
             }
+            $x["submitted_at"] = $crow->timeDisplayed ? : ($crow->timeNotified ? : $crow->timeModified);
             $x["status"] = $rs;
             $x["field"] = "comment";
             $x["format"] = $crow->commentFormat;
             $x["data"] = $crow->commentOverflow ? : $crow->comment;
             add_row($x);
         } else if ($rrow) {
-            $x["review"] = $rrow->unparse_ordinal();
+            $x["review"] = $rrow->unparse_ordinal_id();
             $x["email"] = $rrow->email;
             $x["round"] = $Conf->round_name($rrow->reviewRound);
+            $x["submitted_at"] = $rrow->reviewSubmitted;
             $x["status"] = $rrow->status_description();
             if ($rrow->reviewFormat === null) {
                 $x["format"] = $Conf->default_format;
             } else {
                 $x["format"] = $rrow->reviewFormat;
             }
-            foreach ($prow->viewable_review_fields($rrow, $user) as $fid => $f) {
+            foreach ($rrow->viewable_fields($user) as $fid => $f) {
+                if ($f->has_options ? $no_score : $no_text) {
+                    continue;
+                }
                 $fv = $f->unparse_value($rrow->$fid ?? null, ReviewField::VALUE_TRIM | ReviewField::VALUE_STRING);
                 if ($fv === "") {
                     // ignore

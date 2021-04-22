@@ -1,4 +1,7 @@
 <?php
+// paperjson.php -- HotCRP paper export script
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
+
 require_once(preg_replace('/\/batch\/[^\/]+/', '/src/siteloader.php', __FILE__));
 
 $arg = Getopt::rest($argv, "hn:t:N1", ["help", "name:", "type:", "sitename", "single"]);
@@ -18,7 +21,7 @@ require_once(SiteLoader::find("src/init.php"));
 
 $user = $Conf->root_user();
 $t = $arg["t"] ?? "s";
-$searchtypes = PaperSearch::search_types($user, $t);
+$searchtypes = PaperSearch::viewable_limits($user, $t);
 if (!isset($searchtypes[$t])) {
     fwrite(STDERR, "batch/paperjson.php: No search collection ‘{$t}’.\n");
     exit(1);

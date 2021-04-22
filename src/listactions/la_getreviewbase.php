@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getreviewbase.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class GetReviewBase_ListAction extends ListAction {
     protected $isform;
@@ -42,7 +42,7 @@ class GetReviewBase_ListAction extends ListAction {
         }
 
         if ($this->isform) {
-            $header = $user->conf->review_form()->textFormHeader(count($texts) > 1 && !$this->iszip);
+            $header = $user->conf->review_form()->text_form_header(count($texts) > 1 && !$this->iszip);
         } else {
             $header = "";
         }

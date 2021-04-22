@@ -1,6 +1,6 @@
 <?php
 // search/st_tag.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Tag_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -87,7 +87,7 @@ class Tag_SearchTerm extends SearchTerm {
 
         // return
         foreach ($value->error_texts() as $e) {
-            $srch->warn($e);
+            $srch->warning($e);
         }
         return SearchTerm::combine("or", $allterms)->negate_if($negated);
     }
@@ -134,7 +134,7 @@ class Tag_SearchTerm extends SearchTerm {
             $dt = $srch->conf->tags()->check(Tagger::base($this->tag1));
             if (($dt && $dt->order_anno) || $this->tag1nz) {
                 $xjs = Tag_PaperColumn::expand("#{$this->tag1}", $srch->user, (object) [], ["#{$this->tag1}", "#", $this->tag1]);
-                assert(count($xjs) === 1 && $xjs[0]->callback === "+Tag_PaperColumn");
+                assert(count($xjs) === 1 && $xjs[0]->function === "+Tag_PaperColumn");
                 return PaperColumn::make($srch->conf, $xjs[0], $dt && $dt->votish ? ["reverse"] : []);
             }
         }
@@ -142,5 +142,8 @@ class Tag_SearchTerm extends SearchTerm {
     }
     function debug_json() {
         return ["type" => $this->type, "tag_regex" => $this->tsm->regex()];
+    }
+    function about_reviews() {
+        return self::ABOUT_NO;
     }
 }

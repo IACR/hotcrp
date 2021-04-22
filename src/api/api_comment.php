@@ -109,10 +109,9 @@ class Comment_API {
         }
 
         // check permission, other errors
-        $submit_value = $response && !$changed ? 2 : true;
-        if (($whyNot = $user->perm_comment($prow, $xcrow, $submit_value))) {
-            return [null, 403, whyNotText($whyNot)];
-            // null, new JsonResult(403, ["ok" => false, "msg" => whyNotText($whyNot)]);
+        $whyNot = $user->perm_comment($prow, $xcrow, true);
+        if ($whyNot && ($changed || !$user->can_finalize_comment($prow, $xcrow))) {
+            return [null, 403, $whyNot->unparse_html()];
         }
 
         // save
@@ -122,7 +121,7 @@ class Comment_API {
             if (($token = $qreq->review_token)
                 && ($token = decode_token($token, "V"))
                 && in_array($token, $user->review_tokens())
-                && ($rrow = $prow->review_of_token($token))) {
+                && ($rrow = $prow->review_by_token($token))) {
                 $suser = $prow->conf->user_by_id($rrow->contactId);
             }
 

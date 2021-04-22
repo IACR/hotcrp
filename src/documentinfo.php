@@ -1392,7 +1392,7 @@ class DocumentInfo implements JsonSerializable {
         }
 
         // Print headers
-        header("Content-Type: " . Mimetype::type_with_charset($this->mimetype));
+        $mimetype = Mimetype::type_with_charset($this->mimetype);
         if (isset($opts["attachment"])) {
             $attachment = $opts["attachment"];
         } else {
@@ -1410,19 +1410,18 @@ class DocumentInfo implements JsonSerializable {
         // reduce likelihood of XSS attacks in IE
         header("X-Content-Type-Options: nosniff");
         if ($this->has_hash()) {
-            header("ETag: \"" . $this->text_hash() . "\"");
+            $opts["etag"] = "\"" . $this->text_hash() . "\"";
         }
 
         // Download or redirect
         if ($s3_accel) {
+            header("Content-Type: $mimetype");
+            header("ETag: " . $opts["etag"]);
             $this->conf->s3_docstore()->get_accel_redirect($this->s3_key(), $s3_accel);
         } else if (($path = $this->available_content_file())) {
-            Filer::download_file($path, $this->mimetype, $opts);
+            Filer::download_file($path, $mimetype, $opts);
         } else {
-            if (zlib_get_coding_type() === false) {
-                header("Content-Length: " . strlen($this->content));
-            }
-            echo $this->content;
+            Filer::download_string($this->content, $mimetype, $opts);
         }
         return true;
     }

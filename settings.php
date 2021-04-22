@@ -1,18 +1,17 @@
 <?php
 // settings.php -- HotCRP chair-only conference settings management page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
-if (!$Me->privChair) {
-    $Me->escape();
-}
-
 if (isset($Qreq->cancel)) {
     $Conf->redirect_self($Qreq);
 }
 
 $Sv = SettingValues::make_request($Me, $Qreq);
 $Sv->session_highlight();
+if (!$Sv->viewable_by_user()) {
+    $Me->escape();
+}
 
 function choose_setting_group($qreq, SettingValues $sv) {
     global $Conf, $Me;
@@ -26,9 +25,9 @@ function choose_setting_group($qreq, SettingValues $sv) {
     }
     $want_group = $sv->canonical_group($want_group);
     if (!$want_group || !$sv->group_title($want_group)) {
-        if ($sv->conf->can_some_author_view_review()) {
+        if ($sv->conf->time_some_author_view_review()) {
             $want_group = $sv->canonical_group("decisions");
-        } else if ($sv->conf->deadlinesAfter("sub_sub") || $sv->conf->time_review_open()) {
+        } else if ($sv->conf->time_after_setting("sub_sub") || $sv->conf->time_review_open()) {
             $want_group = $sv->canonical_group("reviews");
         } else {
             $want_group = $sv->canonical_group("sub");
@@ -38,9 +37,9 @@ function choose_setting_group($qreq, SettingValues $sv) {
         $Me->escape();
     }
     if ($want_group !== $req_group && !$qreq->post && $qreq->post_empty()) {
-        $Conf->redirect_self($qreq, ["group" => $want_group, "anchor" => $sv->group_anchorid($req_group)]);
+        $Conf->redirect_self($qreq, ["group" => $want_group, "#" => $sv->group_hashid($req_group)]);
     }
-    $sv->mark_interesting_group($want_group);
+    $sv->canonical_page = $want_group;
     return $want_group;
 }
 $Group = $Qreq->group = choose_setting_group($Qreq, $Sv);
@@ -86,7 +85,7 @@ echo '</ul><div class="leftmenu-if-left if-alert mt-5">',
     '<h2 class="leftmenu">', $Sv->group_title($Group), '</h2>';
 
 $Sv->report(isset($Qreq->update) && $Qreq->valid_post());
-$Sv->render_group(strtolower($Group), ["top" => true]);
+$Sv->render_group(strtolower($Group), true);
 
 
 echo '<div class="aab aabig mt-7">',

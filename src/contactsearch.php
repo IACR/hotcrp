@@ -1,6 +1,6 @@
 <?php
-// papersearch.php -- HotCRP helper class for searching for users
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// contactsearch.php -- HotCRP helper class for searching for users
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ContactSearch {
     const F_QUOTED = 1;
@@ -36,17 +36,18 @@ class ContactSearch {
         $this->user = $user;
         $this->cset = $cset;
         $ids = null;
-        if (!($this->type & self::F_QUOTED) || $this->text === "") {
+        if (($this->type & self::F_QUOTED) === 0
+            || $this->text === "") {
             $ids = $this->check_simple();
         }
         if ($ids === null
-            && ($this->type & self::F_TAG)
-            && !($this->type & self::F_QUOTED)
+            && ($this->type & self::F_TAG) !== 0
+            && ($this->type & self::F_QUOTED) === 0
             && $this->user->can_view_user_tags()) {
             $ids = $this->check_pc_tag();
         }
         if ($ids === null
-            && ($this->type & self::F_USER)) {
+            && ($this->type & self::F_USER) !== 0) {
             $ids = $this->check_user();
         }
         $this->ids = $ids ?? [];
@@ -73,8 +74,8 @@ class ContactSearch {
                 return array_keys($this->conf->pc_members());
             } else if (($this->type & self::F_PC)
                        && (strcasecmp($this->text, "any") === 0
-                           || strcasecmp($this->text, "all") === 0)
-                           || $this->text === "*") {
+                           || strcasecmp($this->text, "all") === 0
+                           || $this->text === "*")) {
                 return array_keys($this->conf->pc_users());
             } else if (strcasecmp($this->text, "chair") === 0
                        || strcasecmp($this->text, "admin") === 0) {
@@ -137,7 +138,7 @@ class ContactSearch {
         if (strcasecmp($this->text, "anonymous") == 0
             && !$this->cset
             && !($this->type & self::F_PC)) {
-            return $this->select_ids("select contactId from ContactInfo where email regexp '^anonymous[0-9]*\$'", []);
+            return $this->select_ids("select contactId from ContactInfo where email regexp _utf8 '^anonymous[0-9]*\$' COLLATE utf8_general_ci", []);
         }
 
         // split name components
@@ -173,9 +174,9 @@ class ContactSearch {
                 $x = sqlq_for_like($e);
                 $where[] = "email like " . Dbl::utf8ci("'" . preg_replace('/[\s*]+/', "%", $x) . "'");
             }
-            $q = "select contactId, firstName, lastName, unaccentedName, email, roles from ContactInfo where " . join(" or ", $where);
+            $q = "select contactId, firstName, lastName, unaccentedName, email, roles, primaryContactId from ContactInfo where " . join(" or ", $where);
             if ($this->type & self::F_ALLOW_DELETED)
-                $q .= " union select contactId, firstName, lastName, unaccentedName, email, 0 roles from DeletedContactInfo where " . join(" or ", $where);
+                $q .= " union select contactId, firstName, lastName, unaccentedName, email, 0 roles, 0 primaryContactId from DeletedContactInfo where " . join(" or ", $where);
             $result = $this->conf->qe_raw($q);
             $cs = [];
             while (($row = Contact::fetch($result, $this->conf))) {

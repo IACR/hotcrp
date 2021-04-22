@@ -1,6 +1,6 @@
 <?php
 // profile.php -- HotCRP profile management page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 
@@ -32,7 +32,7 @@ function change_email_by_capability($Qreq) {
     }
 
     $newemail = $Acct ? $capcontent->uemail : null;
-    if ($Acct && $Conf->user_id_by_email($newemail)) {
+    if ($Acct && $Conf->user_by_email($newemail)) {
         Conf::msg_error("The email address you requested, " . htmlspecialchars($newemail) . ", is already in use on this site. You may want to <a href=\"" . $Conf->hoturl("mergeaccounts") . "\">merge these accounts</a>.");
         return false;
     }
@@ -84,12 +84,12 @@ function change_email_by_capability($Qreq) {
                 '</div>';
         }
         echo '<div class="', Ht::control_class("changeemail", "f-i"), '"><label for="changeemail">Change code</label>',
-            Ht::render_feedback_at("changeemail"),
+            Ht::feedback_at("changeemail"),
             Ht::entry("changeemail", $Qreq->changeemail == "1" ? "" : $Qreq->changeemail, ["id" => "changeemail", "class" => "fullw", "autocomplete" => "one-time-code"]),
             '</div>';
         if ($newcdbu) {
             echo '<div class="', Ht::control_class("password", "f-i"), '"><label for="password">Password for ', htmlspecialchars($newemail), '</label>',
-            Ht::render_feedback_at("password"),
+            Ht::feedback_at("password"),
             Ht::password("password", "", ["autocomplete" => "password", "class" => "fullw"]),
             '</div>';
         }
@@ -118,7 +118,7 @@ if (!$Me->is_signed_in()) {
 $newProfile = 0;
 $UserStatus = new UserStatus($Me);
 $UserStatus->set_user($Me);
-$UserStatus->set_context(["args" => [$UserStatus]]);
+$UserStatus->set_context_args([$UserStatus]);
 
 if ($Qreq->u === null && ($Qreq->user || $Qreq->contact)) {
     $Qreq->u = $Qreq->user ? : $Qreq->contact;
@@ -365,7 +365,7 @@ function parseBulkFile($text, $filename) {
 
     while (($line = $csv->next_row())) {
         $ustatus->set_user(new Contact(null, $Conf));
-        $ustatus->set_context(["args" => [$ustatus]]);
+        $ustatus->set_context_args([$ustatus]);
         $ustatus->clear_messages();
         $cj = (object) ["id" => null];
         $ustatus->parse_csv_group("", $cj, $line);
@@ -424,7 +424,7 @@ if (!$Qreq->valid_post()) {
         parseBulkFile($text, $Qreq->file_filename("bulk"));
     }
     $Qreq->bulkentry = "";
-    $Conf->redirect_self($Qreq, ["anchor" => "bulk"]);
+    $Conf->redirect_self($Qreq, ["#" => "bulk"]);
 } else if ($Qreq->savebulk && $newProfile) {
     $success = true;
     if ($Qreq->bulkentry && $Qreq->bulkentry !== "Enter users one per line") {
@@ -433,12 +433,12 @@ if (!$Qreq->valid_post()) {
     if (!$success) {
         $Me->save_session("profile_bulkentry", [Conf::$now, $Qreq->bulkentry]);
     }
-    $Conf->redirect_self($Qreq, ["anchor" => "bulk"]);
+    $Conf->redirect_self($Qreq, ["#" => "bulk"]);
 } else if (isset($Qreq->save)) {
     assert($Acct->is_empty() === !!$newProfile);
     $cj = (object) ["id" => $Acct->has_account_here() ? $Acct->contactId : "new"];
     $UserStatus->set_user($Acct);
-    $UserStatus->set_context(["args" => [$UserStatus, $cj, $Qreq]]);
+    $UserStatus->set_context_args([$UserStatus, $cj, $Qreq]);
     $UserStatus->no_deprivilege_self = true;
     if ($newProfile) {
         $UserStatus->no_nonempty_profile = true;
@@ -526,7 +526,7 @@ if (isset($Qreq->delete) && !Dbl::has_error() && $Qreq->valid_post()) {
             $assigner->execute();
             // clear caches
             if ($Acct->isPC || $Acct->privChair) {
-                $Conf->invalidate_caches(["pc" => 1]);
+                $Conf->invalidate_caches(["pc" => true]);
             }
             // done
             $Conf->confirmMsg("Permanently deleted account " . htmlspecialchars($Acct->email) . ".");
@@ -538,7 +538,7 @@ if (isset($Qreq->delete) && !Dbl::has_error() && $Qreq->valid_post()) {
 
 // canonicalize topic
 $UserStatus->set_user($Acct);
-$UserStatus->set_context(["args" => [$UserStatus]]);
+$UserStatus->set_context_args([$UserStatus]);
 if (!$newProfile
     && ($g = $UserStatus->gxt()->canonical_group($Qreq->t ? : "main"))) {
     $profile_topic = $g;
@@ -549,7 +549,7 @@ if ($Qreq->t && $Qreq->t !== $profile_topic && $Qreq->method() === "GET") {
     $Qreq->t = $profile_topic === "main" ? null : $profile_topic;
     $Conf->redirect_self($Qreq);
 }
-$UserStatus->set_context(["root" => $profile_topic]);
+$UserStatus->gxt()->set_root($profile_topic);
 
 // set session list
 if (!$newProfile
@@ -591,9 +591,9 @@ if (!$useRequest
 
 // set warnings about user json
 if (!$newProfile && !$useRequest) {
-    $UserStatus->gxt()->set_context(["args" => [$UserStatus, $Acct]]);
-    foreach ($UserStatus->gxt()->members("__crosscheck", "crosscheck_callback") as $gj) {
-        $UserStatus->gxt()->call_callback($gj->crosscheck_callback, $gj);
+    $UserStatus->gxt()->set_context_args([$UserStatus, $Acct]);
+    foreach ($UserStatus->gxt()->members("__crosscheck", "crosscheck_function") as $gj) {
+        $UserStatus->gxt()->call_function($gj->crosscheck_function, $gj);
     }
 }
 
@@ -632,8 +632,11 @@ $form_params["t"] = $Qreq->t;
 if (isset($Qreq->ls)) {
     $form_params["ls"] = $Qreq->ls;
 }
-echo Ht::form($Conf->hoturl_post("profile", $form_params),
-              ["id" => "form-profile", "class" => "need-unload-protection"]);
+echo Ht::form($Conf->hoturl_post("profile", $form_params), [
+    "id" => "form-profile",
+    "class" => "need-unload-protection",
+    "data-user" => $newProfile ? null : $Acct->email
+]);
 
 // left menu
 echo '<div class="leftmenu-left"><nav class="leftmenu-menu">',
@@ -717,10 +720,13 @@ if ($newProfile === 2) {
     if ($newProfile) {
         echo 'New account';
     } else {
-        if ($Me->contactId != $Acct->contactId) {
+        if ($Me->contactId !== $Acct->contactId) {
             echo $Me->reviewer_html_for($Acct), ' ';
         }
         echo htmlspecialchars($UserStatus->gxt()->get($profile_topic)->title);
+        if ($Acct->is_disabled()) {
+            echo ' <span class="n dim">(disabled)</span>';
+        }
     }
     echo '</h2>';
 }
@@ -735,7 +741,7 @@ if ($UserStatus->has_messages()) {
     echo '<div class="msgs-wide">', Ht::msg($msgs, $status), "</div>\n";
 }
 
-$UserStatus->set_context(["args" => [$UserStatus, $Qreq]]);
+$UserStatus->set_context_args([$UserStatus, $Qreq]);
 $UserStatus->render_group($newProfile === 2 ? "__bulk" : $profile_topic);
 
 if ($newProfile !== 2) {

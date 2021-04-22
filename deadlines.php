@@ -1,6 +1,6 @@
 <?php
 // deadlines.php -- HotCRP deadline reporting page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 
@@ -16,7 +16,7 @@ if ($Me->contactId && $Me->is_disabled()) {
 $Conf->header("Deadlines", "deadlines");
 
 if ($Viewer->privChair) {
-    echo "<p>As PC chair, you can <a href='", hoturl("settings"), "'>change the deadlines</a>.</p>\n";
+    echo "<p>As PC chair, you can <a href=\"", $Conf->hoturl("settings"), "\">change the deadlines</a>.</p>\n";
 }
 
 echo "<dl>\n";
@@ -109,7 +109,8 @@ if (($dl->rev ?? false) && ($dl->rev->open ?? false)) {
             $roundname = "";
         }
         foreach (explode(" ", $dltext) as $dldesc) {
-            list($dt, $dv) = array(substr($dldesc, 0, 2), +substr($dldesc, 2));
+            $dt = substr($dldesc, 0, 2);
+            $dv = (int) substr($dldesc, 2);
             if ($dt === "PS") {
                 printDeadline($dv, $Conf->_("%s review deadline", $roundname),
                               $Conf->_("%s reviews are requested by this deadline.", $roundname));

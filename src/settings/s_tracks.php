@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_tracks.php -- HotCRP settings > tracks page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class TrackSettingInfo {
     /** @var array<string,string> */
@@ -9,6 +9,8 @@ class TrackSettingInfo {
     public $req = [];
     /** @var array<string,true> */
     public $unfolded = [];
+    /** @var bool */
+    public $readonly = false;
 }
 
 class Tracks_SettingRenderer {
@@ -48,8 +50,9 @@ class Tracks_SettingRenderer {
         $permts = ["" => "Whole PC", "+" => "PC members with tag", "-" => "PC members without tag", "none" => "Administrators only"];
         if (Track::permission_required(Track::$map[$type])) {
             $permts = ["none" => $permts["none"], "+" => $permts["+"], "-" => $permts["-"]];
-            if ($gj && ($gj->permission_required ?? null) === "show_none")
+            if ($gj && ($gj->permission_required ?? null) === "show_none") {
                 $permts["none"] = "None";
+            }
         }
 
         $hint = "";
@@ -68,10 +71,10 @@ class Tracks_SettingRenderer {
             $sv->label([$track_ctl, $tag_ctl], $question, $ljs),
             '<div class="entry">',
             Ht::select($track_ctl, $permts, $reqv[0],
-                       $sv->sjs($track_ctl, ["class" => "uich js-foldup", "data-default-value" => $curv[0]])),
+                       $sv->sjs($track_ctl, ["class" => "uich js-foldup", "data-default-value" => $curv[0], "disabled" => $trackinfo->readonly])),
             " &nbsp;",
             Ht::entry($tag_ctl, $reqv[1],
-                      $sv->sjs($tag_ctl, ["class" => "fx need-suggest pc-tags", "placeholder" => "(tag)", "data-default-value" => $curv[1]]));
+                      $sv->sjs($tag_ctl, ["class" => "fx need-suggest pc-tags", "placeholder" => "(tag)", "data-default-value" => $curv[1], "readonly" => $trackinfo->readonly]));
         $sv->echo_feedback_at($track_ctl);
         $sv->echo_feedback_at($tag_ctl);
         if ($hint) {
@@ -124,6 +127,7 @@ class Tracks_SettingRenderer {
             if ($tnum === 0 || ($tinfo->req[$type] ?? "") !== "")
                 $tinfo->unfolded[$type] = true;
         }
+        $tinfo->readonly = !$sv->editable("tracks");
         return $tinfo;
     }
 
@@ -142,15 +146,15 @@ class Tracks_SettingRenderer {
             echo "For submissions not on other tracks:", Ht::hidden("name_track$tnum", "_");
         } else {
             echo $sv->label("name_track$tnum", "For submissions with tag &nbsp;"),
-                Ht::entry("name_track$tnum", $req_trackname, $sv->sjs("name_track$tnum", ["placeholder" => "(tag)", "data-default-value" => $trackname, "class" => "settings-track-name need-suggest tags"])), ":";
+                Ht::entry("name_track$tnum", $req_trackname, $sv->sjs("name_track$tnum", ["placeholder" => "(tag)", "data-default-value" => $trackname, "class" => "settings-track-name need-suggest tags", "readonly" => $trackinfo->readonly, "spellcheck" => false])), ":";
         }
         echo "</div>";
 
         self::$nperm_rendered_folded = 0;
         foreach ($sv->group_members("tracks/permissions") as $gj) {
-            if (isset($gj->render_track_permission_callback)) {
+            if (isset($gj->render_track_permission_function)) {
                 Conf::xt_resolve_require($gj);
-                call_user_func($gj->render_track_permission_callback, $sv, $tnum, $trackinfo, $gj);
+                call_user_func($gj->render_track_permission_function, $sv, $tnum, $trackinfo, $gj);
             }
         }
 
@@ -195,7 +199,10 @@ class Tracks_SettingRenderer {
         // catchall track
         self::do_track($sv, "_", 1);
         self::do_cross_track($sv);
-        echo Ht::button("Add track", ["class" => "ui js-settings-add-track", "id" => "settings_track_add"]);
+
+        if ($sv->editable("tracks")) {
+            echo Ht::button("Add track", ["class" => "ui js-settings-add-track", "id" => "settings_track_add"]);
+        }
     }
 
     static function crosscheck(SettingValues $sv) {
@@ -248,10 +255,11 @@ class Tracks_SettingParser extends SettingParser {
             }
             $trackname = $tagger->check($trackname, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE);
             if (!$trackname || ($trackname === "_" && $i !== 1)) {
-                if ($trackname !== "_")
-                    $sv->error_at("name_track$i", $tagger->error_html);
-                else
+                if ($trackname !== "_") {
+                    $sv->error_at("name_track$i", $tagger->error_html());
+                } else {
                     $sv->error_at("name_track$i", "Track name “_” is reserved.");
+                }
                 $sv->error_at("tracks");
                 $ok = false;
             }
@@ -270,7 +278,7 @@ class Tracks_SettingParser extends SettingParser {
                     } else if (($ttag = $tagger->check($ttag, Tagger::NOPRIVATE | Tagger::NOCHAIR | Tagger::NOVALUE))) {
                         $t->$type = $ttype . $ttag;
                     } else {
-                        $sv->error_at("{$type}_track$i", "Track permission tag: " . $tagger->error_html);
+                        $sv->error_at("{$type}_track$i", "Track permission tag: " . $tagger->error_html());
                         $sv->error_at("{$type}_tag_track$i");
                         $sv->error_at("tracks");
                     }

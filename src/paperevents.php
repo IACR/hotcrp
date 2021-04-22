@@ -1,6 +1,6 @@
 <?php
 // paperevents.php -- HotCRP paper events
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class PaperEvent {
     /** @var PaperInfo */
@@ -9,6 +9,7 @@ class PaperEvent {
     public $rrow;
     /** @var CommentInfo */
     public $crow;
+    /** @var int */
     public $eventTime;
 
     /** @param ?ReviewInfo $rrow
@@ -30,7 +31,9 @@ class PaperEvents {
     private $conf;
     /** @var Contact */
     private $user;
+    /** @var bool */
     private $all_papers = false;
+    /** @var PaperInfoSet */
     private $prows;
 
     private $limit;
@@ -110,7 +113,7 @@ class PaperEvents {
             if (($prow = $this->prows->get($rrow->paperId))
                 && $this->user->can_view_paper($prow)
                 && !$this->user->act_author_view($prow)
-                && $this->user->following_reviews($prow, (int) $prow->watch)
+                && $this->user->following_reviews($prow)
                 && $this->user->can_view_review($prow, $rrow)) {
                 $rrow->set_prow($prow);
                 return new PaperEvent($prow, $rrow, null);
@@ -150,7 +153,7 @@ class PaperEvents {
             if (($prow = $this->prows->get($crow->paperId))
                 && $this->user->can_view_paper($prow)
                 && !$this->user->act_author_view($prow)
-                && $this->user->following_reviews($prow, (int) $prow->watch)
+                && $this->user->following_reviews($prow)
                 && $this->user->can_view_comment($prow, $crow)) {
                 $crow->set_prow($prow);
                 return new PaperEvent($prow, null, $crow);
@@ -185,9 +188,9 @@ class PaperEvents {
         } else if (!$a->rrow !== !$b->rrow) {
             return $a->rrow ? -1 : 1;
         } else if ($a->rrow) {
-            return $a->rrow->reviewId - $b->rrow->reviewId;
+            return $a->rrow->reviewId <=> $b->rrow->reviewId;
         } else {
-            return $a->crow->commentId - $b->crow->commentId;
+            return $a->crow->commentId <=> $b->crow->commentId;
         }
     }
 

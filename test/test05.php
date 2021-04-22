@@ -1,6 +1,6 @@
 <?php
 // test05.php -- HotCRP paper submission tests
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 declare(strict_types=1);
 require_once(preg_replace('/\/test\/[^\/]+/', '/test/setup.php', __FILE__));
@@ -8,6 +8,8 @@ $Conf->save_setting("sub_open", 1);
 $Conf->save_setting("sub_update", Conf::$now + 100);
 $Conf->save_setting("sub_sub", Conf::$now + 100);
 $Conf->save_setting("opt.contentHashMethod", 1, "sha1");
+$Conf->save_setting("rev_open", 1);
+$Conf->refresh_settings();
 
 // load users
 $user_chair = $Conf->checked_user_by_email("chair@_.com");
@@ -92,7 +94,7 @@ $options = $Conf->setting_json("options");
 xassert(!array_filter((array) $options, function ($o) { return $o->id === 2; }));
 $options[] = (object) ["id" => 2, "name" => "Attachments", "abbr" => "attachments", "type" => "attachments", "position" => 2];
 $Conf->save_setting("options", 1, json_encode($options));
-$Conf->invalidate_caches("options");
+$Conf->invalidate_caches(["options" => true]);
 
 $ps->save_paper_json(json_decode("{\"id\":2,\"options\":{\"attachments\":[{\"content\":\"%PDF-1\", \"type\":\"application/pdf\"}, {\"content\":\"%PDF-2\", \"type\":\"application/pdf\"}]}}"));
 xassert_paper_status($ps);
@@ -157,6 +159,12 @@ $paper3b = $ps->paper_json(3);
 xassert_eqq($paper3b->submission->hash, "sha2-38b74d4ab9d3897b0166aa975e5e00dd2861a218fad7ec8fa08921fff7f0f0f4");
 
 // test submitting a new paper
+$ps->save_paper_json(json_decode("{\"id\":\"new\",\"submission\":{\"content\":\"%PDF-jiajfnbsaf\\n\",\"type\":\"application/pdf\"},\"title\":\"New paper J\",\"abstract\":\"This is a jabstract\\r\\n\",\"authors\":[{\"name\":\"Poopo\"}]}"));
+xassert_paper_status($ps);
+$newpaperj = $user_estrin->checked_paper_by_id($ps->paperId);
+xassert(!!$newpaperj->primary_document());
+ConfInvariants::test_all($Conf);
+
 $ps = new PaperStatus($Conf, $user_estrin);
 xassert($ps->prepare_save_paper_web(new Qrequest("POST", ["title" => "New paper", "abstract" => "This is an abstract\r\n", "has_authors" => "1", "authors:name_1" => "Bobby Flay", "authors:email_1" => "flay@_.com"]), null, "update"));
 xassert_paper_status($ps);
@@ -361,7 +369,7 @@ xassert_eqq(count($ps->error_fields()), 1);
 xassert_eq($ps->error_texts(), ["Entry required."]);
 
 $Conf->set_opt("noAbstract", 1);
-$Conf->invalidate_caches();
+$Conf->invalidate_caches(["options" => true]);
 
 $qreq = new Qrequest("POST", ["submitpaper" => 1, "title" => "Another Mantis Shrimp Paper", "has_authors" => "1", "authors:name_1" => "David Attenborough", "authors:email_1" => "atten@_.com", "authors:affiliation_1" => "BBC", "has_submission" => "1"]);
 $qreq->set_file("submission", ["name" => "amazing-sample.pdf", "tmp_name" => SiteLoader::find("etc/sample.pdf"), "type" => "application/pdf", "error" => UPLOAD_ERR_OK]);
@@ -646,7 +654,7 @@ $ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_contacts" => 
 xassert(!$ps->has_problem());
 xassert_array_eqq(array_keys($ps->diffs), [], true);
 
-xassert(!$Conf->user_id_by_email("festrin@fusc.fedu"));
+xassert(!$Conf->user_by_email("festrin@fusc.fedu"));
 $ps->save_paper_json((object) [
     "id" => $npid1, "contacts" => ["estrin@usc.edu", (object) ["email" => "festrin@fusc.fedu", "name" => "Feborah Festrin"]]
 ]);
@@ -656,15 +664,17 @@ $new_user = $Conf->user_by_email("festrin@fusc.fedu");
 xassert(!!$new_user);
 xassert_eqq($new_user->firstName, "Feborah");
 xassert_eqq($new_user->lastName, "Festrin");
+$festrin_cid = $new_user->contactId;
 $nprow1->invalidate_conflicts();
 xassert($nprow1->has_author($new_user));
 
-xassert(!$Conf->user_id_by_email("gestrin@gusc.gedu"));
+xassert(!$Conf->user_by_email("gestrin@gusc.gedu"));
 $ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_contacts" => 1, "contacts:email_1" => "estrin@usc.edu", "contacts:active_1" => 1, "contacts:email_2" => "festrin@fusc.fedu", "contacts:email_3" => "gestrin@gusc.gedu", "contacts:name_3" => "Geborah Gestrin", "contacts:active_3" => 1]), $nprow1, "update");
 xassert(!$ps->has_problem());
 xassert_array_eqq(array_keys($ps->diffs), ["contacts"], true);
 $new_user2 = $Conf->user_by_email("gestrin@gusc.gedu");
 xassert(!!$new_user2);
+$gestrin_cid = $new_user2->contactId;
 xassert_eqq($new_user2->firstName, "Geborah");
 xassert_eqq($new_user2->lastName, "Gestrin");
 $nprow1->invalidate_conflicts();
@@ -691,6 +701,55 @@ xassert_array_eqq(array_keys($ps->diffs), ["contacts"], true);
 $nprow1->invalidate_conflicts();
 xassert_array_eqq(contact_emails($nprow1), ["atten@_.com", "estrin@usc.edu"], true);
 xassert_eqq($nprow1->conflict_type($user_atten), CONFLICT_AUTHOR | CONFLICT_CONTACTAUTHOR);
+
+// check some primaryContactId functionality
+$Conf->qe("update ContactInfo set primaryContactId=? where email=?", $festrin_cid, "gestrin@gusc.gedu");
+$ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_authors" => "1", "authors:name_1" => "David Attenborough", "authors:email_1" => "atten@_.com", "authors:name_2" => "Geborah Gestrin", "authors:email_2" => "gestrin@gusc.gedu"]), $nprow1, "update");
+xassert(!$ps->has_problem());
+xassert_array_eqq(array_keys($ps->diffs), ["authors", "contacts"], true);
+$nprow1 = $Conf->checked_paper_by_id($npid1);
+xassert_array_eqq(contact_emails($nprow1), ["atten@_.com", "estrin@usc.edu", "festrin@fusc.fedu", "gestrin@gusc.gedu"], true);
+xassert_eqq($nprow1->conflict_type($user_atten), CONFLICT_AUTHOR | CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($festrin_cid), CONFLICT_AUTHOR);
+xassert_eqq($nprow1->conflict_type($gestrin_cid), CONFLICT_AUTHOR);
+xassert_eqq($nprow1->conflict_type($user_estrin), CONFLICT_CONTACTAUTHOR);
+
+$ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_authors" => "1", "authors:name_1" => "David Attenborough", "authors:email_1" => "atten@_.com"]), $nprow1, "update");
+xassert(!$ps->has_problem());
+xassert_array_eqq(array_keys($ps->diffs), ["authors", "contacts"], true);
+$nprow1 = $Conf->checked_paper_by_id($npid1);
+xassert_array_eqq(contact_emails($nprow1), ["atten@_.com", "estrin@usc.edu"], true);
+xassert_eqq($nprow1->conflict_type($user_atten), CONFLICT_AUTHOR | CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($user_estrin), CONFLICT_CONTACTAUTHOR);
+
+$ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_contacts" => "1", "contacts:email_1" => "gestrin@gusc.gedu", "contacts:active_1" => "1"]), $nprow1, "update");
+xassert(!$ps->has_problem());
+xassert_array_eqq(array_keys($ps->diffs), ["contacts"], true);
+$nprow1->invalidate_conflicts();
+xassert_array_eqq(contact_emails($nprow1), ["atten@_.com", "estrin@usc.edu", "festrin@fusc.fedu"], true);
+xassert_eqq($nprow1->conflict_type($user_atten), CONFLICT_AUTHOR | CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($user_estrin), CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($festrin_cid), CONFLICT_CONTACTAUTHOR);
+
+$ps->save_paper_web(new Qrequest("POST", ["submitpaper" => 1, "has_contacts" => "1", "contacts:email_1" => "gestrin@gusc.gedu"]), $nprow1, "update");
+xassert(!$ps->has_problem());
+xassert_array_eqq(array_keys($ps->diffs), [], true);
+$nprow1->invalidate_conflicts();
+xassert_array_eqq(contact_emails($nprow1), ["atten@_.com", "estrin@usc.edu", "festrin@fusc.fedu"], true);
+xassert_eqq($nprow1->conflict_type($user_atten), CONFLICT_AUTHOR | CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($user_estrin), CONFLICT_CONTACTAUTHOR);
+xassert_eqq($nprow1->conflict_type($festrin_cid), CONFLICT_CONTACTAUTHOR);
+
+xassert_eqq(pc_conflict_keys($nprow1), [$user_estrin->contactId, $user_varghese->contactId]);
+$Conf->qe("update ContactInfo set roles=1 where contactId=?", $festrin_cid);
+$Conf->invalidate_caches(["pc" => true]);
+$ps->save_paper_json((object) [
+    "id" => $npid1, "pc_conflicts" => ["gestrin@gusc.gedu" => true]
+]);
+xassert(!$ps->has_problem());
+xassert_array_eqq(array_keys($ps->diffs), ["pc_conflicts"], true);
+$nprow1->invalidate_conflicts();
+xassert_eqq(pc_conflict_keys($nprow1), [$user_estrin->contactId, $user_varghese->contactId, $festrin_cid]);
 
 // check some content_text_signature functionality
 $doc = new DocumentInfo(["content" => "ABCdefGHIjklMNO"], $Conf);
@@ -783,7 +842,7 @@ $options = $Conf->setting_json("options");
 xassert(!array_filter((array) $options, function ($o) { return $o->id === 3; }));
 $options[] = (object) ["id" => 3, "name" => "Supervisor(s)", "type" => "text", "position" => 3];
 $Conf->save_setting("options", 1, json_encode($options));
-$Conf->invalidate_caches("options");
+$Conf->invalidate_caches(["options" => true]);
 
 $ps->save_paper_json(json_decode("{\"id\":3,\"Supervisor(s)\":\"fart fart barf barf\"}"));
 xassert_paper_status($ps);
@@ -805,6 +864,40 @@ $paper3 = $user_estrin->checked_paper_by_id(3);
 xassert(!!$paper3->option(3));
 xassert_eqq($paper3->option(3)->value, 1);
 xassert_eqq($paper3->option(3)->data(), "farm farm bark bark");
+
+// mail to authors does not include information that only reviewers can see
+// (this matters when an author is also a reviewer)
+MailChecker::clear();
+$estrin_14_rrow = save_review(14, $user_estrin, ["overAllMerit" => 5, "revexp" => 1, "papsum" => "Summary 1", "comaut" => "Comments 1", "ready" => false]);
+xassert($estrin_14_rrow);
+$estrin_14_rid = $estrin_14_rrow->reviewId;
+save_review(14, $user_varghese, ["ovemer" => 5, "revexp" => 2, "papsum" => "Summary V", "comaut" => "Comments V", "compc" => "PC V", "ready" => true]);
+$paper14 = $user_estrin->checked_paper_by_id(14);
+HotCRPMailer::send_contacts("@rejectnotify", $paper14);
+MailChecker::check_db("test05-reject14-1");
+xassert_assign($Conf->root_user(), "action,paper,user\ncontact,14,varghese@ccrc.wustl.edu");
+$paper14 = $user_estrin->checked_paper_by_id(14);
+HotCRPMailer::send_contacts("@rejectnotify", $paper14);
+MailChecker::check_db("test05-reject14-2");
+
+// paper table tests
+$pr = PaperRequest::make($user_estrin, (new Qrequest("GET", ["p" => "0123"]))->set_page("paper"), false);
+xassert($pr instanceof Redirection);
+xassert_eqq($pr->url, "paper/123");
+$pr = PaperRequest::make($user_estrin, (new Qrequest("GET", ["p" => "0123"]))->set_page("review"), false);
+xassert($pr instanceof Redirection);
+xassert_eqq($pr->url, "review/123");
+$pr = PaperRequest::make($user_estrin, (new Qrequest("GET", ["p" => "3"]))->set_page("paper"), false);
+xassert($pr instanceof PaperRequest);
+$pr = PaperRequest::make($user_estrin, (new Qrequest("GET", ["r" => (string) $estrin_14_rid]))->set_page("paper"), false);
+xassert($pr instanceof Redirection);
+xassert_eqq($pr->url, "paper/14?r={$estrin_14_rid}");
+$pr = PaperRequest::make($user_varghese, (new Qrequest("GET", ["r" => (string) $estrin_14_rid]))->set_page("paper"), false);
+xassert($pr instanceof Redirection);
+xassert_eqq($pr->url, "paper/14?r={$estrin_14_rid}");
+$pr = PaperRequest::make($user_nobody, (new Qrequest("GET", ["r" => (string) $estrin_14_rid]))->set_page("paper"), false);
+xassert($pr instanceof PermissionProblem);
+xassert($pr["missingId"]);
 
 ConfInvariants::test_all($Conf);
 

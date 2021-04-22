@@ -1,9 +1,10 @@
 <?php
 // search/st_color.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Color_SearchTerm {
     static function parse($word, SearchWord $sword, PaperSearch $srch) {
+        // XXX does not correctly handle tag patterns
         $word = strtolower($word);
         $tm = new TagSearchMatcher($srch->user);
         $tm->set_include_twiddles(true);

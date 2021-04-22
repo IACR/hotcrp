@@ -1,16 +1,15 @@
 <?php
 // manualassign.php -- HotCRP chair's paper assignment page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
-require_once("src/papersearch.php");
 if (!$Me->is_manager()) {
     $Me->escape();
 }
 $Me->add_overrides(Contact::OVERRIDE_CONFLICT);
 
 // request cleaning
-$tOpt = PaperSearch::manager_search_types($Me);
+$tOpt = PaperSearch::viewable_manager_limits($Me);
 if (!$Qreq->t || !isset($tOpt[$Qreq->t])) {
     reset($tOpt);
     $Qreq->t = key($tOpt);
@@ -114,12 +113,12 @@ if ($Qreq->update && $Qreq->valid_post()) {
 
 
 $Conf->header("Assignments", "assignpc", ["subtitle" => "Manual"]);
-echo '<div class="psmode">',
+echo '<div class="mb-5 clearfix">',
     '<div class="papmode"><a href="', $Conf->hoturl("autoassign"), '">Automatic</a></div>',
     '<div class="papmode active"><a href="', $Conf->hoturl("manualassign"), '">Manual</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("conflictassign"), '">Conflicts</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("bulkassign"), '">Bulk update</a></div>',
-    '</div><hr class="c">';
+    '</div>';
 
 
 // Help list
@@ -173,10 +172,11 @@ echo "<table><tr><td><strong>PC member:</strong> &nbsp;</td>",
 
 // Paper selection
 echo "<tr><td>Paper selection: &nbsp;</td><td>",
-    Ht::entry("q", $Qreq->q,
-              ["id" => "manualassignq", "size" => 40, "placeholder" => "(All)",
-               "title" => "Paper numbers or search terms"]),
-    " &nbsp;in &nbsp;";
+    Ht::entry("q", $Qreq->q, [
+        "id" => "manualassignq", "size" => 40, "placeholder" => "(All)",
+        "class" => "papersearch want-focus need-suggest", "aria-label" => "Search",
+        "spellcheck" => false
+    ]), " &nbsp;in &nbsp;";
 if (count($tOpt) > 1) {
     echo Ht::select("t", $tOpt, $Qreq->t);
 } else {

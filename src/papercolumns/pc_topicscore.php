@@ -1,6 +1,6 @@
 <?php
 // pc_topicscore.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class TopicScore_PaperColumn extends PaperColumn {
     /** @var Contact */
@@ -28,9 +28,7 @@ class TopicScore_PaperColumn extends PaperColumn {
         return true;
     }
     function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
-        $at = $a->topic_interest_score($this->contact);
-        $bt = $b->topic_interest_score($this->contact);
-        return $at < $bt ? 1 : ($at == $bt ? 0 : -1);
+        return $b->topic_interest_score($this->contact) <=> $a->topic_interest_score($this->contact);
     }
     function content(PaperList $pl, PaperInfo $row) {
         $v = $row->topic_interest_score($this->contact);

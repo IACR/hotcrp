@@ -1,6 +1,6 @@
 <?php
 // paperlist.php -- HotCRP helper class for producing paper lists
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class PaperListTableRender {
     /** @var ?string */
@@ -137,9 +137,9 @@ class PaperListReviewAnalysis {
     function wrap_link($html, $klass = null) {
         if ($this->rrow) {
             if ($this->rrow->reviewStatus >= ReviewInfo::RS_COMPLETED) {
-                $href = $this->prow->hoturl(["anchor" => "r" . $this->rrow->unparse_ordinal()]);
+                $href = $this->prow->hoturl(["#" => "r" . $this->rrow->unparse_ordinal_id()]);
             } else {
-                $href = $this->prow->reviewurl(["r" => $this->rrow->unparse_ordinal()]);
+                $href = $this->prow->reviewurl(["r" => $this->rrow->unparse_ordinal_id()]);
             }
             $k = $klass ? " class=\"{$klass}\"" : "";
             return "<a{$k} href=\"{$href}\">{$html}</a>";
@@ -154,16 +154,16 @@ class PaperList implements XtContext {
      * @readonly */
     public $conf;
     /** @var Contact
-     * @readonly  */
+     * @readonly */
     public $user;
     /** @var Tagger
-     * @readonly  */
+     * @readonly */
     public $tagger;
     /** @var PaperSearch
-     * @readonly  */
+     * @readonly */
     public $search;
     /** @var Qrequest
-     * @readonly  */
+     * @readonly */
     private $qreq;
     /** @var Contact */
     private $_reviewer_user;
@@ -508,7 +508,7 @@ class PaperList implements XtContext {
                 $col->sort_subset = $sort_subset;
                 $this->_sortcol[] = $col;
             } else {
-                $this->search->warn("“" . htmlspecialchars($name) . "” cannot be sorted.");
+                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted.");
             }
         } else if (empty($fs)) {
             if ($this->user->can_view_tags(null)
@@ -516,12 +516,12 @@ class PaperList implements XtContext {
                 && ($tag = $tagger->check($name))
                 && ($ps = new PaperSearch($this->user, ["q" => "#$tag", "t" => "vis"]))
                 && $ps->paper_ids()) {
-                $this->search->warn("“" . htmlspecialchars($name) . "” cannot be sorted. Did you mean “sort:#" . htmlspecialchars($name) . "”?");
+                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted. Did you mean “sort:#" . htmlspecialchars($name) . "”?");
             } else {
-                $this->search->warn("“" . htmlspecialchars($name) . "” cannot be sorted.");
+                $this->search->warning("“" . htmlspecialchars($name) . "” cannot be sorted.");
             }
         } else {
-            $this->search->warn("Sort “" . htmlspecialchars($name) . "” matches more than one field, ignoring.");
+            $this->search->warning("Sort “" . htmlspecialchars($name) . "” matches more than one field, ignoring.");
         }
     }
 
@@ -644,7 +644,7 @@ class PaperList implements XtContext {
     }
 
 
-    /** @return PaperInfoSet */
+    /** @return PaperInfoSet|Iterable<PaperInfo> */
     function rowset() {
         if ($this->_rowset === null) {
             $this->qopts["scores"] = array_keys($this->qopts["scores"]);
@@ -665,22 +665,24 @@ class PaperList implements XtContext {
         return $this->_rowset;
     }
 
+    /** @param PaperInfo $a
+     * @param PaperInfo $b
+     * @return int */
     function _sort_compare($a, $b) {
         foreach ($this->_sortcol as $s) {
             if (($x = $s->compare($a, $b, $this))) {
                 return ($x < 0) === $s->sort_reverse ? 1 : -1;
             }
         }
-        if ($a->paperId != $b->paperId) {
-            return $a->paperId < $b->paperId ? -1 : 1;
-        } else {
-            return 0;
-        }
+        return $a->paperId <=> $b->paperId;
     }
 
+    /** @param PaperInfo $a
+     * @param PaperInfo $b
+     * @return int */
     function _then_sort_compare($a, $b) {
-        if (($x = $a->_sort_subset - $b->_sort_subset)) {
-            return $x < 0 ? -1 : 1;
+        if (($x = $a->_sort_subset <=> $b->_sort_subset)) {
+            return $x;
         }
         foreach ($this->_sortcol as $s) {
             if (($s->sort_subset === -1 || $s->sort_subset === $a->_sort_subset)
@@ -688,11 +690,7 @@ class PaperList implements XtContext {
                 return ($x < 0) === $s->sort_reverse ? 1 : -1;
             }
         }
-        if ($a->paperId != $b->paperId) {
-            return $a->paperId < $b->paperId ? -1 : 1;
-        } else {
-            return 0;
-        }
+        return $a->paperId <=> $b->paperId;
     }
 
     /** @return non-empty-list<PaperColumn> */
@@ -1671,15 +1669,15 @@ class PaperList implements XtContext {
         $lllgroups = [];
         $whichlll = -1;
         foreach ($gex->members("") as $rf) {
-            if (isset($rf->render_callback)
+            if (isset($rf->render_function)
                 && !str_starts_with($rf->name, "__")
                 && Conf::xt_resolve_require($rf)
-                && ($lllg = call_user_func($rf->render_callback, $this, $qreq, $gex, $rf))) {
+                && ($lllg = call_user_func($rf->render_function, $this, $qreq, $gex, $rf))) {
                 if (is_string($lllg)) {
                     $lllg = [$lllg];
                 }
                 array_unshift($lllg, $rf->name, $rf->title);
-                $lllg[0] = $this->conf->selfurl($qreq, ["atab" => $lllg[0], "anchor" => "plact"]);
+                $lllg[0] = $this->conf->selfurl($qreq, ["atab" => $lllg[0], "#" => "plact"]);
                 $lllgroups[] = $lllg;
                 if ($qreq->fn == $rf->name || $this->_atab == $rf->name) {
                     $whichlll = count($lllgroups) - 1;
@@ -1690,7 +1688,7 @@ class PaperList implements XtContext {
         $footsel_ncol = $this->_view_kanban ? 0 : 1;
         return self::render_footer_row($footsel_ncol, $ncol - $footsel_ncol,
             "<b>Select papers</b> (or <a class=\"ui js-select-all\" href=\""
-            . $this->conf->selfurl($qreq, ["selectall" => 1, "anchor" => "plact"])
+            . $this->conf->selfurl($qreq, ["selectall" => 1, "#" => "plact"])
             . '">select all ' . $this->count . "</a>), then&nbsp;",
             $lllgroups, $whichlll, $extra);
     }
@@ -1753,9 +1751,9 @@ class PaperList implements XtContext {
                 if (substr($url, 0, 5) == "search") {
                     $altqh = "<a href=\"" . htmlspecialchars(Navigation::siteurl() . $url) . "\">" . $altqh . "</a>";
                 }
-                return PaperListTableRender::make_error("No matching papers. Did you mean “{$altqh}”?");
+                return PaperListTableRender::make_error("No matches. Did you mean “{$altqh}”?");
             } else {
-                return PaperListTableRender::make_error("No matching papers");
+                return PaperListTableRender::make_error("No matches");
             }
         }
 
@@ -1892,7 +1890,7 @@ class PaperList implements XtContext {
             $colhead = " <thead class=\"pltable\">\n  <tr class=\"pl_headrow\">" . $ths . "</tr>\n";
 
             if (isset($this->table_attr["data-drag-tag"])
-                && $this->user->can_change_tag_anno($this->_sort_etag)) {
+                && $this->user->can_edit_tag_anno($this->_sort_etag)) {
                 $colhead .= "  <tr class=\"pl_headrow pl_annorow\" data-anno-tag=\"{$this->_sort_etag}\">";
                 if ($rstate->titlecol) {
                     $colhead .= "<td class=\"plh\" colspan=\"$rstate->titlecol\"></td>";
@@ -1984,7 +1982,7 @@ class PaperList implements XtContext {
         return ob_get_clean();
     }
 
-    /** @return array{fields:array<string,object>,data:array<int,array{id:int}>,attr?:array,stat?:array} */
+    /** @return array{fields:array<string,array>,data:array<int,array{id:int}>,attr?:array,stat?:array} */
     function table_html_json() {
         // get column list, check sort
         $this->_prepare();
@@ -2047,7 +2045,7 @@ class PaperList implements XtContext {
         return $result;
     }
 
-    /** @return array<int,object> */
+    /** @return array<int,array<string,mixed>> */
     function text_json() {
         // get column list, check sort
         $this->_prepare();
@@ -2063,7 +2061,7 @@ class PaperList implements XtContext {
                         $p[$fdef->name] = $text;
                     }
                 }
-                $data[$row->paperId] = (object) $p;
+                $data[$row->paperId] = $p;
             }
         }
         return $data;

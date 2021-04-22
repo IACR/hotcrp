@@ -1,6 +1,6 @@
 <?php
 // search/st_paperstatus.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class PaperStatus_SearchTerm extends SearchTerm {
     private $match;
@@ -12,7 +12,7 @@ class PaperStatus_SearchTerm extends SearchTerm {
     static function parse($word, SearchWord $sword, PaperSearch $srch) {
         $fval = PaperSearch::status_field_matcher($srch->conf, $word, $sword->quoted);
         if (is_array($fval[1]) && empty($fval[1])) {
-            $srch->warn("“" . htmlspecialchars($word) . "” doesn’t match a decision or status.");
+            $srch->warning("“" . htmlspecialchars($word) . "” doesn’t match a decision or status.");
             $fval[1][] = -10000000;
         }
         if ($fval[0] === "outcome") {
@@ -20,7 +20,7 @@ class PaperStatus_SearchTerm extends SearchTerm {
         } else {
             if ($srch->limit_submitted()
                 && ($fval[0] !== "timeSubmitted" || $fval[1] !== ">0")) {
-                $srch->warn("“" . htmlspecialchars("{$sword->keyword}:{$sword->qword}") . "” won’t match because this collection that only contains submitted papers.");
+                $srch->warning($sword->source_html() . ": Matches nothing because this search is limited to submitted papers.");
             }
             return new PaperStatus_SearchTerm($fval);
         }
@@ -42,5 +42,8 @@ class PaperStatus_SearchTerm extends SearchTerm {
                 return false;
         }
         return true;
+    }
+    function about_reviews() {
+        return self::ABOUT_NO;
     }
 }

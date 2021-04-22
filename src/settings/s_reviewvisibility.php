@@ -1,22 +1,15 @@
 <?php
 // src/settings/s_reviewvisibility.php -- HotCRP settings > decisions page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewVisibility_SettingParser extends SettingParser {
     static function render(SettingValues $sv) {
         $opts = [Conf::AUSEEREV_NO => "No, unless authors can edit responses",
                  Conf::AUSEEREV_YES => "Yes"];
-        if ($sv->curv("au_seerev") == Conf::AUSEEREV_UNLESSINCOMPLETE
-            && !$sv->conf->opt("allow_auseerev_unlessincomplete")) {
-            $sv->conf->save_setting("opt.allow_auseerev_unlessincomplete", 1);
-        }
-        if ($sv->conf->opt("allow_auseerev_unlessincomplete")) {
-            $opts[Conf::AUSEEREV_UNLESSINCOMPLETE] = "Yes, after completing any assigned reviews for other submissions";
-        }
         $opts[Conf::AUSEEREV_TAGS] = '<div class="d-inline-flex flex-wrap">'
             . "<label for=\"au_seerev_" . Conf::AUSEEREV_TAGS . "\" class=\"mr-2\">Yes, for submissions with any of these tags:</label>"
-            . "<div>" . $sv->render_feedback_at("tag_au_seerev")
-            . $sv->render_entry("tag_au_seerev", ["class" => "uii js-settings-au-seerev-tag"])
+            . "<div>" . $sv->feedback_at("tag_au_seerev")
+            . $sv->entry("tag_au_seerev", ["class" => "uii js-settings-au-seerev-tag"])
             . "</div></div>";
 
         $hint = '<div class="f-hx if-response-active';

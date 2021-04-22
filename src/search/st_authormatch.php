@@ -1,6 +1,6 @@
 <?php
 // search/st_authormatch.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class AuthorMatch_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -61,13 +61,15 @@ class AuthorMatch_SearchTerm extends SearchTerm {
         }
         return false;
     }
-    function extract_metadata($top, PaperSearch $srch) {
-        parent::extract_metadata($top, $srch);
+    function configure_search($top, PaperSearch $srch) {
         if ($this->type !== "comatch") {
             $srch->add_field_highlighter("au", $this->matcher->general_pregexes());
         }
         if ($this->type !== "aumatch") {
             $srch->add_field_highlighter("co", $this->matcher->general_pregexes());
         }
+    }
+    function about_reviews() {
+        return self::ABOUT_NO;
     }
 }

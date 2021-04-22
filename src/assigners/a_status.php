@@ -1,6 +1,6 @@
 <?php
 // a_status.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Status_Assignable extends Assignable {
     /** @var ?int */
@@ -87,14 +87,14 @@ class Status_AssignmentParser extends UserlessAssignmentParser {
         if ($this->xtype === "submit") {
             if ($res->_submitted === 0) {
                 if (($whynot = $state->user->perm_finalize_paper($prow))) {
-                    return whyNotText($whynot);
+                    return $whynot->unparse_html();
                 }
                 $res->_submitted = ($res->_withdrawn > 0 ? -Conf::$now : Conf::$now);
             }
         } else if ($this->xtype === "unsubmit") {
             if ($res->_submitted !== 0) {
                 if (($whynot = $state->user->perm_edit_paper($prow))) {
-                    return whyNotText($whynot);
+                    return $whynot->unparse_html();
                 }
                 $res->_submitted = 0;
             }
@@ -102,7 +102,7 @@ class Status_AssignmentParser extends UserlessAssignmentParser {
             if ($res->_withdrawn === 0) {
                 assert($res->_submitted >= 0);
                 if (($whynot = $state->user->perm_withdraw_paper($prow))) {
-                    return whyNotText($whynot);
+                    return $whynot->unparse_html();
                 }
                 $res->_withdrawn = Conf::$now;
                 $res->_submitted = -$res->_submitted;
@@ -120,7 +120,7 @@ class Status_AssignmentParser extends UserlessAssignmentParser {
             if ($res->_withdrawn !== 0) {
                 assert($res->_submitted <= 0);
                 if (($whynot = $state->user->perm_revive_paper($prow))) {
-                    return whyNotText($whynot);
+                    return $whynot->unparse_html();
                 }
                 $res->_withdrawn = 0;
                 if ($res->_submitted === -100) {
@@ -186,10 +186,10 @@ class Status_Assigner extends Assigner {
             $aset->user->log_activity($submitted > 0 ? "Paper submitted" : "Paper unsubmitted", $this->pid);
         }
         if (($submitted > 0) !== ($old_submitted > 0)) {
-            $aset->cleanup_callback("papersub", function ($aset, $vals) {
+            $aset->cleanup_callback("papersub", function ($vals) use ($aset) {
                 $aset->conf->update_papersub_setting(min($vals));
             }, $submitted > 0 ? 1 : 0);
-            $aset->cleanup_callback("paperacc", function ($aset, $vals) {
+            $aset->cleanup_callback("paperacc", function ($vals) use ($aset) {
                 $aset->conf->update_paperacc_setting(min($vals));
             }, 0);
         }

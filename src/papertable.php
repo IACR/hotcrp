@@ -1,6 +1,6 @@
 <?php
 // papertable.php -- HotCRP helper class for producing paper tables
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 ///////////// Added for IACR functionality ////////////
 global $ConfSitePATH, $Opt;
@@ -12,10 +12,14 @@ if (isset($Opt["iacrType"])) {
 class PaperTable {
     /** @var Conf */
     public $conf;
-    /** @var PaperInfo */
-    public $prow;
     /** @var Contact */
     public $user;
+    /** @var Qrequest */
+    private $qreq;
+    /** @var PaperInfo */
+    public $prow;
+    /** @var ?ReviewInfo */
+    public $rrow;
     /** @var list<ReviewInfo> */
     private $all_rrows = [];
     /** @var list<ReviewInfo> */
@@ -27,14 +31,14 @@ class PaperTable {
     /** @var bool */
     private $can_view_reviews;
     /** @var ?ReviewInfo */
-    public $rrow;
-    /** @var ?ReviewInfo */
     public $editrrow;
     /** @var string */
     public $mode;
     /** @var string */
     private $first_mode;
+    /** @var bool */
     private $prefer_approvable = false;
+    /** @var bool */
     private $allreviewslink;
     /** @var ?PaperStatus */
     private $edit_status;
@@ -43,8 +47,6 @@ class PaperTable {
     /** @var list<PaperOption> */
     private $edit_fields;
 
-    /** @var Qrequest */
-    private $qreq;
     private $useRequest;
     /** @var ?ReviewValues */
     private $review_values;
@@ -65,15 +67,13 @@ class PaperTable {
     public $cf;
     private $quit = false;
 
-    function __construct(PaperInfo $prow = null, Qrequest $qreq, $mode = null) {
-        global $Me;
-
-        $this->conf = $prow ? $prow->conf : Conf::$main;
-        $this->user = $user = $Me;
+    function __construct(Contact $user, Qrequest $qreq, PaperInfo $prow = null, $mode = null) {
+        $this->conf = $user->conf;
+        $this->user = $user;
+        $this->qreq = $qreq;
         $this->prow = $prow ?? PaperInfo::make_new($user);
         $this->allow_admin = $user->allow_administer($this->prow);
         $this->admin = $user->can_administer($this->prow);
-        $this->qreq = $qreq;
 
         $this->canUploadFinal = $this->user->allow_edit_final_paper($this->prow);
 
@@ -85,7 +85,7 @@ class PaperTable {
 
         $this->can_view_reviews = $user->can_view_review($prow, null);
         if (!$this->can_view_reviews && $prow->has_reviewer($user)) {
-            foreach ($prow->reviews_of_user($user) as $rrow) {
+            foreach ($prow->reviews_by_user($user) as $rrow) {
                 if ($rrow->reviewStatus >= ReviewInfo::RS_COMPLETED) {
                     $this->can_view_reviews = true;
                 }
@@ -95,9 +95,9 @@ class PaperTable {
         // enumerate allowed modes
         if ($prow->has_author($user)
             && !$user->can_view_review($prow, null)
-            && $this->conf->timeFinalizePaper($prow)) {
+            && $this->conf->time_finalize_paper($prow)) {
             $this->first_mode = "edit";
-        } else if ($user->can_review($prow, null)
+        } else if ($user->can_edit_review($prow, null)
                    && $qreq->page() === "review") {
             $this->first_mode = "re";
         } else {
@@ -105,7 +105,7 @@ class PaperTable {
         }
 
         $ms = ["p" => true];
-        if ($user->can_review($prow, null)) {
+        if ($user->can_edit_review($prow, null)) {
             $ms["re"] = true;
         }
         if ($prow->has_author($user) || $this->allow_admin) {
@@ -114,25 +114,25 @@ class PaperTable {
         if ($prow->review_type($user) >= REVIEW_SECONDARY || $this->allow_admin) {
             $ms["assign"] = true;
         }
-        if (!$mode) {
-            $mode = $this->qreq->m ? : $this->qreq->mode;
-        }
-        if ($mode === "pe") {
-            $mode = "edit";
-        } else if ($mode === "view" || $mode === "r" || $mode === "main") {
-            $mode = "p";
-        } else if ($mode === "rea") {
-            $mode = "re";
-            $this->prefer_approvable = true;
-        }
-        if ($mode && isset($ms[$mode])) {
-            $this->mode = $mode;
-        } else {
-            $this->mode = $this->first_mode;
-        }
         if (isset($ms["re"]) && isset($this->qreq->reviewId)) {
-            $this->mode = "re";
+            $this->first_mode = "re";
         }
+
+        if (!$mode) {
+            $mode = $this->qreq->m ?? $this->qreq->mode;
+            if ($mode === "pe") {
+                $mode = "edit";
+            } else if ($mode === "view" || $mode === "r" || $mode === "main") {
+                $mode = "p";
+            } else if ($mode === "rea") {
+                $mode = "re";
+                $this->prefer_approvable = true;
+            }
+            if (!$mode || !isset($ms[$mode])) {
+                $mode = $this->first_mode;
+            }
+        }
+        $this->mode = $mode;
     }
 
     static function do_header($paperTable, $id, $action_mode, $qreq) {
@@ -435,7 +435,7 @@ class PaperTable {
             $klass .= " field-required";
         }
         echo '">', Ht::label($heading ?? $this->edit_title_html($opt), $for === "checkbox" ? false : $for, ["class" => $klass]);
-        if ($opt->visibility === "admin") {
+        if ($opt->visibility() === PaperOption::VIS_ADMIN) {
             echo '<div class="field-visibility">(hidden from reviewers)</div>';
         }
         echo '</h3>';
@@ -967,7 +967,7 @@ class PaperTable {
             htmlspecialchars($status_info[1]), "</span></p>";
 
         $renders = [];
-        $fr = new FieldRender(FieldRender::CPAGE);
+        $fr = new FieldRender(FieldRender::CPAGE, $this->user);
         $fr->table = $this;
         foreach ($this->prow->display_fields() as $o) {
             if ($o->display_position() === false
@@ -1272,8 +1272,8 @@ class PaperTable {
         }
 
         $tags = $this->prow->all_tags_text();
-        $is_editable = $this->user->can_change_some_tag($this->prow);
-        $is_sitewide = $is_editable && !$this->user->can_change_most_tags($this->prow);
+        $is_editable = $this->user->can_edit_some_tag($this->prow);
+        $is_sitewide = $is_editable && !$this->user->can_edit_most_tags($this->prow);
         if ($tags === "" && !$is_editable) {
             return;
         }
@@ -1323,9 +1323,9 @@ class PaperTable {
                 $is_sitewide ? "sitewide-editable-tags" : "editable-tags",
                 '" spellcheck="false">', $tagger->unparse($editable), '</textarea>',
                 '<div class="aab aabr aab-compact"><div class="aabut">',
-                Ht::submit("save", "Save", ["class" => "btn-primary"]),
-                '</div><div class="aabut">',
                 Ht::submit("cancel", "Cancel"),
+                '</div><div class="aabut">',
+                Ht::submit("save", "Save", ["class" => "btn-primary"]),
                 "</div></div>",
                 '<span class="hint"><a href="', $this->conf->hoturl("help", "t=tags"), '">Learn more</a> <span class="barsep">·</span> <strong>Tip:</strong> Twiddle tags like “~tag” are visible only to you.</span>',
                 "</div>";
@@ -1385,7 +1385,7 @@ class PaperTable {
         if (($type === "allotment" || $type === "approval")
             && $this->user->can_view_peruser_tag($this->prow, $tag)) {
             $class .= " need-tooltip";
-            $extradiv = ' data-tooltip-dir="h" data-tooltip-info="votereport" data-tag="' . htmlspecialchars($tag) . '"';
+            $extradiv = ' data-tooltip-anchor="h" data-tooltip-info="votereport" data-tag="' . htmlspecialchars($tag) . '"';
         }
         return '<div class="' . $class . '"' . $extradiv
             . '><a class="qq" href="' . $this->conf->hoturl("search", "q=" . urlencode("show:#$tag sort:" . ($reverse ? "-" : "") . "#$tag")) . '">'
@@ -1475,15 +1475,13 @@ class PaperTable {
                 && !$this->user->is_admin_force())) {
             return;
         }
-        // watch note
-        $watch = $this->conf->fetch_ivalue("select watch from PaperWatch where paperId=? and contactId=?", $this->prow->paperId, $this->user->contactId);
 
         $this->_papstripBegin();
 
         echo '<form class="ui-submit uin">',
             $this->papt("watch",
                 '<label><span class="checkc">'
-                . Ht::checkbox("follow", 1, $this->user->following_reviews($this->prow, $watch), ["class" => "uich js-follow-change"])
+                . Ht::checkbox("follow", 1, $this->user->following_reviews($this->prow), ["class" => "uich js-follow-change"])
                 . '</span>Email notification</label>',
                 ["type" => "ps", "fnclass" => "checki"]),
             '<div class="pshint">Select to receive email on updates to reviews and comments.</div>',
@@ -1533,7 +1531,7 @@ class PaperTable {
     }
     private function _edit_message_new_paper() {
         $msg = "";
-        if ($this->admin || $this->conf->timeStartPaper()) {
+        if ($this->admin || $this->conf->time_start_paper()) {
             $t = [$this->conf->_("Enter information about your submission.")];
             $sub_reg = $this->conf->setting("sub_reg");
             $sub_upd = $this->conf->setting("sub_update");
@@ -1550,7 +1548,7 @@ class PaperTable {
                 $this->_main_message($v, 0);
             }
         }
-        if (!$this->conf->timeStartPaper()) {
+        if (!$this->conf->time_start_paper()) {
             $this->_edit_message_new_paper_deadline();
             $this->quit = $this->quit || !$this->admin;
         }
@@ -1582,7 +1580,7 @@ class PaperTable {
                        && $this->user->can_finalize_paper($this->prow)) {
                 $this->_main_message('This submission is not ready for review. Although you cannot make any further changes, the current version can be still be submitted for review.' . $this->deadline_setting_is("sub_sub") . $this->_deadline_override_message(), 1);
             } else if (isset($whyNot["deadline"])) {
-                if ($this->conf->deadlinesBetween("", "sub_sub", "sub_grace")) {
+                if ($this->conf->time_between_settings("", "sub_sub", "sub_grace") > 0) {
                     $this->_main_message('The site is not open for updates at the moment.' . $this->_deadline_override_message(), 1);
                 } else {
                     $this->_main_message('The <a href="' . $this->conf->hoturl("deadlines") . '">submission deadline</a> has passed and this submission will not be reviewed.' . $this->deadline_setting_is("sub_sub") . $this->_deadline_override_message(), 1);
@@ -1678,7 +1676,7 @@ class PaperTable {
 
         // Withdrawn papers can be revived
         if ($this->prow->timeWithdrawn > 0) {
-            $revivable = $this->conf->timeFinalizePaper($this->prow);
+            $revivable = $this->conf->time_finalize_paper($this->prow);
             if ($revivable) {
                 return [Ht::submit("revive", "Revive submission", ["class" => "btn-primary"])];
             } else if ($this->admin) {
@@ -1708,7 +1706,7 @@ class PaperTable {
                 $buttons[] = [Ht::submit("update", $save_name, ["class" => "btn-primary btn-savepaper uic js-mark-submit"]), ""];
             } else if ($this->admin) {
                 $revWhyNot = $whyNot->filter(["deadline", "rejected"]);
-                $x = whyNotText($revWhyNot) . " Are you sure you want to override the deadline?";
+                $x = $revWhyNot->unparse_html() . " Are you sure you want to override the deadline?";
                 $buttons[] = [Ht::button($save_name, ["class" => "btn-primary btn-savepaper ui js-override-deadlines", "data-override-text" => $x, "data-override-submit" => "update"]), "(admin only)"];
             } else if (isset($whyNot["updateSubmitted"])
                        && $this->user->can_finalize_paper($this->prow)) {
@@ -1735,7 +1733,7 @@ class PaperTable {
                 $args["data-withdrawable"] = "true";
             }
             if (($this->admin && !$this->prow->has_author($this->user))
-                || $this->conf->timeFinalizePaper($this->prow)) {
+                || $this->conf->time_finalize_paper($this->prow)) {
                 $args["data-revivable"] = "true";
             }
             $b = Ht::button("Withdraw", $args);
@@ -1791,7 +1789,7 @@ class PaperTable {
         }
         $this->papstripTags();
         foreach ($this->conf->tags() as $ltag => $t) {
-            if ($this->user->can_change_tag($this->prow, "~$ltag", null, 0)) {
+            if ($this->user->can_edit_tag($this->prow, "~$ltag", null, 0)) {
                 if ($t->approval) {
                     $this->papstrip_approval($t->tag);
                 } else if ($t->allotment) {
@@ -1817,7 +1815,7 @@ class PaperTable {
         if ($this->user->can_view_shepherd($this->prow)) {
             $this->papstripShepherd($this->mode === "assign");
         }
-        if ($this->user->can_enter_preference($this->prow)
+        if ($this->user->can_edit_preference_for($this->user, $this->prow, true)
             && $this->conf->timePCReviewPreferences()
             && ($this->user->roles & (Contact::ROLE_PC | Contact::ROLE_CHAIR))) {
             $this->papstripReviewPreference();
@@ -1836,7 +1834,7 @@ class PaperTable {
         // what actions are supported?
         $pid = $this->prow->paperId;
         $canEdit = $this->user->allow_edit_paper($this->prow);
-        $canReview = $this->user->can_review($this->prow, null);
+        $canReview = $this->user->can_edit_review($this->prow, null);
         $canAssign = $this->admin || $this->user->can_request_review($this->prow, null, true);
         $canHome = $canEdit || $canAssign || $this->mode === "contact";
 
@@ -1981,11 +1979,11 @@ class PaperTable {
         if ($this->prow->paperId <= 0) {
             echo "new submission";
         } else if ($this->mode !== "re") {
-            echo "#{$this->prow->paperId}";
-        } else if (!$this->editrrow || !$this->editrrow->reviewOrdinal) {
-            echo "#{$this->prow->paperId} review";
+            echo "#", $this->prow->paperId;
+        } else if ($this->editrrow && $this->editrrow->reviewOrdinal) {
+            echo "#", $this->editrrow->unparse_ordinal_id();
         } else {
-            echo "#" . unparseReviewOrdinal($this->editrrow);
+            echo "#", $this->prow->paperId, " review";
         }
         echo '</a>', $close, '</h4><ul class="pslcard"></ul></nav></div>';
         echo '<div class="pcard papcard"><div class="',
@@ -2107,7 +2105,7 @@ class PaperTable {
             // review ID
             $id = $rr->subject_to_approval() ? "Subreview" : "Review";
             if ($rr->reviewOrdinal && !$isdelegate) {
-                $id .= " #" . $rr->unparse_ordinal();
+                $id .= " #" . $rr->unparse_ordinal_id();
             }
             if ($rr->reviewStatus < ReviewInfo::RS_ADOPTED) {
                 $d = $rr->status_description();
@@ -2117,7 +2115,7 @@ class PaperTable {
                     $id .= " (" . $d . ")";
                 }
             }
-            $rlink = $rr->unparse_ordinal();
+            $rlink = $rr->unparse_ordinal_id();
 
             $t = '<td class="rl nw">';
             if ($editrrow && $editrrow->reviewId === $rr->reviewId) {
@@ -2127,15 +2125,15 @@ class PaperTable {
                 }
                 $t .= '<a href="' . $prow->reviewurl(["r" => $rlink]) . '" class="q"><b>' . $id . '</b></a>';
             } else if (!$canView
-                       || ($rr->reviewStatus < ReviewInfo::RS_DRAFTED && !$user->can_review($prow, $rr))) {
+                       || ($rr->reviewStatus < ReviewInfo::RS_DRAFTED && !$user->can_edit_review($prow, $rr))) {
                 $t .= $id;
             } else {
                 if ((!$this->can_view_reviews
                      || $rr->reviewStatus < ReviewInfo::RS_ADOPTED)
-                    && $user->can_review($prow, $rr)) {
+                    && $user->can_edit_review($prow, $rr)) {
                     $link = $prow->reviewurl(["r" => $rlink]);
                 } else if (Navigation::page() !== "paper") {
-                    $link = $prow->hoturl(["anchor" => "r$rlink"]);
+                    $link = $prow->hoturl(["#" => "r$rlink"]);
                 } else {
                     $link = "#r$rlink";
                 }
@@ -2158,10 +2156,9 @@ class PaperTable {
 
             // primary/secondary glyph
             $rtype = "";
-            if (($cflttype <= 0 || $admin) && $rr->reviewType > 0) {
+            if ($rr->reviewType > 0 && $user->can_view_review_meta($prow, $rr)) {
                 $rtype = $rr->type_icon();
-                if ($rr->reviewRound > 0
-                    && $user->can_view_review_round($prow, $rr)) {
+                if ($rr->reviewRound > 0) {
                     $rtype .= '&nbsp;<span class="revround" title="Review round">'
                         . htmlspecialchars($conf->round_name($rr->reviewRound))
                         . "</span>";
@@ -2169,9 +2166,9 @@ class PaperTable {
             }
 
             // reviewer identity
-            $showtoken = $rr->reviewToken && $user->can_review($prow, $rr);
+            $showtoken = $rr->reviewToken && $user->can_edit_review($prow, $rr);
             if (!$user->can_view_review_identity($prow, $rr)) {
-                $t .= ($rtype ? '<td class="rl">' . $rtype . '</td>' : '<td></td>');
+                $t .= ($rtype ? "<td class=\"rl\">{$rtype}</td>" : '<td></td>');
             } else {
                 if (!$showtoken || !Contact::is_anonymous_email($rr->email)) {
                     $n = $user->reviewer_html_for($rr);
@@ -2211,9 +2208,9 @@ class PaperTable {
             if ($want_my_scores && $canView) {
                 $view_score = $user->view_score_bound($prow, $rr);
                 foreach ($conf->review_form()->forder as $fid => $f) {
-                    if ($f->has_options && $f->view_score > $view_score
-                        && (!$f->round_mask || $f->is_round_visible($rr))
-                        && isset($rr->$fid) && $rr->$fid) {
+                    if ($f->has_options
+                        && $f->view_score > $view_score
+                        && $rr->has_nonempty_field($f)) {
                         if ($score_header[$fid] === "") {
                             $score_header[$fid] = '<th class="rlscore">' . $f->web_abbreviation() . "</th>";
                         }
@@ -2372,14 +2369,14 @@ class PaperTable {
             || !$prow) {
             /* no link */;
         } else if ($myrr && $editrrow !== $myrr) {
-            $a = '<a href="' . $prow->reviewurl(["r" => $myrr->unparse_ordinal()]) . '" class="xx revlink">';
-            if ($this->user->can_review($prow, $myrr)) {
+            $a = '<a href="' . $prow->reviewurl(["r" => $myrr->unparse_ordinal_id()]) . '" class="xx revlink">';
+            if ($this->user->can_edit_review($prow, $myrr)) {
                 $x = $a . Ht::img("review48.png", "[Edit review]", $dlimgjs) . "&nbsp;<u><b>Edit your review</b></u></a>";
             } else {
                 $x = $a . Ht::img("review48.png", "[Your review]", $dlimgjs) . "&nbsp;<u><b>Your review</b></u></a>";
             }
             $t[] = $x;
-        } else if (!$myrr && !$editrrow && $this->user->can_review($prow, null)) {
+        } else if (!$myrr && !$editrrow && $this->user->can_edit_review($prow, null)) {
             $t[] = '<a href="' . $prow->reviewurl(["m" => "re"]) . '" class="xx revlink">'
                 . Ht::img("review48.png", "[Write review]", $dlimgjs) . "&nbsp;<u><b>Write review</b></u></a>";
         }
@@ -2588,7 +2585,7 @@ class PaperTable {
         $m = [];
         if ($this->all_rrows
             && ($whyNot = $this->user->perm_view_review($this->prow, null))) {
-            $m[] = "<p class=\"sd\">You can’t see the reviews for this submission. " . whyNotText($whyNot) . "</p>";
+            $m[] = "<p class=\"sd\">You can’t see the reviews for this submission. " . $whyNot->unparse_html() . "</p>";
         }
         if (!$this->conf->time_review_open()
             && $this->prow->review_type($this->user)) {
@@ -2661,7 +2658,7 @@ class PaperTable {
             } else {
                 $opt["editmessage"] = "The site is not open for reviewing, so the review cannot be changed." . $override;
             }
-        } else if (!$this->user->can_review($this->prow, $this->editrrow)) {
+        } else if (!$this->user->can_edit_review($this->prow, $this->editrrow)) {
             $opt["edit"] = false;
         }
 
@@ -2674,181 +2671,36 @@ class PaperTable {
     }
 
 
-    // Functions for loading papers
-
-    static function clean_request(Qrequest $qreq) {
-        if (!isset($qreq->paperId) && isset($qreq->p)) {
-            $qreq->paperId = $qreq->p;
-        }
-        if (!isset($qreq->reviewId) && isset($qreq->r)) {
-            $qreq->reviewId = $qreq->r;
-        }
-        if (!isset($qreq->commentId) && isset($qreq->c)) {
-            $qreq->commentId = $qreq->c;
-        }
-        if (($pc = $qreq->path_component(0))) {
-            if (!isset($qreq->reviewId) && preg_match('/\A\d+[A-Z]+\z/i', $pc)) {
-                $qreq->reviewId = $pc;
-            } else if (!isset($qreq->paperId)) {
-                $qreq->paperId = $pc;
-            }
-        }
-        if (!isset($qreq->paperId)
-            && isset($qreq->reviewId)
-            && preg_match('/\A(\d+)[A-Z]+\z/i', $qreq->reviewId, $m)) {
-            $qreq->paperId = $m[1];
-        }
-        if (isset($qreq->paperId) || isset($qreq->reviewId)) {
-            unset($qreq->q);
-        }
-    }
-
-    static private function simple_qreq($qreq) {
-        return $qreq->method() === "GET"
-            && !array_diff($qreq->keys(), ["p", "paperId", "m", "mode", "forceShow", "go", "actas", "t", "q", "r", "reviewId"]);
-    }
-
-    /** @param Qrequest $qreq
-     * @param Contact $user
-     * @return ?int */
-    static private function lookup_pid($qreq, $user) {
-        // if a number, don't search
-        $pid = isset($qreq->paperId) ? $qreq->paperId : $qreq->q;
-        if (preg_match('/\A\s*#?(\d+)\s*\z/', $pid, $m)) {
-            return intval($m[1]);
-        }
-
-        // look up a review ID
-        if (!isset($pid) && isset($qreq->reviewId)) {
-            return $user->conf->fetch_ivalue("select paperId from PaperReview where reviewId=?", $qreq->reviewId);
-        }
-
-        // if a complex request, or a form upload, or empty user, don't search
-        if (!self::simple_qreq($qreq) || $user->is_empty()) {
-            return null;
-        }
-
-        // if no paper ID set, find one
-        if (!isset($pid)) {
-            $q = "select min(Paper.paperId) from Paper ";
-            if ($user->isPC) {
-                $q .= "where timeSubmitted>0";
-            } else if ($user->has_review()) {
-                $q .= "join PaperReview on (PaperReview.paperId=Paper.paperId and PaperReview.contactId=$user->contactId)";
-            } else {
-                $q .= "join PaperConflict on (PaperConflict.paperId=Paper.paperId and PaperConflict.contactId=$user->contactId and PaperConflict.conflictType>=" . CONFLICT_AUTHOR . ")";
-            }
-            return $user->conf->fetch_ivalue($q);
-        }
-
-        // actually try to search
-        if ($pid === "" || $pid === "(All)") {
-            return null;
-        }
-
-        $search = new PaperSearch($user, ["q" => $pid, "t" => $qreq->get("t")]);
-        $ps = $search->paper_ids();
-        if (count($ps) == 1) {
-            $list = $search->session_list_object();
-            // DISABLED: check if the paper is in the current list
-            unset($qreq->ls);
-            $list->set_cookie($user);
-            return $ps[0];
-        } else {
-            return null;
-        }
-    }
-
-    /** @param ?int $pid */
-    static function redirect_request($pid, Qrequest $qreq, Contact $user) {
-        if ($pid !== null) {
-            $qreq->paperId = $pid;
-            unset($qreq->q, $qreq->p);
-            $user->conf->redirect_self($qreq);
-        } else if ((isset($qreq->paperId) || isset($qreq->q))
-                   && !$user->is_empty()) {
-            $q = "q=" . urlencode(isset($qreq->paperId) ? $qreq->paperId : $qreq->q);
-            if ($qreq->t) {
-                $q .= "&t=" . urlencode($qreq->t);
-            }
-            if ($qreq->page() === "assign") {
-                $q .= "&linkto=" . $qreq->page();
-            }
-            $user->conf->redirect_hoturl("search", $q);
-        }
-    }
-
-    /** @return ?PaperInfo */
-    static function fetch_paper_request(Qrequest $qreq, Contact $user) {
-        self::clean_request($qreq);
-        $pid = self::lookup_pid($qreq, $user);
-        if (self::simple_qreq($qreq)
-            && ($pid === null || (string) $pid !== $qreq->paperId)) {
-            self::redirect_request($pid, $qreq, $user);
-        }
-        if ($pid !== null) {
-            $options = ["topics" => true, "options" => true];
-            if ($user->privChair
-                || ($user->isPC && $user->conf->timePCReviewPreferences())) {
-                $options["reviewerPreference"] = true;
-            }
-            $prow = $user->paper_by_id($pid, $options);
-        } else {
-            $prow = null;
-        }
-        $whynot = $user->perm_view_paper($prow, false, $pid);
-        if (!$whynot
-            && !isset($qreq->paperId)
-            && isset($qreq->reviewId)
-            && !$user->privChair
-            && (!($rrow = $prow->review_of_id($qreq->reviewId))
-                || !$user->can_view_review($prow, $rrow))) {
-            $whynot = new PermissionProblem($user->conf, ["invalidId" => "paper"]);
-        }
-        if ($whynot) {
-            $qreq->set_annex("paper_whynot", $whynot);
-        }
-        $user->conf->paper = $whynot ? null : $prow;
-        return $user->conf->paper;
-    }
-
-    function resolveReview($want_review) {
+    /** @param bool $want_review */
+    function resolve_review($want_review) {
         $this->prow->ensure_full_reviews();
-        $this->all_rrows = $this->prow->reviews_by_display($this->user);
+        $this->all_rrows = $this->prow->reviews_as_display();
 
-        $this->viewable_rrows = array();
-        $round_mask = 0;
-        $min_view_score = VIEWSCORE_EMPTYBOUND;
+        $this->viewable_rrows = [];
+        $rf = $this->conf->review_form();
+        $unresolved_fields = $rf->all_fields();
         foreach ($this->all_rrows as $rrow) {
             if ($this->user->can_view_review($this->prow, $rrow)) {
                 $this->viewable_rrows[] = $rrow;
-                if ($rrow->reviewRound !== null) {
-                    $round_mask |= 1 << (int) $rrow->reviewRound;
+                if (!empty($unresolved_fields)) {
+                    $bound = $this->user->view_score_bound($this->prow, $rrow);
+                    $this_resolved_fields = [];
+                    foreach ($unresolved_fields as $f) {
+                        if ($f->view_score > $bound && $rrow->has_nonempty_field($f))
+                            $this_resolved_fields[] = $f;
+                    }
+                    foreach ($this_resolved_fields as $f) {
+                        unset($unresolved_fields[$f->id]);
+                    }
                 }
-                $min_view_score = min($min_view_score, $this->user->view_score_bound($this->prow, $rrow));
             }
         }
-        $rf = $this->conf->review_form();
-        Ht::stash_script("hotcrp.set_review_form(" . json_encode_browser($rf->unparse_json($round_mask, $min_view_score)) . ")");
+        Ht::stash_script("hotcrp.set_review_form(" . json_encode_browser($rf->unparse_form_json(array_diff_key($rf->all_fields(), $unresolved_fields))) . ")");
 
-        $want_rid = $want_rordinal = -1;
-        $rtext = (string) $this->qreq->reviewId;
-        if ($rtext !== "" && $rtext !== "new") {
-            if (ctype_digit($rtext)) {
-                $want_rid = intval($rtext);
-            } else if (str_starts_with($rtext, (string) $this->prow->paperId)
-                       && ($x = substr($rtext, strlen((string) $this->prow->paperId))) !== ""
-                       && ctype_alpha($x)) {
-                $want_rordinal = parseReviewOrdinal(strtoupper($x));
-            }
-        }
+        $this->rrow = $this->prow->review_by_ordinal_id((string) $this->qreq->reviewId);
 
-        $this->rrow = $myrrow = $approvable_rrow = null;
+        $myrrow = $approvable_rrow = null;
         foreach ($this->viewable_rrows as $rrow) {
-            if (($want_rid > 0 && $rrow->reviewId == $want_rid)
-                || ($want_rordinal > 0 && $rrow->reviewOrdinal == $want_rordinal)) {
-                $this->rrow = $rrow;
-            }
             if ($rrow->contactId === $this->user->contactId
                 || (!$myrrow && $this->user->is_my_review($rrow))) {
                 $myrrow = $rrow;
@@ -2872,12 +2724,12 @@ class PaperTable {
         }
 
         if ($want_review
-            && $this->user->can_review($this->prow, $this->editrrow, false)) {
+            && $this->user->can_edit_review($this->prow, $this->editrrow, false)) {
             $this->mode = "re";
         }
     }
 
-    function resolveComments() {
+    function resolve_comments() {
         $this->crows = $this->prow->all_comments();
         $this->mycrows = $this->prow->viewable_comments($this->user, true);
     }
@@ -2887,10 +2739,10 @@ class PaperTable {
         return $this->all_rrows;
     }
 
-    function fixReviewMode() {
+    function fix_mode() {
         if ($this->mode === "re"
             && $this->rrow
-            && !$this->user->can_review($this->prow, $this->rrow, false)
+            && !$this->user->can_edit_review($this->prow, $this->rrow, false)
             && ($this->rrow->contactId != $this->user->contactId
                 || $this->rrow->reviewStatus >= ReviewInfo::RS_COMPLETED)) {
             $this->mode = "p";
@@ -2906,7 +2758,8 @@ class PaperTable {
             && empty($this->mycrows)
             && $this->prow->has_author($this->user)
             && !$this->allow_admin
-            && ($this->conf->timeFinalizePaper($this->prow) || $this->prow->timeSubmitted <= 0)) {
+            && ($this->conf->time_finalize_paper($this->prow)
+                || $this->prow->timeSubmitted <= 0)) {
             $this->mode = "edit";
         }
     }

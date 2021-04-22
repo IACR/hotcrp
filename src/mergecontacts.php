@@ -1,6 +1,6 @@
 <?php
 // mergecontacts.php -- HotCRP helper class for merging users
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class MergeContacts extends MessageSet {
     /** @var Conf */
@@ -47,7 +47,8 @@ class MergeContacts extends MessageSet {
         $this->q("delete from $table where $idfield=?", $this->oldu->contactId);
     }
     private function replace_contact_string($k) {
-        return (string) $this->oldu->$k !== "" && (string) $this->newu->$k === "";
+        return (string) $this->oldu->prop($k) !== ""
+            && (string) $this->newu->prop($k) === "";
     }
     private function basic_user_json() {
         $cj = (object) ["email" => $this->newu->email];
@@ -55,15 +56,16 @@ class MergeContacts extends MessageSet {
         foreach (["firstName", "lastName", "affiliation", "country",
                   "collaborators", "phone"] as $k) {
             if ($this->replace_contact_string($k))
-                $cj->$k = $this->oldu->$k;
+                $cj->$k = $this->oldu->prop($k);
         }
 
         if (($old_data = $this->oldu->data())) {
             $cj->data = (object) [];
             $new_data = $this->newu->data();
-            foreach ($old_data as $k => $v)
+            foreach ($old_data as $k => $v) {
                 if (!isset($new_data->$k))
                     $cj->data->$k = $v;
+            }
         }
 
         return $cj;

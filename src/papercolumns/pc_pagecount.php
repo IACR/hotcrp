@@ -1,6 +1,6 @@
 <?php
 // pc_pagecount.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class PageCount_PaperColumn extends PaperColumn {
     /** @var CheckFormat */
@@ -10,9 +10,6 @@ class PageCount_PaperColumn extends PaperColumn {
     function __construct(Conf $conf, $cj) {
         parent::__construct($conf, $cj);
         $this->cf = new CheckFormat($conf, CheckFormat::RUN_IF_NECESSARY_TIMEOUT);
-    }
-    function prepare(PaperList $pl, $visible) {
-        return $pl->user->can_view_some_pdf();
     }
     /** @return 0|-1 */
     private function dtype(Contact $user, PaperInfo $row) {
@@ -36,16 +33,16 @@ class PageCount_PaperColumn extends PaperColumn {
     function prepare_sort(PaperList $pl, $sortindex) {
         $this->sortmap = [];
         foreach ($pl->rowset() as $row) {
-            $this->sortmap[$row->uid] = $this->page_count($pl->user, $row);
+            $this->sortmap[$row->paperXid] = $this->page_count($pl->user, $row);
         }
     }
     function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
-        $ac = $this->sortmap[$a->uid];
-        $bc = $this->sortmap[$b->uid];
+        $ac = $this->sortmap[$a->paperXid];
+        $bc = $this->sortmap[$b->paperXid];
         if ($ac === null || $bc === null) {
             return $ac === $bc ? 0 : ($ac === null ? -1 : 1);
         } else {
-            return $ac == $bc ? 0 : ($ac < $bc ? -1 : 1);
+            return $ac <=> $bc;
         }
     }
     function content_empty(PaperList $pl, PaperInfo $row) {

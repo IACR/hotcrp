@@ -1,9 +1,8 @@
 <?php
 // mail.php -- HotCRP mail tool
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
-require_once("src/papersearch.php");
 require_once("src/mailclasses.php");
 if (!$Me->is_manager() && !$Me->isPC) {
     $Me->escape();
@@ -166,11 +165,17 @@ if (isset($papersel)
 
 
 class MailSender {
+    /** @var Conf */
     public $conf;
+    /** @var Contact */
     public $user;
+    /** @var MailRecipients */
     private $recip;
+    /** @var int */
     private $phase;
+    /** @var bool */
     private $sending;
+    /** @var Qrequest */
     private $qreq;
 
     private $started = false;
@@ -184,6 +189,8 @@ class MailSender {
     private $cbcount = 0;
     private $mailid_text = "";
 
+    /** @param MailRecipients $recip
+     * @param int $phase */
     function __construct(Contact $user, $recip, $phase, Qrequest $qreq) {
         $this->conf = $user->conf;
         $this->user = $user;
@@ -195,12 +202,12 @@ class MailSender {
         $this->recipients = (string) $qreq->to;
     }
 
-    static function check($user, $recip, $qreq) {
+    static function check(Contact $user, MailRecipients $recip, Qrequest $qreq) {
         $ms = new MailSender($user, $recip, 0, $qreq);
         $ms->run();
     }
 
-    static function send1($user, $recip, $qreq) {
+    static function send1(Contact $user, MailRecipients $recip, Qrequest $qreq) {
         $ms = new MailSender($user, $recip, 1, $qreq);
         $result = $user->conf->qe("insert into MailLog set
             recipients=?, cc=?, replyto=?, subject=?, emailBody=?, q=?, t=?,
@@ -211,7 +218,7 @@ class MailSender {
         $ms->echo_request_form(true);
         echo Ht::hidden("mailid", $result->insert_id),
             Ht::hidden("send", 1),
-            Ht::submit("Send mail"),
+            Ht::submit("Send mail", ["class" => "btn-highlight"]),
             "</form>",
             Ht::unstash_script('$("#mailform").submit()'),
             '<div class="warning">About to send mail.</div>';
@@ -219,7 +226,7 @@ class MailSender {
         exit;
     }
 
-    static function send2($user, $recip, $qreq) {
+    static function send2(Contact $user, MailRecipients $recip, Qrequest $qreq) {
         $mailid = isset($qreq->mailid) && ctype_digit($qreq->mailid) ? intval($qreq->mailid) : -1;
         $result = $user->conf->qe("update MailLog set status=1 where mailId=? and status=-1", $mailid);
         if (!$result->affected_rows) {
@@ -231,7 +238,7 @@ class MailSender {
 
     private function echo_actions($extra_class = "") {
         echo '<div class="aa', $extra_class, '">',
-            Ht::submit("send", "Send", array("style" => "margin-right:4em")),
+            Ht::submit("send", "Send", ["class" => "btn-highlight mr-3"]),
             ' &nbsp; ';
         $class = $this->groupable ? "" : " hidden";
         if (!$this->qreq->group && $this->qreq->ungroup) {
@@ -281,16 +288,14 @@ class MailSender {
                 && $this->user->privChair
                 && (strpos($this->qreq->emailBody, "%REVIEWS%")
                     || strpos($this->qreq->emailBody, "%COMMENTS%"))) {
-                if (!$this->conf->can_some_author_view_review()) {
+                if (!$this->conf->time_some_author_view_review()) {
                     echo '<div class="warning">Although these mails contain reviews and/or comments, authors can’t see reviews or comments on the site. (<a href="', $this->conf->hoturl("settings", "group=dec"), '" class="nw">Change this setting</a>)</div>', "\n";
-                } else if (!$this->conf->can_some_author_view_review(true)) {
-                    echo '<div class="warning">Mails to users who have not completed their own reviews will not include reviews or comments. (<a href="', $this->conf->hoturl("settings", "group=dec"), '" class="nw">Change the setting</a>)</div>', "\n";
                 }
             }
             if (isset($this->qreq->emailBody)
                 && $this->user->privChair
                 && substr($this->recipients, 0, 4) == "dec:") {
-                if (!$this->conf->can_some_author_view_decision()) {
+                if (!$this->conf->time_some_author_view_decision()) {
                     echo '<div class="warning">You appear to be sending an acceptance or rejection notification, but authors can’t see paper decisions on the site. (<a href="', $this->conf->hoturl("settings", "group=dec"), '" class="nw">Change this setting</a>)</div>', "\n";
                 }
             }
@@ -457,7 +462,11 @@ class MailSender {
         $subject = "[{$this->conf->short_name}] $subject";
         $emailBody = $this->qreq->emailBody;
         $template = ["subject" => $subject, "body" => $emailBody];
-        $rest = array_merge(["no_error_quit" => true], $mailer_options);
+        $rest = $mailer_options;
+        $rest["no_error_quit"] = true;
+        if ($this->recip->is_authors()) {
+            $rest["author_permission"] = true;
+        }
 
         // test whether this mail is paper-sensitive
         $mailer = new HotCRPMailer($this->conf, $this->user, $rest);
@@ -524,14 +533,23 @@ class MailSender {
                 }
             }
 
-            if ($nwarnings !== $mailer->warning_count() || $nrows_done % 5 == 0) {
+            if ($nwarnings !== $mailer->message_count() || $nrows_done % 5 == 0) {
                 $this->echo_mailinfo($nrows_done, $nrows_total);
             }
-            if ($nwarnings !== $mailer->warning_count()) {
+            if ($nwarnings !== $mailer->message_count()) {
                 $this->echo_prologue();
-                $nwarnings = $mailer->warning_count();
-                echo "<div id=\"foldmailwarn$nwarnings\" class=\"hidden\"><div class=\"warning\">", join("<br>", $mailer->warning_htmls()), "</div></div>";
-                echo Ht::unstash_script("document.getElementById('mailwarnings').innerHTML = document.getElementById('foldmailwarn$nwarnings').innerHTML;");
+                $nwarnings = $mailer->message_count();
+                echo "<div id=\"foldmailwarn$nwarnings\" class=\"hidden\"><div class=\"warning\">";
+                foreach ($mailer->message_list() as $mx) {
+                    echo "<div class=\"mmm\">";
+                    if ($mx->field && str_starts_with($mx->field, "%")) {
+                        echo "<code>", htmlspecialchars($mx->field), "</code>: ";
+                    } else if ($mx->field) {
+                        echo htmlspecialchars($mx->field), ": ";
+                    }
+                    echo $mx->message, "</div>";
+                }
+                echo "</div></div>", Ht::unstash_script("document.getElementById('mailwarnings').innerHTML = document.getElementById('foldmailwarn$nwarnings').innerHTML;");
             }
 
             if ($this->sending && $revinform !== null && $prow) {
@@ -580,10 +598,10 @@ if (!$Qreq->loadtmpl
     && !$Qreq->psearch
     && !$Qreq->again
     && !$recip->error
-    && $Qreq->valid_post()) {
-    if ($Qreq->send && $Qreq->mailid) {
+    && $Qreq->valid_token()) {
+    if ($Qreq->send && $Qreq->mailid && $Qreq->is_post()) {
         MailSender::send2($Me, $recip, $Qreq);
-    } else if ($Qreq->send) {
+    } else if ($Qreq->send && $Qreq->is_post()) {
         MailSender::send1($Me, $recip, $Qreq);
     } else if ($Qreq->check || $Qreq->group || $Qreq->ungroup) {
         MailSender::check($Me, $recip, $Qreq);
@@ -657,10 +675,10 @@ if ($Me->privChair)
 else
     echo '<td class="nw">Papers: &nbsp;</td><td>',
         Ht::hidden("plimit", 1), '<span>';
-echo Ht::entry("q", (string) $Qreq->q,
-               array("id" => "q", "placeholder" => "(All)",
-                     "class" => "papersearch need-suggest", "size" => 36)),
-    " &nbsp;in&nbsp;";
+echo Ht::entry("q", (string) $Qreq->q, [
+        "id" => "q", "placeholder" => "(All)", "spellcheck" => false,
+        "class" => "papersearch need-suggest", "size" => 36
+    ]), " &nbsp;in&nbsp;";
 if (count($tOpt) == 1) {
     echo htmlspecialchars($tOpt[$Qreq->t]);
 } else {
@@ -751,14 +769,14 @@ if ($Me->privChair) {
 
 
 echo '<div class="aa c">',
-    Ht::submit("Prepare mail"), ' &nbsp; <span class="hint">You’ll be able to review the mails before they are sent.</span>
+    Ht::submit("Prepare mail", ["class" => "btn-primary"]), ' &nbsp; <span class="hint">You’ll be able to review the mails before they are sent.</span>
 </div>
 
 
 <div id="mailref">Keywords enclosed in percent signs, such as <code>%NAME%</code> or <code>%REVIEWDEADLINE%</code>, are expanded for each mail.  Use the following syntax:
 <hr class="g">
 <div class="ctable no-hmargin">
-<dl class="ctelt" style="margin-bottom:1.5em">
+<dl class="ctelt">
 <dt><code>%URL%</code></dt>
     <dd>Site URL.</dd>
 <dt><code>%NUMSUBMITTED%</code></dt>
@@ -773,7 +791,7 @@ echo '<div class="aa c">',
     <dd>Email address of recipient.</dd>
 <dt><code>%REVIEWDEADLINE%</code></dt>
     <dd>Reviewing deadline appropriate for recipient.</dd>
-</dl><dl class="ctelt" style="margin-bottom:1.5em">
+</dl><dl class="ctelt">
 <dt><code>%NUMBER%</code></dt>
     <dd>Paper number relevant for mail.</dd>
 <dt><code>%TITLE%</code></dt>
@@ -782,14 +800,14 @@ echo '<div class="aa c">',
     <dd>First couple words of paper title (useful for mail subject).</dd>
 <dt><code>%OPT(AUTHORS)%</code></dt>
     <dd>Paper authors (if recipient is allowed to see the authors).</dd>
-</dl><dl class="ctelt" style="margin-bottom:1.5em">
+</dl><dl class="ctelt">
 <dt><code>%REVIEWS%</code></dt>
     <dd>Pretty-printed paper reviews.</dd>
 <dt><code>%COMMENTS%</code></dt>
     <dd>Pretty-printed paper comments, if any.</dd>
 <dt><code>%COMMENTS(<i>tag</i>)%</code></dt>
     <dd>Comments tagged #<code><i>tag</i></code>, if any.</dd>
-</dl><dl class="ctelt" style="margin-bottom:1.5em">
+</dl><dl class="ctelt">
 <dt><code>%IF(SHEPHERD)%...%ENDIF%</code></dt>
     <dd>Include text if a shepherd is assigned.</dd>
 <dt><code>%SHEPHERD%</code></dt>
@@ -798,7 +816,7 @@ echo '<div class="aa c">',
     <dd>Shepherd name, if any.</dd>
 <dt><code>%SHEPHERDEMAIL%</code></dt>
     <dd>Shepherd email, if any.</dd>
-</dl><dl class="ctelt" style="margin-bottom:1.5em">
+</dl><dl class="ctelt">
 <dt><code>%IF(#<i>tag</i>)%...%ENDIF%</code></dt>
     <dd>Include text if paper has tag <code><i>tag</i></code>.</dd>
 <dt><code>%TAGVALUE(<i>tag</i>)%</code></dt>

@@ -1,6 +1,6 @@
 <?php
 // pc_reviewdelegation.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ReviewDelegation_PaperColumn extends PaperColumn {
     private $requester;
@@ -19,7 +19,7 @@ class ReviewDelegation_PaperColumn extends PaperColumn {
         $rx = [];
         $row->ensure_reviewer_names();
         $old_overrides = $pl->user->add_overrides(Contact::OVERRIDE_CONFLICT);
-        foreach ($row->reviews_by_display($pl->user) as $rrow) {
+        foreach ($row->reviews_as_display() as $rrow) {
             if ($rrow->reviewType == REVIEW_EXTERNAL
                 && $rrow->requestedBy == $this->requester->contactId) {
                 if (!$pl->user->can_view_review_assignment($row, $rrow)) {
@@ -33,7 +33,7 @@ class ReviewDelegation_PaperColumn extends PaperColumn {
                 $ranal = $pl->make_review_analysis($rrow, $row);
                 $d = $rrow->status_description();
                 if ($rrow->reviewOrdinal) {
-                    $d = rtrim("#" . $rrow->unparse_ordinal() . " " . $d);
+                    $d = rtrim("#" . $rrow->unparse_ordinal_id() . " " . $d);
                 }
                 $d = $ranal->wrap_link($d, "uu nw");
                 if ($rrow->reviewStatus < ReviewInfo::RS_DELIVERED) {

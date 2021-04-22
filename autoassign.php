@@ -1,6 +1,6 @@
 <?php
 // autoassign.php -- HotCRP automatic paper assignment page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 if (!$Me->is_manager()) {
@@ -17,11 +17,11 @@ if ($Qreq->valid_post()) {
     header("X-Accel-Buffering: no");  // NGINX: do not hold on to file
 }
 
-$tOpt = PaperSearch::manager_search_types($Me);
+$tOpt = PaperSearch::viewable_manager_limits($Me);
 if ($Me->privChair
     && !isset($Qreq->t)
     && $Qreq->a === "prefconflict"
-    && $Conf->can_pc_see_active_submissions()) {
+    && $Conf->time_pc_view_active_submissions()) {
     $Qreq->t = "all";
 }
 if (!isset($Qreq->t) || !isset($tOpt[$Qreq->t])) {
@@ -131,7 +131,8 @@ if (isset($Qreq->saveassignment)
     $assignset->parse($Qreq->assignment);
     $csvg = $Conf->make_csvg("assignments");
     $assignset->make_acsv()->unparse_into($csvg);
-    csv_exit($csvg->sort(SORT_NATURAL));
+    $csvg->sort(SORT_NATURAL)->emit();
+    exit;
 }
 
 // execute assignment
@@ -259,7 +260,7 @@ class AutoassignerInterface {
             if (($tag = $tagger->check($tag, Tagger::NOVALUE))) {
                 $this->discordertag = $tag;
             } else {
-                $this->errors["discordertag"] = $tagger->error_html;
+                $this->errors["discordertag"] = $tagger->error_html();
             }
         }
 
@@ -543,12 +544,12 @@ class AutoassignerInterface {
 }
 
 $Conf->header("Assignments", "autoassign", ["subtitle" => "Automatic"]);
-echo '<div class="psmode">',
+echo '<div class="mb-5 clearfix">',
     '<div class="papmode active"><a href="', $Conf->hoturl("autoassign"), '">Automatic</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("manualassign"), '">Manual</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("conflictassign"), '">Conflicts</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("bulkassign"), '">Bulk update</a></div>',
-    '</div><hr class="c">';
+    '</div>';
 
 if (isset($Qreq->a) && isset($Qreq->pctyp) && $Qreq->valid_post()) {
     if (isset($Qreq->assignment) && isset($Qreq->showassignment)) {
@@ -582,14 +583,6 @@ function echo_radio_row($name, $value, $text, $extra = null) {
     }
 }
 
-function divClass($name, $classes = null) {
-    if (($c = Ht::control_class($name, $classes))) {
-        return '<div class="' . $c . '">';
-    } else {
-        return '<div>';
-    }
-}
-
 echo Ht::form($Conf->hoturl_post("autoassign", array("profile" => $Qreq->profile, "seed" => $Qreq->seed, "XDEBUG_PROFILE" => $Qreq->XDEBUG_PROFILE)), ["id" => "autoassignform"]),
     '<div class="helpside"><div class="helpinside">
 Assignment methods:
@@ -609,15 +602,17 @@ Assignment methods:
 echo Ht::unstash_script("hotcrp.highlight_form_children(\"#autoassignform\")");
 
 // paper selection
-echo divClass("pap"), "<h3 class=\"form-h\">Paper selection</h3>";
+echo '<div class="form-section">',
+    '<h3 class="', Ht::control_class("pap", "form-h", "is-"), '">Paper selection</h3>';
 if (!isset($Qreq->q)) { // XXX redundant
     $Qreq->q = join(" ", $SSel->selection());
 }
-echo Ht::entry("q", $Qreq->q,
-               array("id" => "autoassignq", "placeholder" => "(All)",
-                     "size" => 40, "title" => "Enter paper numbers or search terms",
-                     "class" => Ht::control_class("q", "papersearch js-autosubmit need-suggest"),
-                     "data-autosubmit-type" => "requery")), " &nbsp;in &nbsp;";
+echo Ht::entry("q", $Qreq->q, [
+        "id" => "autoassignq", "placeholder" => "(All)",
+        "size" => 40, "aria-label" => "Search",
+        "class" => Ht::control_class("q", "papersearch js-autosubmit need-suggest"),
+        "data-autosubmit-type" => "requery", "spellcheck" => false
+    ]), " &nbsp;in &nbsp;";
 if (count($tOpt) > 1) {
     echo Ht::select("t", $tOpt, $Qreq->t);
 } else {
@@ -642,8 +637,10 @@ echo "</div>\n";
 
 
 // action
-echo '<div>';
-echo divClass("ass"), "<h3 class=\"form-h\">Action</h3>", "</div>";
+echo '<div class="form-section">',
+    '<h3 class="', Ht::control_class("ass", "form-h", "is-"), "\">Action</h3>\n";
+
+echo '<div class="form-g">';
 echo_radio_row("a", "rev", "Ensure each selected paper has <i>at least</i>", ["open" => true]);
 echo "&nbsp; ",
     Ht::entry("revct", $Qreq->revct ?? 1,
@@ -684,30 +681,36 @@ if (count($rev_rounds) > 1 || !($rev_rounds["unnamed"] ?? false)) {
     echo "</div>";
 }
 
-echo "</div>\n";
+echo "</div>"; // revpc container
+echo "</div>"; // .form-g
 
 // conflicts, clear reviews
+echo '<div class="form-g">';
 echo_radio_row("a", "prefconflict", "Assign conflicts when PC members have review preferences of &minus;100 or less", ["divclass" => "mt-3"]);
 echo_radio_row("a", "clear", "Clear all &nbsp;", ["open" => true]);
 echo Ht::select("cleartype", [REVIEW_PRIMARY => "primary", REVIEW_SECONDARY => "secondary", REVIEW_PC => "optional", REVIEW_META => "metareview", "conflict" => "conflict", "lead" => "discussion lead", "shepherd" => "shepherd"], $Qreq->cleartype),
-    " &nbsp;assignments for selected papers and PC members</div>\n";
+    " &nbsp;assignments for selected papers and PC members</div></div>\n";
 
 // leads, shepherds
+echo '<div class="form-g">';
 echo_radio_row("a", "lead", "Assign discussion lead from reviewers, preferring&nbsp; ", ["open" => true, "divclass" => "mt-3"]);
 echo Ht::select("leadscore", $scoreselector, $Qreq->leadscore), "</div>\n";
 
 echo_radio_row("a", "shepherd", "Assign shepherd from reviewers, preferring&nbsp; ", ["open" => true]);
-echo Ht::select("shepherdscore", $scoreselector, $Qreq->shepherdscore), "</div>\n";
+echo Ht::select("shepherdscore", $scoreselector, $Qreq->shepherdscore), "</div></div>\n";
 
 // discussion order
+echo '<div class="form-g">';
 echo_radio_row("a", "discorder", "Create discussion order in tag #", ["open" => true, "divclass" => "mt-3"]);
 echo Ht::entry("discordertag", $Qreq->discordertag ?? "discuss",
                ["size" => 12, "class" => Ht::control_class("discordertag", "js-autosubmit")]),
-    ", grouping papers with similar PC conflicts</div>";
+    ", grouping papers with similar PC conflicts</div></div>";
+
+echo "</div>\n\n"; // .form-section
 
 
 // PC
-echo "<h3 class=\"form-h\">PC members</h3>\n";
+echo '<div class="form-section"><h3 class="form-h">PC members</h3>';
 
 echo '<div class="js-radio-focus checki"><label>',
     '<span class="checkc">', Ht::radio("pctyp", "all", $Qreq->pctyp === "all"), '</span>',
@@ -740,7 +743,7 @@ $summary = [];
 $nrev = AssignmentCountSet::load($Me, AssignmentCountSet::HAS_REVIEW);
 foreach ($Conf->pc_members() as $id => $p) {
     $t = '<div class="ctelt"><label class="checki ctelti"><span class="checkc">'
-        . Ht::checkbox("pcc$id", 1, isset($pcsel[$id]), [
+        . Ht::checkbox("pcc$id", 1, isset($Qreq["pcc$id"]), [
             "id" => "pcc$id", "data-range-type" => "pcc",
             "class" => "uic js-range-click js-pcsel-tag"
         ]) . '</span>' . $Me->reviewer_html_for($p)
@@ -776,18 +779,19 @@ for ($i = 1; $i == 1 || isset($Qreq["bpa$i"]); ++$i) {
     }
     echo "</td></tr>\n";
 }
-echo "</tbody></table></div>\n";
+echo "</tbody></table></div></div>\n";
 $Conf->stash_hotcrp_pc($Me);
 
 
 // Load balancing
-echo "<h3 class=\"form-h\">Load balancing</h3>\n";
+echo '<div class="form-section"><h3 class="form-h">Load balancing</h3>';
 echo_radio_row("balance", "new", "New assignments—spread new assignments equally among selected PC members");
 echo_radio_row("balance", "all", "All assignments—spread assignments so that selected PC members have roughly equal overall load");
+echo '</div>';
 
 
 // Method
-echo "<h3 class=\"form-h\">Assignment method</h3>\n";
+echo '<div class="form-section"><h3 class="form-h">Assignment method</h3>';
 echo_radio_row("method", "mcmf", "Globally optimal assignment");
 echo_radio_row("method", "random", "Random good assignment");
 
@@ -802,6 +806,8 @@ if ($Conf->opt("autoassignReviewGadget") === "expertise") {
     }
     echo "</div>\n";
 }
+
+echo "</div>\n";
 
 
 // Create assignment

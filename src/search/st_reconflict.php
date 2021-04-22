@@ -1,6 +1,6 @@
 <?php
 // search/st_reconflict.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 abstract class Reconflict_SearchTerm extends SearchTerm {
     static function parse($word, SearchWord $sword, PaperSearch $srch) {
@@ -15,7 +15,7 @@ abstract class Reconflict_SearchTerm extends SearchTerm {
             $xword = $m[3];
         }
         if ($xword !== "" || $st->is_empty()) {
-            $srch->warn("reconflict: Expected a list of paper numbers.");
+            $srch->warning("reconflict: Expected a list of paper numbers.");
             return new False_SearchTerm;
         }
 
@@ -23,7 +23,7 @@ abstract class Reconflict_SearchTerm extends SearchTerm {
         $cids = [];
         foreach ($srch->user->paper_set(["paperId" => $st, "reviewSignatures" => true, "finalized" => $srch->limit_submitted()]) as $prow) {
             if ($srch->user->can_view_paper($prow)) {
-                foreach ($prow->reviews_by_id() as $rrow) {
+                foreach ($prow->all_reviews() as $rrow) {
                     if ($rrow->reviewToken === 0
                         && $srch->user->can_view_review_identity($prow, $rrow)) {
                         $cids[$rrow->contactId] = true;
@@ -36,7 +36,7 @@ abstract class Reconflict_SearchTerm extends SearchTerm {
         if (!empty($cids)) {
             return new Conflict_SearchTerm($srch->user, ">0", array_keys($cids), false);
         } else {
-            $srch->warn("reconflict:" . htmlspecialchars($word) . ": No visible reviewers.");
+            $srch->warning("reconflict:" . htmlspecialchars($word) . ": No visible reviewers.");
             return new False_SearchTerm;
         }
     }

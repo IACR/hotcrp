@@ -1,6 +1,6 @@
 <?php
 // listactions/la_getscores.php -- HotCRP helper classes for list actions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class GetScores_ListAction extends ListAction {
     function allow(Contact $user, Qrequest $qreq) {
@@ -13,36 +13,38 @@ class GetScores_ListAction extends ListAction {
         $errors = $texts = $any_scores = array();
         $any_decision = $any_reviewer_identity = $any_ordinal = false;
         foreach ($ssel->paper_set($user) as $row) {
-            if (($whyNot = $user->perm_view_paper($row)))
-                $errors[] = "#$row->paperId: " . whyNotText($whyNot);
-            else if (($whyNot = $user->perm_view_review($row, null)))
-                $errors[] = "#$row->paperId: " . whyNotText($whyNot);
-            else {
+            if (($whyNot = $user->perm_view_paper($row))) {
+                $errors[] = "#$row->paperId: " . $whyNot->unparse_html();
+            } else if (($whyNot = $user->perm_view_review($row, null))) {
+                $errors[] = "#$row->paperId: " . $whyNot->unparse_html();
+            } else {
                 $row->ensure_full_reviews();
                 $a = ["paper" => $row->paperId, "title" => $row->title];
                 if ($row->outcome && $user->can_view_decision($row)) {
                     $a["decision"] = $any_decision = $user->conf->decision_name($row->outcome);
                 }
-                foreach ($row->viewable_submitted_reviews_by_display($user) as $rrow) {
-                    $this_scores = false;
-                    $b = $a;
-                    foreach ($row->viewable_review_fields($rrow, $user) as $field => $f) {
-                        if ($f->has_options && ($rrow->$field || $f->allow_empty)) {
-                            $b[$f->search_keyword()] = $f->unparse_value($rrow->$field);
-                            $any_scores[$f->search_keyword()] = $this_scores = true;
+                foreach ($row->viewable_reviews_as_display($user) as $rrow) {
+                    if ($rrow->reviewSubmitted) {
+                        $this_scores = false;
+                        $b = $a;
+                        foreach ($rrow->viewable_fields($user) as $field => $f) {
+                            if ($f->has_options && ($rrow->$field || !$f->required)) {
+                                $b[$f->search_keyword()] = $f->unparse_value($rrow->$field);
+                                $any_scores[$f->search_keyword()] = $this_scores = true;
+                            }
                         }
-                    }
-                    if ($this_scores) {
-                        if ($rrow->reviewOrdinal > 0) {
-                            $any_ordinal = true;
-                            $b["review"] = $row->paperId . unparseReviewOrdinal($rrow->reviewOrdinal);
+                        if ($this_scores) {
+                            if ($rrow->reviewOrdinal > 0) {
+                                $any_ordinal = true;
+                                $b["review"] = $rrow->unparse_ordinal_id();
+                            }
+                            if ($user->can_view_review_identity($row, $rrow)) {
+                                $any_reviewer_identity = true;
+                                $b["reviewername"] = trim($rrow->firstName . " " . $rrow->lastName);
+                                $b["email"] = $rrow->email;
+                            }
+                            $texts[] = $b;
                         }
-                        if ($user->can_view_review_identity($row, $rrow)) {
-                            $any_reviewer_identity = true;
-                            $b["reviewername"] = trim($rrow->firstName . " " . $rrow->lastName);
-                            $b["email"] = $rrow->email;
-                        }
-                        $texts[] = $b;
                     }
                 }
             }

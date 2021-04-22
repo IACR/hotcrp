@@ -1,6 +1,6 @@
 <?php
 // pc_formula.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Formula_PaperColumn extends PaperColumn {
     /** @var Formula */
@@ -41,7 +41,11 @@ class Formula_PaperColumn extends PaperColumn {
         }
     }
     function sort_name() {
-        return $this->formula->name ? : $this->formula->expression;
+        if ($this->formula->name) {
+            return $this->formula->name;
+        } else {
+            return "formula:{$this->formula->expression}";
+        }
     }
     function prepare(PaperList $pl, $visible) {
         if (!$this->formula->check($pl->user)
@@ -58,12 +62,12 @@ class Formula_PaperColumn extends PaperColumn {
         $this->sortmap = [];
         $formulaf = $this->formula->compile_sortable_function();
         foreach ($pl->rowset() as $row) {
-            $this->sortmap[$row->uid] = $formulaf($row, null, $pl->user);
+            $this->sortmap[$row->paperXid] = $formulaf($row, null, $pl->user);
         }
     }
     function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
-        $as = $this->sortmap[$a->uid];
-        $bs = $this->sortmap[$b->uid];
+        $as = $this->sortmap[$a->paperXid];
+        $bs = $this->sortmap[$b->paperXid];
         if ($as === null || $bs === null) {
             return $as === $bs ? 0 : ($as === null ? 1 : -1);
         } else {

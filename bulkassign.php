@@ -1,6 +1,6 @@
 <?php
 // bulkassign.php -- HotCRP bulk paper assignment page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 require_once("src/initweb.php");
 if (!$Me->is_manager()) {
@@ -95,12 +95,12 @@ if (isset($Qreq->saveassignment)
 
 
 $Conf->header("Assignments", "bulkassign", ["subtitle" => "Bulk update"]);
-echo '<div class="psmode">',
+echo '<div class="mb-5 clearfix">',
     '<div class="papmode"><a href="', $Conf->hoturl("autoassign"), '">Automatic</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("manualassign"), '">Manual</a></div>',
     '<div class="papmode"><a href="', $Conf->hoturl("conflictassign"), '">Conflicts</a></div>',
     '<div class="papmode active"><a href="', $Conf->hoturl("bulkassign"), '">Bulk update</a></div>',
-    '</div><hr class="c" />';
+    '</div>';
 
 
 // upload review form action

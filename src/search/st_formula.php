@@ -1,6 +1,6 @@
 <?php
 // search/st_formula.php -- HotCRP helper class for searching for papers
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Formula_SearchTerm extends SearchTerm {
     /** @var Contact */
@@ -23,7 +23,7 @@ class Formula_SearchTerm extends SearchTerm {
             $formula = new Formula($word, $is_graph ? Formula::ALLOW_INDEXED : 0);
         }
         if (!$formula->check($srch->user)) {
-            $srch->warn("Formula error: " . $formula->error_html());
+            $srch->warning("Formula error: " . $formula->error_html());
             $formula = null;
         }
         return $formula;

@@ -1,6 +1,6 @@
 <?php
 // test04.php -- HotCRP user database tests
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 declare(strict_types=1);
 global $Opt;
@@ -252,21 +252,20 @@ $user_anne2 = maybe_user("anne2@_.com");
 xassert($user_anne1 && !$user_anne2);
 xassert_eqq($user_anne1->firstName, "Anne");
 xassert_eqq($user_anne1->lastName, "Dudfield");
-xassert_eqq($user_anne1->collaborators, "All (derpo)");
+xassert_eqq($user_anne1->collaborators(), "All (derpo)");
 xassert_eqq($user_anne1->tag_value("a"), 1.0);
 xassert_eqq($user_anne1->tag_value("b"), 3.0);
 xassert_eqq($user_anne1->roles, Contact::ROLE_PC | Contact::ROLE_ADMIN);
 xassert_eqq($user_anne1->data("data_test"), 139);
 xassert_eqq($user_anne1->email, "anne1@_.com");
-$paper1->invalidate_conflicts();
-$paper1->invalidate_tags();
+$paper1 = $Conf->checked_paper_by_id(1);
 xassert($paper1->has_conflict($user_anne1));
 xassert_eqq($paper1->tag_value("{$a2id}~butt"), null);
 xassert_eqq($paper1->tag_value("{$a1id}~butt"), 1.0);
-$paper2->invalidate_tags();
+$paper2 = $Conf->checked_paper_by_id(2);
 xassert_eqq($paper2->tag_value("{$a2id}~butt"), null);
 xassert_eqq($paper2->tag_value("{$a1id}~butt"), 2.0);
-$paper3->invalidate_tags();
+$paper3 = $Conf->checked_paper_by_id(3);
 xassert_eqq($paper3->tag_value("{$a2id}~butt"), null);
 xassert_eqq($paper3->tag_value("{$a1id}~butt"), 4.0);
 
@@ -328,7 +327,7 @@ xassert_eqq($u->affiliation, "France");
 $u = $Conf->user_by_email("betty5@_.com");
 xassert(!$u);
 $u = $Conf->contactdb_user_by_email("betty5@_.com");
-$u->activate_database_account();
+$u->ensure_account_here();
 $u = $Conf->checked_user_by_email("betty5@_.com");
 xassert($u->has_account_here());
 xassert_eqq($u->firstName, "Betty");
@@ -363,5 +362,34 @@ xassert_eqq($pc_json["12"]->email, "mgbaker@cs.stanford.edu");
 xassert_eqq($pc_json["12"]->lastpos, 5);
 xassert_eqq($pc_json["21"]->email, "vera@bombay.com");
 xassert_eqq($pc_json["21"]->lastpos, 5);
+
+// review claiming
+Dbl::qe($Conf->contactdb(), "insert into ContactInfo set email='sophia@dros.nl', password='', firstName='Sophia', lastName='Dros'");
+$user_sophia = $Conf->user_by_email("sophia@dros.nl");
+xassert(!$user_sophia);
+$user_sophia = $Conf->contactdb_user_by_email("sophia@dros.nl");
+xassert(!!$user_sophia);
+$user_cengiz = $Conf->checked_user_by_email("cengiz@isi.edu");
+$rrid = $user_chair->assign_review(3, $user_cengiz->contactId, REVIEW_EXTERNAL);
+$paper3->load_reviews();
+xassert($rrid > 0);
+$rrow = $paper3->fresh_review_by_id($rrid);
+xassert(!!$rrow);
+xassert_eqq($rrow->contactId, $user_cengiz->contactId);
+Contact::$session_users = ["cengiz@isi.edu", "sophia@dros.nl"];
+$result = RequestReview_API::claimreview($user_cengiz, new Qrequest("POST", ["p" => "3", "r" => "$rrid", "email" => "betty6@_.com"]), $paper3);
+xassert_eqq($result->content["ok"], false);
+$rrow = $paper3->fresh_review_by_id($rrid);
+xassert(!!$rrow);
+xassert_eqq($rrow->contactId, $user_cengiz->contactId);
+$result = RequestReview_API::claimreview($user_cengiz, new Qrequest("POST", ["p" => "3", "r" => "$rrid", "email" => "sophia@dros.nl"]), $paper3);
+xassert_eqq($result->content["ok"], true);
+$user_sophia = $Conf->checked_user_by_email("sophia@dros.nl");
+xassert(!!$user_sophia);
+$rrow = $paper3->fresh_review_by_id($rrid);
+xassert(!!$rrow);
+xassert_neqq($rrow->contactId, $user_cengiz->contactId);
+xassert_eqq($rrow->contactId, $user_sophia->contactId);
+Contact::$session_users = null;
 
 xassert_exit();

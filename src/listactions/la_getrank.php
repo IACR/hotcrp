@@ -30,7 +30,7 @@ class GetRank_ListAction extends ListAction {
             });
             $lastIndex = null;
             foreach ($pset as $prow) {
-                if ($user->can_change_tag($prow, $tag, null, 1)) {
+                if ($user->can_edit_tag($prow, $tag, null, 1)) {
                     $csvt = CsvGenerator::quote($prow->title);
                     $tv = $prow->tag_value($tag);
                     $tail = ",$prow->paperId,$csvt\n";
@@ -70,7 +70,7 @@ tag," . CsvGenerator::quote(trim($qreq->tag)) . "
                     . "# " . $user->conf->hoturl_absolute("offline", null, Conf::HOTURL_RAW) . "\n\n"
                     . $real . ($real === "" ? "" : "\n") . $null);
         } else {
-            Conf::msg_error($tagger->error_html);
+            Conf::msg_error($tagger->error_html());
         }
     }
 }

@@ -1,6 +1,6 @@
 <?php
 // a_conflict.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Conflict_Assignable extends Assignable {
     /** @var int */
@@ -50,7 +50,7 @@ class Conflict_AssignmentParser extends AssignmentParser {
         } else if (!$this->iscontact
                    && !$state->user->can_administer($prow)
                    && ($whyNot = $state->user->perm_edit_paper($prow))) {
-            return whyNotText($whyNot);
+            return $whyNot->unparse_html();
         } else {
             return true;
         }

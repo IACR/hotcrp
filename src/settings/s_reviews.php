@@ -1,6 +1,6 @@
 <?php
 // src/settings/s_reviews.php -- HotCRP settings > reviews page
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Reviews_SettingRenderer {
     /** @param SettingValues $sv
@@ -18,7 +18,7 @@ class Reviews_SettingRenderer {
 
         echo '<div class="mg js-settings-review-round" data-review-round-number="', $rnum, '"><div>',
             $sv->label($rname, "Round"), ' &nbsp;',
-            $sv->render_entry($rname);
+            $sv->entry($rname);
         echo '<div class="d-inline-block" style="min-width:7em;margin-left:2em">';
         if ($rnum !== '$' && $review_count) {
             echo '<a href="', $sv->conf->hoturl("search", "q=" . urlencode("round:" . ($rnum ? $sv->conf->round_name($rnum) : "none"))), '">(', plural($review_count, "review"), ')</a>';
@@ -70,7 +70,7 @@ class Reviews_SettingRenderer {
 
 
         // Deadlines
-        echo "<h3 id=\"rounds\" class=\"form-h\">Deadlines &amp; rounds</h3>\n";
+        $sv->render_section("Deadlines &amp; rounds", "rounds");
         echo '<p>Reviews are due by the deadline, but <em>cannot be modified</em> after the hard deadline. Most conferences don’t use hard deadlines for reviews.</p>';
         echo '<p class="f-h">', ($sv->type_hint("date") ? : ""), '</p>';
 
@@ -155,10 +155,10 @@ class Reviews_SettingRenderer {
         $extselector = array_merge(["#same" => "(same as PC)"], $selector);
         echo '<div id="round_container" style="margin-top:1em', (count($selector) == 1 ? ';display:none' : ''), '">',
             $sv->label("rev_roundtag", "New PC reviews use round&nbsp; "),
-            Ht::select("rev_roundtag", $selector, $round_value, $sv->sjs("rev_roundtag")),
+            Ht::select("rev_roundtag", $selector, $round_value, $sv->sjs("rev_roundtag", null, "select")),
             ' <span class="barsep">·</span> ',
             $sv->label("extrev_roundtag", "New external reviews use round&nbsp; "),
-            Ht::select("extrev_roundtag", $extselector, $extround_value, $sv->sjs("extrev_roundtag")),
+            Ht::select("extrev_roundtag", $extselector, $extround_value, $sv->sjs("extrev_roundtag", null, "select")),
             '</div>';
     }
 
@@ -261,7 +261,7 @@ class Reviews_SettingRenderer {
             '<a class="ui qq js-foldup" href="">', expander(null, 0),
             '<label for="mailbody_requestreview">Mail template for external review requests</label></a>',
             '<span class="fx"> (<a href="', $sv->conf->hoturl("mail"), '">keywords</a> allowed; set to empty for default)</span></div>',
-            $sv->render_textarea("mailbody_requestreview", ["class" => "text-monospace fx", "cols" => 80, "rows" => 20]);
+            $sv->textarea("mailbody_requestreview", ["class" => "text-monospace fx", "cols" => 80, "rows" => 20]);
         $sv->echo_feedback_at("mailbody_requestreview");
         echo "</div></div>\n";
     }
@@ -296,13 +296,13 @@ class Reviews_SettingRenderer {
             && $sv->newv("pcrev_soft") > 0
             && Conf::$now < $sv->newv("pcrev_soft")
             && !$sv->has_error()) {
-            $sv->warning_at(null, "Authors can see reviews and comments although it is before the review deadline. This is sometimes unintentional.");
+            $sv->warning_at(null, $sv->setting_link("Authors can see reviews and comments", "au_seerev") . " although it is before the " . $sv->setting_link("review deadline", "pcrev_soft") . ". This is sometimes unintentional.");
         }
 
         if (($sv->has_interest("rev_blind") || $sv->has_interest("extrev_view"))
             && $sv->newv("rev_blind") == Conf::BLIND_NEVER
             && $sv->newv("extrev_view") == 1) {
-            $sv->warning_at("extrev_view", "Reviews aren’t blind, so external reviewers can see reviewer names and comments despite your settings.");
+            $sv->warning_at("extrev_view", $sv->setting_link("Reviews aren’t blind", "rev_blind") . ", so external reviewers can see reviewer names and comments despite " . $sv->setting_link("your settings", "extrev_view") . ".");
         }
 
         if ($sv->has_interest("mailbody_requestreview")
@@ -443,7 +443,7 @@ class ReviewDeadline_SettingParser extends SettingParser {
     function parse(SettingValues $sv, Si $si) {
         assert($sv->has_savedv("tag_rounds"));
 
-        $rref = (int) $si->suffix();
+        $rref = (int) substr($si->suffix(), 1);
         if ($sv->reqv("deleteround_$rref")) {
             // setting already deleted by tag_rounds parsing
             return false;

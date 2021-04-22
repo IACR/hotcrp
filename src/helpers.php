@@ -1,6 +1,6 @@
 <?php
 // helpers.php -- HotCRP non-class helper functions
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 /** @return array */
 function mkarray($value) {
@@ -82,7 +82,7 @@ function hoturl_post($page, $param = null) {
 }
 
 
-class JsonResult {
+class JsonResult implements JsonSerializable {
     /** @var ?int */
     public $status;
     /** @var array<string,mixed> */
@@ -112,24 +112,34 @@ class JsonResult {
             $this->content = $values;
         }
     }
+    /** @return JsonResult */
     static function make($jr, $arg2 = null) {
-        if (is_int($jr)) {
-            $jr = new JsonResult($jr, $arg2);
-        } else if (!($jr instanceof JsonResult)) {
-            $jr = new JsonResult($jr);
+        if ($jr instanceof JsonResult) {
+            return $jr;
+        } else if (is_int($jr)) {
+            return new JsonResult($jr, $arg2);
+        } else {
+            return new JsonResult($jr);
         }
-        return $jr;
     }
-    function export_errors() {
+    function export_errors(Conf $conf = null) {
         if (isset($this->content["error"])) {
-            Conf::msg_error($this->content["error"]);
+            Conf::msg_on($conf, $this->content["error"], 2);
         }
-        if (isset($this->content["errf"])) {
-            foreach ($this->content["errf"] as $f => $x) {
-                Ht::error_at((string) $f);
+    }
+    function export_messages(Conf $conf) {
+        $this->export_errors();
+        foreach ($this->content["message_list"] ?? [] as $mx) {
+            $ma = (array) $mx;
+            if (is_string($ma["message"] ?? null) && $ma["message"] !== "") {
+                Conf::msg_on($conf, $ma["message"], $ma["status"]);
+            }
+            if (is_string($ma["field"] ?? null)) {
+                Ht::message_set()->msg_at($ma["field"], $ma["message"] ?? null, $ma["status"]);
             }
         }
     }
+    /** @param bool $validated */
     function emit($validated) {
         if ($this->status) {
             if (!isset($this->content["ok"])) {
@@ -152,23 +162,36 @@ class JsonResult {
         header("Content-Type: application/json; charset=utf-8");
         echo json_encode_browser($this->content);
     }
+    function jsonSerialize() {
+        return $this->content;
+    }
 }
 
 class JsonResultException extends Exception {
     /** @var JsonResult */
     public $result;
-    /** @var bool */
-    static public $capturing = false;
+    /** @var int */
+    static public $capturing = 0;
     /** @param JsonResult $j */
     function __construct($j) {
         $this->result = $j;
     }
 }
 
+class Redirection extends Exception {
+    /** @var string */
+    public $url;
+    /** @param string $url */
+    function __construct($url) {
+        parent::__construct("Redirect to $url");
+        $this->url = $url;
+    }
+}
+
 function json_exit($json, $arg2 = null) {
     global $Qreq;
     $json = JsonResult::make($json, $arg2);
-    if (JsonResultException::$capturing) {
+    if (JsonResultException::$capturing > 0) {
         throw new JsonResultException($json);
     } else {
         $json->emit($Qreq && $Qreq->valid_token());
@@ -176,9 +199,9 @@ function json_exit($json, $arg2 = null) {
     }
 }
 
+/** @deprecated */
 function csv_exit(CsvGenerator $csv) {
-    $csv->download_headers();
-    $csv->download();
+    $csv->emit();
     exit;
 }
 
@@ -193,8 +216,9 @@ function foldupbutton($foldnum = 0, $content = "", $js = null) {
 
 /** @param ?bool $open
  * @param ?int $foldnum
+ * @param ?string $open_tooltip
  * @return string */
-function expander($open, $foldnum = null) {
+function expander($open, $foldnum = null, $open_tooltip = null) {
     $f = $foldnum !== null;
     $foldnum = ($foldnum !== 0 ? $foldnum : "");
     $t = '<span class="expander">';
@@ -202,7 +226,11 @@ function expander($open, $foldnum = null) {
         $t .= '<span class="in0' . ($f ? " fx$foldnum" : "") . '">' . Icons::ui_triangle(2) . '</span>';
     }
     if ($open !== false) {
-        $t .= '<span class="in1' . ($f ? " fn$foldnum" : "") . '">' . Icons::ui_triangle(1) . '</span>';
+        $t .= '<span class="in1' . ($f ? " fn$foldnum" : "");
+        if ($open_tooltip) {
+            $t .= ' need-tooltip" data-tooltip="' . htmlspecialchars($open_tooltip) . '" data-tooltip-anchor="e';
+        }
+        $t .= '">' . Icons::ui_triangle(1) . '</span>';
     }
     return $t . '</span>';
 }
@@ -245,9 +273,9 @@ function goPaperForm($baseUrl = null, $args = array()) {
     $list = Conf::$main->active_list();
     $x = Ht::form(Conf::$main->hoturl($baseUrl ? : "paper"), ["method" => "get", "class" => "gopaper"]);
     if ($baseUrl == "profile") {
-        $x .= Ht::entry("u", "", array("id" => "quicklink-search", "size" => 15, "placeholder" => "User search", "aria-label" => "User search", "class" => "usersearch need-autogrow"));
+        $x .= Ht::entry("u", "", ["id" => "quicklink-search", "size" => 15, "placeholder" => "User search", "aria-label" => "User search", "class" => "usersearch need-autogrow", "spellcheck" => false]);
     } else {
-        $x .= Ht::entry("p", "", array("id" => "quicklink-search", "size" => 10, "placeholder" => "(All)", "aria-label" => "Search", "class" => "papersearch need-suggest need-autogrow"));
+        $x .= Ht::entry("q", "", ["id" => "quicklink-search", "size" => 10, "placeholder" => "(All)", "aria-label" => "Search", "class" => "papersearch need-suggest need-autogrow", "spellcheck" => false]);
     }
     foreach ($args as $k => $v) {
         $x .= Ht::hidden($k, $v);
@@ -454,7 +482,8 @@ function unparse_byte_size_binary($n) {
     }
 }
 
-/** @param PermissionProblem $whyNot */
+/** @param PermissionProblem $whyNot
+ * @deprecated */
 function whyNotText($whyNot, $text_only = false) {
     return $whyNot->unparse($text_only ? 0 : 5);
 }
@@ -516,10 +545,13 @@ function actionBar($mode = null, $qreq = null) {
     return '<table class="vbar"><tr>' . $x . '</tr></table>';
 }
 
-function parseReviewOrdinal($t) {
+/** @param string $t
+ * @return int */
+function parse_latin_ordinal($t) {
     $t = strtoupper($t);
-    if (!ctype_alpha($t))
+    if (!ctype_alpha($t)) {
         return -1;
+    }
     $l = strlen($t) - 1;
     $ord = 0;
     $base = 1;
@@ -534,28 +566,38 @@ function parseReviewOrdinal($t) {
     return $ord;
 }
 
-/** @param null|ReviewInfo|int $ord
+/** @param int $n
  * @return string */
+function unparse_latin_ordinal($n) {
+    assert($n >= 1);
+    if ($n <= 26) {
+        return chr($n + 64);
+    } else {
+        $t = "";
+        while (true) {
+            $t = chr((($n - 1) % 26) + 65) . $t;
+            if ($n <= 26) {
+                return $t;
+            }
+            $n = intval(($n - 1) / 26);
+        }
+    }
+}
+
+/** @param null|ReviewInfo|int $ord
+ * @return string
+ * @deprecated */
 function unparseReviewOrdinal($ord) {
     if (!$ord) {
         return ".";
     } else if (is_object($ord)) {
         if ($ord->reviewOrdinal) {
-            return $ord->paperId . unparseReviewOrdinal($ord->reviewOrdinal);
+            return $ord->paperId . unparse_latin_ordinal($ord->reviewOrdinal);
         } else {
             return (string) $ord->reviewId;
         }
-    } else if ($ord <= 26) {
-        return chr($ord + 64);
     } else {
-        $t = "";
-        while (true) {
-            $t = chr((($ord - 1) % 26) + 65) . $t;
-            if ($ord <= 26) {
-                return $t;
-            }
-            $ord = intval(($ord - 1) / 26);
-        }
+        return unparse_latin_ordinal($ord);
     }
 }
 

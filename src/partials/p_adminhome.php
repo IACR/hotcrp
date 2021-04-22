@@ -1,6 +1,6 @@
 <?php
 // src/partials/p_adminhome.php -- HotCRP home page partials for administrators
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class AdminHome_Partial {
     static function check_admin(Contact $user, Qrequest $qreq) {
@@ -80,10 +80,11 @@ class AdminHome_Partial {
         if ($conf->setting("pcrev_assigntime", 0) > $conf->setting("pcrev_informtime", 0)) {
             $assigntime = $conf->setting("pcrev_assigntime");
             $result = $conf->qe("select paperId from PaperReview where reviewType>" . REVIEW_PC . " and timeRequested>timeRequestNotified and reviewSubmitted is null and reviewNeedsSubmit!=0 limit 1");
-            if ($result->num_rows)
+            if ($result->num_rows) {
                 $m[] = "PC review assignments have changed.&nbsp; <a href=\"" . $conf->hoturl("mail", "template=newpcrev") . "\">Send review assignment notifications</a> <span class=\"barsep\">·</span> <a href=\"" . $conf->hoturl_post("index", "clearnewpcrev=$assigntime") . "\">Clear this message</a>";
-            else
+            } else {
                 $conf->save_setting("pcrev_informtime", $assigntime);
+            }
         }
         // Review round expired?
         if (count($conf->round_list()) > 1
@@ -92,7 +93,7 @@ class AdminHome_Partial {
             $any_rounds_open = false;
             foreach ($conf->defined_round_list() as $i => $rname) {
                 if (!$conf->missed_review_deadline($i, true, false)
-                    && $conf->setting($conf->review_deadline($i, true, false))) {
+                    && $conf->setting($conf->review_deadline_name($i, true, false))) {
                     $m[] = "The deadline for review round " . htmlspecialchars($conf->assignment_round_option(false)) . " has passed. You may want to <a href=\"" . $conf->hoturl("settings", "group=reviews") . "\">change the round for new assignments</a> to " . htmlspecialchars($rname) . ".";
                     break;
                 }

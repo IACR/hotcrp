@@ -1,5 +1,5 @@
 // script.js -- HotCRP JavaScript library
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 var siteinfo, hotcrp, hotcrp_status;
 
@@ -225,7 +225,7 @@ $(document).ajaxError(function (event, jqxhr, settings, httperror) {
         } catch (e) {
         }
     }
-    if (!data || !data.user_error) {
+    if ((!data || !data.user_error) && jqxhr.status != 502) {
         var msg = url_absolute(settings.url) + " API failure: ";
         if (siteinfo.user && siteinfo.user.email)
             msg += "user " + siteinfo.user.email + ", ";
@@ -888,8 +888,10 @@ function hoturl_add(url, component) {
 function hoturl_find(x, page_component) {
     var m;
     for (var i = 0; i < x.v.length; ++i)
-        if ((m = page_component.exec(x.v[i])))
-            return [i, m[1]];
+        if ((m = page_component.exec(x.v[i]))) {
+            m[0] = i;
+            return m;
+        }
     return null;
 }
 
@@ -927,7 +929,7 @@ function hoturl(page, options) {
             v = options[i];
             if (v == null)
                 /* skip */;
-            else if (i === "anchor")
+            else if (i === "anchor" /* XXX deprecated */ || i === "#")
                 anchor = "#" + v;
             else
                 x.v.push(encodeURIComponent(i) + "=" + encodeURIComponent(v));
@@ -944,7 +946,13 @@ function hoturl(page, options) {
             want_forceShow = true;
         }
     } else if (page === "review") {
-        hoturl_clean(x, /^r=(\d+[A-Z]+)$/);
+        hoturl_clean(x, /^p=(\d+)$/);
+        if (x.last !== false
+            && (m = hoturl_find(x, /^r=(\d+)([A-Z]+|r\d+|rnew)$/))
+            && x.t.endsWith("/" + m[1])) {
+            x.t += m[2];
+            x.v.splice(m[0], 1);
+        }
     } else if (page === "help") {
         hoturl_clean(x, /^t=(\w+)$/);
     } else if (page.substring(0, 3) === "api") {
@@ -1057,7 +1065,7 @@ function hoturl_get_form(action) {
 
 
 // render_xmsg
-function render_xmsg(status, msg) {
+function render_xmsg(msg, status) {
     if (typeof msg === "string")
         msg = msg === "" ? [] : [msg];
     if (msg.length === 0)
@@ -1084,6 +1092,27 @@ function render_feedback(msg, status) {
         t.push('<' + tag + ' class="feedback is-' + status + '">' + msg[i] + '</' + tag + '>');
     }
     return t.join('');
+}
+
+function render_feedback_near(msg, status, e) {
+    var x, c, m, $j;
+    if (status === 0 || status === 1 || status === 2)
+        status = ["note", "warning", "error"][status];
+    else
+        status = "note";
+    if (status === "warning" || status === "error")
+        addClass(e, "has-" + status);
+    if (hasClass(e, "entryi") && ($j = $(e).find(".entry")).length) {
+        e = $j[0];
+    } else if (!hasClass(e, "f-i")) {
+        return false;
+    }
+    c = e.firstChild;
+    while (c && c.nodeType === 1 && (c.tagName === "LABEL" || hasClass(c, "feedback")))
+        c = c.nextSibling;
+    m = render_feedback(msg, status);
+    c ? $(c).before(m) : $(e).prepend(m);
+    return true;
 }
 
 
@@ -1446,7 +1475,7 @@ return function (content, bubopt) {
     else if (typeof bubopt === "string")
         bubopt = {color: bubopt};
 
-    var nearpos = null, dirspec = bubopt.dir, dir = null,
+    var nearpos = null, dirspec = bubopt.anchor, dir = null,
         color = bubopt.color ? " " + bubopt.color : "";
 
     var bubdiv = $('<div class="bubble' + color + '" style="margin:0"><div class="bubtail bubtail0' + color + '" style="width:0;height:0"></div><div class="bubcontent"></div><div class="bubtail bubtail1' + color + '" style="width:0;height:0"></div></div>')[0];
@@ -1672,7 +1701,7 @@ return function (content, bubopt) {
             if (typeof epos === "string" || epos.tagName || epos.jquery) {
                 epos = $(epos);
                 if (dirspec == null && epos[0])
-                    dirspec = epos[0].getAttribute("data-tooltip-dir");
+                    dirspec = epos[0].getAttribute("data-tooltip-anchor");
                 epos = epos.geometry(true);
             }
             for (i = 0; i < 4; ++i)
@@ -1688,7 +1717,7 @@ return function (content, bubopt) {
         at: function (x, y, reference) {
             return bubble.near({top: y, left: x}, reference);
         },
-        dir: function (dir) {
+        anchor: function (dir) {
             dirspec = dir;
             return bubble;
         },
@@ -1775,8 +1804,8 @@ function prepare_info(elt, info) {
     }
     if (info.builder && builders[info.builder])
         info = builders[info.builder].call(elt, info) || info;
-    if (info.dir == null || elt.hasAttribute("data-tooltip-dir"))
-        info.dir = elt.getAttribute("data-tooltip-dir") || "v";
+    if (info.anchor == null || elt.hasAttribute("data-tooltip-anchor"))
+        info.anchor = elt.getAttribute("data-tooltip-anchor") || "v";
     if (info.type == null || elt.hasAttribute("data-tooltip-type"))
         info.type = elt.getAttribute("data-tooltip-type");
     if (info.className == null || elt.hasAttribute("data-tooltip-class"))
@@ -1813,7 +1842,7 @@ function show_tooltip(info) {
 
     function show_bub() {
         if (content && !bub) {
-            bub = make_bubble(content, {color: "tooltip " + info.className, dir: info.dir});
+            bub = make_bubble(content, {color: "tooltip " + info.className, anchor: info.anchor});
             near = info.near || info.element;
             bub.near(near).hover(tt.enter, tt.exit);
         } else if (content) {
@@ -1987,8 +2016,9 @@ return function () {
 function popup_skeleton(options) {
     var hc = new HtmlCollector, $d = null;
     options = options || {};
+    var near = options.near || options.anchor;
     hc.push('<div class="modal" role="dialog"><div class="modal-dialog'
-        + (!options.anchor || options.anchor === window ? " modal-dialog-centered" : "")
+        + (!near || near === window ? " modal-dialog-centered" : "")
         + (options.style ? '" style="' + escape_entities(options.style) : '')
         + '" role="document"><div class="modal-content"><form enctype="multipart/form-data" accept-charset="UTF-8"'
         + (options.form_class ? ' class="' + options.form_class + '"' : '')
@@ -2002,16 +2032,19 @@ function popup_skeleton(options) {
     function show_errors(data) {
         var form = $d.find("form")[0],
             dbody = $d.find(".popup-body"),
-            m = render_xmsg(2, data.error);
-        $d.find(".msg-error").remove();
-        dbody.length ? dbody.prepend(m) : $d.find("h2").after(m);
-        for (var f in data.errf || {}) {
-            var e = form[f];
-            if (e) {
-                var x = $(e).closest(".entryi, .f-i");
-                (x.length ? x : $(e)).addClass("has-error");
+            messages = "", mx, i, e, x;
+        $d.find(".msg-error, .feedback").remove();
+        for (i in data.message_list || []) {
+            mx = data.message_list[i];
+            if (mx.field && (e = form[mx.field])) {
+                x = e.closest(".entryi, .f-i");
+                if (render_feedback_near(mx.message, mx.status, x || e)) {
+                    continue;
+                }
             }
+            messages += render_xmsg(mx.message, mx.status);
         }
+        dbody.length ? dbody.prepend(messages) : $d.find("h2").after(messages);
         return $d;
     }
     function close() {
@@ -2058,7 +2091,7 @@ function popup_skeleton(options) {
             show();
         }
         if (visible !== false) {
-            popup_near($d, options.anchor || window);
+            popup_near($d, near || window);
             $d.find(".need-autogrow").autogrow();
             $d.find(".need-suggest").each(suggest);
             $d.find(".need-tooltip").each(tooltip);
@@ -2068,7 +2101,7 @@ function popup_skeleton(options) {
     return hc;
 }
 
-function popup_near(elt, anchor) {
+function popup_near(elt, near) {
     tooltip.erase();
     if (elt.jquery)
         elt = elt[0];
@@ -2078,7 +2111,7 @@ function popup_near(elt, anchor) {
     addClass(bgelt, "show");
     addClass(document.body, "modal-open");
     if (!hasClass(elt, "modal-dialog-centered")) {
-        var anchorPos = $(anchor).geometry(),
+        var anchorPos = $(near).geometry(),
             wg = $(window).geometry(),
             po = $(bgelt).offset(),
             y = (anchorPos.top + anchorPos.bottom - elt.offsetHeight) / 2;
@@ -2105,9 +2138,9 @@ function popup_near(elt, anchor) {
 function override_deadlines(callback) {
     var self = this, hc;
     if (typeof callback === "object" && "sidebarTarget" in callback) {
-        hc = popup_skeleton({anchor: callback.sidebarTarget});
+        hc = popup_skeleton({near: callback.sidebarTarget});
     } else {
-        hc = popup_skeleton({anchor: this});
+        hc = popup_skeleton({near: this});
     }
     hc.push('<p>' + (this.getAttribute("data-override-text") || "Are you sure you want to override the deadline?") + '</p>');
     hc.push_actions([
@@ -3008,12 +3041,8 @@ function foldup(event, opts) {
         }
     }
     var foldname = "fold" + (opts.n || "");
-    while (e
-           && (!e.id || e.id.substr(0, 4) != "fold")
-           && !hasClass(e, "has-fold")
-           && (opts.n == null
-               || (!hasClass(e, foldname + "c")
-                   && !hasClass(e, foldname + "o")))) {
+    while (e && ((!hasClass(e, "has-fold") && (!e.id || !e.id.startsWith("fold")))
+                 || (opts.n != null && !hasClass(e, foldname + "c") && !hasClass(e, foldname + "o")))) {
         e = e.parentNode;
     }
     if (!e) {
@@ -3761,33 +3790,46 @@ function make_outline_flasher(elt, rgba, duration) {
 }
 
 function setajaxcheck(elt, rv) {
+    var f, i, e, mx, reset;
     if (typeof elt == "string")
         elt = $$(elt);
     else if (elt.jquery)
         elt = elt[0];
     if (!elt)
         return;
-    if (rv && !rv.ok && rv.errf) {
-        var i, e, f = elt.closest("form");
-        for (i in rv.errf)
-            if (f && (e = f.elements[i])) {
-                elt = e;
-                break;
-            }
-    }
     make_outline_flasher(elt);
-    if (!rv || (!rv.ok && !rv.error))
-        rv = {error: "Error"};
-    if (rv.ok && !rv.warning)
+    var t = "", i, status = 0;
+    if (rv && rv.message_list) {
+        f = elt.closest("form");
+        for (var i = 0; i !== rv.message_list.length; ++i) {
+            mx = rv.message_list[i];
+            t += render_feedback(mx.message, mx.status);
+            status = Math.max(status, mx.status);
+            if (f && mx.field && (e = f.elements[mx.field]) && !reset) {
+                elt = reset = e;
+            }
+        }
+    }
+    if (t === "") {
+        if (rv && rv.error) {
+            t = rv.error;
+            status = 2;
+        } else if (rv && rv.warning) {
+            t = rv.warning;
+            status = rv.ok ? 1 : 2;
+        } else if (!rv || !rv.ok) {
+            t = "Error";
+            status = 2;
+        }
+    }
+    if (status === 0)
         make_outline_flasher(elt, "0, 200, 0");
-    else if (rv.ok)
+    else if (status === 1)
         make_outline_flasher(elt, "133, 92, 4");
     else
         elt.style.outline = "5px solid red";
-    if (rv.error)
-        make_bubble(rv.error, "errorbubble").near(elt).removeOn(elt, "input change click hide");
-    else if (rv.warning)
-        make_bubble(rv.warning, "warningbubble").near(elt).removeOn(elt, "input change click hide focus blur");
+    if (t)
+        make_bubble(t, status === 2 ? "errorbubble" : "warningbubble").near(elt).removeOn(elt, "input change click hide" + (status === 2 ? "" : " focus blur"));
 }
 
 function link_urls(t) {
@@ -3991,7 +4033,7 @@ handle_ui.on("js-review-tokens", function () {
                         location.assign(location.href);
                     }
                 } else {
-                    $d.find("h2").after(render_xmsg(2, data.error || "Internal error."));
+                    $d.find("h2").after(render_xmsg(data.error || "Internal error.", 2));
                 }
             });
         return false;
@@ -4009,7 +4051,7 @@ handle_ui.on("js-review-tokens", function () {
 window.review_form = (function ($) {
 var formj, form_order;
 var rtype_info = {
-    "-3": ["−" /* &minus; */, "Refused"], "-2": ["A", "Author"],
+    "-3": ["−" /* &minus; */, "Declined"], "-2": ["A", "Author"],
     "-1": ["C", "Conflict"], 1: ["E", "External review"],
     2: ["P", "PC review"], 3: ["2", "Secondary review"],
     4: ["1", "Primary review"], 5: ["M", "Metareview"]
@@ -4021,7 +4063,7 @@ tooltip.add_builder("rf-score", function (info) {
         && (score = fieldj.score_info.parse($self.find("span.sv").text())))
         info = $.extend({
             content: fieldj.options[score - 1],
-            dir: "l", near: $self.find("span")[0]
+            anchor: "w", near: $self.find("span")[0]
         }, info);
     return info;
 });
@@ -4044,7 +4086,7 @@ tooltip.add_builder("rf-description", function (info) {
                      si < vo.length; ++si)
                     d += "<div class=\"od\"><strong class=\"rev_num " + fieldj.score_info.className(vo[si]) + "\">" + fieldj.score_info.unparse(vo[si]) + ".</strong>&nbsp;" + escape_entities(fieldj.options[vo[si] - 1]) + "</div>";
             }
-            info = $.extend({content: d, dir: "l"}, info);
+            info = $.extend({content: d, anchor: "w"}, info);
         }
     }
     return info;
@@ -4057,7 +4099,7 @@ function score_header_tooltips($j) {
 
 function render_review_body(rrow) {
     var view_order = $.grep(form_order, function (f) {
-        if (f.options && f.allow_empty)
+        if (f.options && !f.required)
             return f.uid in rrow;
         else
             return !!rrow[f.uid];
@@ -4096,7 +4138,7 @@ function render_review_body(rrow) {
                 f.score_info.unparse_revnum(x) + ' </span><span class="revscoredesc">' +
                 escape_entities(f.options[x - 1]) + '</span></p>';
         } else {
-            t += '<p class="revv revnoscore">' + (f.allow_empty ? "No entry" : "Unknown") + '</p>';
+            t += '<p class="revv revnoscore">' + (f.required ? "Unknown" : "No entry") + '</p>';
         }
 
         t += '</div>';
@@ -4206,11 +4248,11 @@ handle_ui.on("js-revrating", function () {
                 $rr.find(".revrating-choice").each(function () {
                     var bit = this.getAttribute("data-revrating-bit");
                     if (ct[bit]) {
-                        this.lastChild.innerText = " " + ct[bit];
+                        this.lastChild.textContent = " " + ct[bit];
                         removeClass(this, "fx");
                         removeClass(this, "revrating-unused");
                     } else {
-                        this.lastChild.innerText = "";
+                        this.lastChild.textContent = "";
                         bit >= 2 && addClass(this, "fx");
                         addClass(this, "revrating-unused");
                     }
@@ -4240,27 +4282,27 @@ function revrating_key(event) {
 
 function add_review(rrow) {
     var hc = new HtmlCollector,
-        rid = rrow.ordinal ? rrow.pid + "" + rrow.ordinal : "" + rrow.rid,
-        rlink = "r=" + rid + (siteinfo.want_override_conflict ? "&forceShow=1" : ""),
+        rid = rrow.pid + (rrow.ordinal || "r" + rrow.rid),
+        rlink = "p=".concat(rrow.pid, "&r=", rid),
         has_user_rating = false, i, ratekey, selected;
+    if (siteinfo.want_override_conflict)
+        rlink += "&forceShow=1";
 
     i = rrow.ordinal ? '" data-review-ordinal="' + rrow.ordinal : '';
-    hc.push('<article id="r' + rid + '" class="pcard revcard need-anchor-unfold has-fold '
-            + (rrow.folded ? "fold20c" : "fold20o")
-            + '" data-pid="' + rrow.pid
-            + '" data-rid="' + rrow.rid + i + '">', '</article>');
+    hc.push('<article id="r'.concat(rid,
+                '" class="pcard revcard need-anchor-unfold has-fold ',
+                rrow.folded ? "fold20c" : "fold20o", '" data-pid="', rrow.pid,
+                '" data-rid="', rrow.rid, i, '">'), '</article>');
 
     // HEADER
     hc.push('<header class="revcard-head">', '</header>');
 
     // review description
     var rdesc = rrow.subreview ? "Subreview" : "Review";
-    if (rrow.draft) {
+    if (rrow.draft)
         rdesc = "Draft " + rdesc;
-    }
-    if (rrow.ordinal) {
+    if (rrow.ordinal)
         rdesc += " #" + rid;
-    }
 
     // edit/text links
     if (rrow.folded) {
@@ -4571,20 +4613,21 @@ function render_editing(hc, cj) {
     hc.pop();
 
     // actions: [btnbox], [wordcount] || cancel, save/submit
-    hc.push('<div class="w-text aabig aab aabr">', '</div>');
+    hc.push('<div class="w-text aabig aab mt-3">', '</div>');
     bnote = edit_allowed(cj) ? "" : '<div class="hint">(admin only)</div>';
     if (btnbox.length)
-        hc.push('<div class="aabut aabl"><div class="btnbox">' + btnbox.join("") + '</div></div>');
+        hc.push('<div class="aabut"><div class="btnbox">' + btnbox.join("") + '</div></div>');
     if (cj.response && resp_rounds[cj.response].words > 0)
-        hc.push('<div class="aabut aabl"><div class="words"></div></div>');
+        hc.push('<div class="aabut"><div class="words"></div></div>');
+    hc.push('<div class="aabr">', '</div>');
+    hc.push('<div class="aabut"><button type="button" name="cancel">Cancel</button></div>');
     if (cj.response) {
         // XXX allow_administer
         hc.push('<div class="aabut"><button type="button" name="bsubmit" class="btn-primary">Submit</button>' + bnote + "</div>");
     } else {
         hc.push('<div class="aabut"><button type="button" name="bsubmit" class="btn-primary">Save</button>' + bnote + "</div>");
     }
-    hc.push('<div class="aabut"><button type="button" name="cancel">Cancel</button></div>');
-    hc.pop();
+    hc.pop_n(2);
 }
 
 function visibility_change() {
@@ -4731,7 +4774,7 @@ function make_save_callback($c) {
             }
             var error = data.message || data.error;
             if (!/^<div/.test(error))
-                error = render_xmsg(2, error);
+                error = render_xmsg(error, 2);
             $c.find(".cmtmsg").html(error);
             $c.find("button, input[type=file]").prop("disabled", false);
             $c.find("input[name=draft]").remove();
@@ -4911,11 +4954,7 @@ function render_cmt($c, cj, editing, msg) {
     }
     hc.pop();
     if (cj.response && cj.draft && cj.text) {
-        hc.push('<p class="feedback is-warning">Reviewers can’t see this draft response', '.</p>');
-        if (cj.submittable) {
-            hc.push(' unless you <a href="" class="ui js-submit-comment">submit it</a>.');
-        }
-        hc.pop();
+        hc.push('<p class="feedback is-warning">Reviewers can’t see this draft response.</p>');
     }
     if (editing) {
         render_editing(hc, cj);
@@ -5658,9 +5697,9 @@ function make_suggestions(precaret, postcaret, options) {
                     || (lregion.length >= fl
                         && ltext.substr(0, fl) === lregion.substr(0, fl)))) {
                 if (can_highlight
-                    && ltext.substr(0, lregion.length) === lregion) {
+                    && ltext.substr(0, lregion.length) === lregion
+                    && (best === null || ltext.length === lregion.length)) {
                     best = res.length;
-                    can_highlight = false;
                 }
                 res.push(titem);
             }
@@ -5728,7 +5767,7 @@ function suggest() {
 
         hiding = false;
         if (!hintdiv) {
-            hintdiv = make_bubble({dir: "nw", color: "suggest"});
+            hintdiv = make_bubble({anchor: "nw", color: "suggest"});
             hintdiv.self().on("mousedown", function (evt) { evt.preventDefault(); })
                 .on("click", ".suggestion", click)
                 .on("mousemove", ".suggestion", hover);
@@ -6129,9 +6168,9 @@ function tagannorow_fill(row, anno) {
         } else {
             row.removeAttribute("data-tags");
         }
-        var heading = anno.heading === null ? "" : anno.heading;
-        var $g = $(row).find(".plheading-group").attr({"data-format": anno.format || 0, "data-title": heading});
-        $g.text(heading === "" ? heading : heading + " ");
+        var legend = anno.legend === null ? "" : anno.legend;
+        var $g = $(row).find(".plheading-group").attr({"data-format": anno.format || 0, "data-title": legend});
+        $g.text(legend === "" ? legend : legend + " ");
         anno.format && render_text.on.call($g[0]);
         // `plheading-count` is taken care of in `searchbody_postreorder`
     }
@@ -6520,7 +6559,7 @@ function taganno_success(rv) {
                 ++annoi;
             }
             if (annoi === rv.anno.length && tagval === false) {
-                groups.push({pos: pos, tag: rv.tag, tagval: 2147483646, heading: "Untagged"});
+                groups.push({pos: pos, tag: rv.tag, tagval: 2147483646, legend: "Untagged"});
                 ++annoi;
             }
         }
@@ -6546,21 +6585,21 @@ handle_ui.on("js-annotate-order", function () {
             var $row = $(hc.render());
             $row.appendTo($d.find(".tagannos"));
             $d.find(".modal-dialog").scrollIntoView({atBottom: true, marginBottom: "auto"});
-            $row.find("input[name='heading_n" + last_newannoid + "']").focus();
+            $row.find("input[name='legend_n" + last_newannoid + "']").focus();
         } else {
             var anno = [];
             for (var i = 0; i < annos.length; ++i) {
-                var heading = $d.find("input[name='heading_" + annos[i].annoid + "']").val();
+                var legend = $d.find("input[name='legend_" + annos[i].annoid + "']").val();
                 var tagval = $d.find("input[name='tagval_" + annos[i].annoid + "']").val();
                 var deleted = $d.find("input[name='deleted_" + annos[i].annoid + "']").val();
-                if (heading != annos[i].heading || tagval != annos[i].tagval || deleted)
-                    anno.push({annoid: annos[i].annoid, heading: heading, tagval: tagval, deleted: !!deleted});
+                if (legend != annos[i].legend || tagval != annos[i].tagval || deleted)
+                    anno.push({annoid: annos[i].annoid, legend: legend, tagval: tagval, deleted: !!deleted});
             }
             for (i = 1; i <= last_newannoid; ++i) {
-                heading = $d.find("input[name='heading_n" + i + "']").val();
+                legend = $d.find("input[name='legend_n" + i + "']").val();
                 tagval = $d.find("input[name='tagval_n" + i + "']").val();
-                if (heading != "" || tagval != 0)
-                    anno.push({annoid: "new", heading: heading, tagval: tagval});
+                if (legend != "" || tagval != 0)
+                    anno.push({annoid: "n" + i, legend: legend, tagval: tagval});
             }
             $.post(hoturl_post("api/taganno", {tag: mytag}),
                    {anno: JSON.stringify(anno)}, make_onsave($d));
@@ -6571,18 +6610,18 @@ handle_ui.on("js-annotate-order", function () {
         var $div = $(this).closest(".form-g"), annoid = $div.attr("data-anno-id");
         $div.find("input[name='tagval_" + annoid + "']").after("[deleted]").remove();
         $div.append(hidden_input("deleted_" + annoid, "1"));
-        $div.find("input[name='heading_" + annoid + "']").prop("disabled", true);
+        $div.find("input[name='legend_" + annoid + "']").prop("disabled", true);
         tooltip.erase.call(this);
         $(this).remove();
         return false;
     }
     function make_onsave($d) {
         return function (rv) {
-            setajaxcheck($d.find("button[name=save]"), rv);
             if (rv.ok) {
                 taganno_success(rv);
                 $d.close($d);
-            }
+            } else
+                $d.show_errors(rv);
         };
     }
     function add_anno(hc, anno) {
@@ -6590,10 +6629,10 @@ handle_ui.on("js-annotate-order", function () {
         if (annoid == null)
             annoid = "n" + (last_newannoid += 1);
         hc.push('<div class="form-g" data-anno-id="' + annoid + '">', '</div>');
-        hc.push('<div class="entryi"><label for="htctl-taganno-' + annoid + '-d">Heading</label><input id="htctl-taganno-' + annoid + '-d" name="heading_' + annoid + '" type="text" placeholder="none" size="32" class="need-autogrow"></div>');
+        hc.push('<div class="entryi"><label for="htctl-taganno-' + annoid + '-d">Legend</label><input id="htctl-taganno-' + annoid + '-d" name="legend_' + annoid + '" type="text" placeholder="none" size="32" class="need-autogrow"></div>');
         hc.push('<div class="entryi"><label for="htctl-taganno-' + annoid + '-tagval">Tag value</label><div class="entry"><input id="htctl-taganno-' + annoid + '-tagval" name="tagval_' + annoid + '" type="text" size="5">', '</div></div>');
         if (anno.annoid)
-            hc.push(' <a class="ui closebtn delete-link need-tooltip" href="" aria-label="Delete heading">x</a>');
+            hc.push(' <a class="ui closebtn delete-link need-tooltip" href="" aria-label="Delete group">x</a>');
         hc.pop_n(2);
     }
     function show_dialog(rv) {
@@ -6609,11 +6648,11 @@ handle_ui.on("js-annotate-order", function () {
             add_anno(hc, annos[i]);
         }
         hc.pop();
-        hc.push('<div class="g"><button type="button" name="add">Add heading</button></div>');
+        hc.push('<div class="g"><button type="button" name="add">Add group</button></div>');
         hc.push_actions(['<button type="submit" name="save" class="btn-primary">Save changes</button>', '<button type="button" name="cancel">Cancel</button>']);
         $d = hc.show();
         for (var i = 0; i < annos.length; ++i) {
-            $d.find("input[name='heading_" + annos[i].annoid + "']").val(annos[i].heading);
+            $d.find("input[name='legend_" + annos[i].annoid + "']").val(annos[i].legend);
             $d.find("input[name='tagval_" + annos[i].annoid + "']").val(tagvalue_unparse(annos[i].tagval));
         }
         $d.on("click", "button", clickh).on("click", "a.delete-link", ondeleteclick);
@@ -6653,8 +6692,9 @@ function make_tag_save_callback(elt) {
 
 function set_tags_callback(evt, data) {
     var si = analyze_rows(data.pid);
-    if (highlight_entries && rowanal[si].entry)
+    if (highlight_entries && rowanal[si].entry) {
         setajaxcheck(rowanal[si].entry, {ok: true});
+    }
     row_move(si);
 }
 
@@ -6809,7 +6849,7 @@ function tag_dragto(l) {
 
     // create dragger
     if (!dragger) {
-        dragger = make_bubble({color: "edittagbubble dark", dir: "1!*"});
+        dragger = make_bubble({color: "edittagbubble dark", anchor: "e!*"});
         window.disable_tooltip = true;
     }
 
@@ -7219,7 +7259,7 @@ handle_ui.on("js-plinfo-edittags", function () {
         if (!rv.ok || !rv.pid || rv.pid != pid)
             return;
         $(div).html('<em class="plx">Tags:</em> '
-            + '<textarea name="tags ' + rv.pid + '" style="vertical-align:top;max-width:70%;margin-bottom:2px" cols="120" rows="1" class="want-focus need-suggest tags" data-tooltip-dir="v"></textarea>'
+            + '<textarea name="tags ' + rv.pid + '" style="vertical-align:top;max-width:70%;margin-bottom:2px" cols="120" rows="1" class="want-focus need-suggest tags" data-tooltip-anchor="v"></textarea>'
             + ' &nbsp;<button type="button" name="tagsave ' + rv.pid + '">Save</button>'
             + ' &nbsp;<button type="button" name="tagcancel ' + rv.pid + '">Cancel</button>');
         var $ta = $(div).find("textarea");
@@ -7874,7 +7914,7 @@ handle_ui.on("js-check-format", function () {
     if (this && "tagName" in this && this.tagName === "A")
         $self.addClass("hidden");
     var running = setTimeout(function () {
-        $cf.html(render_xmsg(0, "Checking format (this can take a while)..."));
+        $cf.html(render_xmsg("Checking format (this can take a while)...", 0));
     }, 1000);
     $.ajax(hoturl_post("api/formatcheck", {p: siteinfo.paperid}), {
         timeout: 20000, data: {
@@ -8068,7 +8108,7 @@ handle_ui.on("js-remove-document", function (event) {
 
 handle_ui.on("js-withdraw", function (event) {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f});
+        hc = popup_skeleton({near: this, action: f});
     hc.push('<p>Are you sure you want to withdraw this submission from consideration and/or publication?');
     if (!this.hasAttribute("data-revivable"))
         hc.push(' Only administrators can undo this step.');
@@ -8087,7 +8127,7 @@ handle_ui.on("js-withdraw", function (event) {
 
 handle_ui.on("js-delete-paper", function (event) {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f});
+        hc = popup_skeleton({near: this, action: f});
     hc.push('<p>Be careful: This will permanently delete all information about this submission from the database and <strong>cannot be undone</strong>.</p>');
     hc.push_actions(['<button type="submit" name="delete" value="1" class="btn-danger">Delete</button>',
         '<button type="button" name="cancel">Cancel</button>']);
@@ -8110,7 +8150,7 @@ handle_ui.on("js-clickthrough", function (event) {
                 $container.find(".js-clickthrough-terms").slideUp();
             } else {
                 make_bubble((data && data.error) || "You can’t continue to review until you accept these terms.", "errorbubble")
-                    .dir("l").near(self);
+                    .anchor("w").near(self);
             }
         });
 });
@@ -8151,7 +8191,7 @@ function prepare_paper_select() {
         if (ok)
             $s.delay(1000).fadeOut();
         if (message)
-            make_bubble(message, "errorbubble").dir("l").near($s[0]);
+            make_bubble(message, "errorbubble").anchor("w").near($s[0]);
     }
     function make_callback(close) {
         return function (data) {
@@ -8282,8 +8322,9 @@ function save_pstags(evt) {
         success: function (data) {
             $f.find("input").prop("disabled", false);
             if (data.ok) {
-                if (!data.message_list || !data.message_list.length)
+                if (!data.message_list || !data.message_list.length) {
                     foldup.call($f[0], null, {f: true});
+                }
                 $(window).trigger("hotcrptags", [data]);
                 removeClass(f.elements.tags, "has-error");
                 removeClass(f.elements.save, "btn-highlight");
@@ -8356,7 +8397,7 @@ function save_pstagindex(event) {
         if (data.ok)
             $s.delay(1000).fadeOut();
         if (messages !== "") {
-            make_bubble(messages, status > 1 ? "errorbubble" : "warningbubble").dir("l")
+            make_bubble(messages, status > 1 ? "errorbubble" : "warningbubble").anchor("w")
                 .near($(inputs[0]).is(":visible") ? inputs[0] : $f.find(".psfn")[0])
                 .removeOn($f.find("input"), "input")
                 .removeOn(document.body, "fold");
@@ -8641,15 +8682,15 @@ if (siteinfo.paperid) {
 
 // profile UI
 handle_ui.on("js-cannot-delete-user", function (event) {
-    var hc = popup_skeleton({anchor: this});
-    hc.push('<p><strong>This user cannot be deleted</strong> because they are the sole contact for ' + $(this).data("soleAuthor") + '. To delete the user, first remove these papers from the database or give the papers more contacts.</p>');
+    var hc = popup_skeleton({near: this});
+    hc.push('<p><strong>This user cannot be deleted</strong> because they are the sole contact for ' + $(this).data("soleAuthor") + '. To delete the user, first remove those submissions from the database or give them more contacts.</p>');
     hc.push_actions(['<button type="button" name="cancel">Cancel</button>']);
     hc.show();
 });
 
 handle_ui.on("js-delete-user", function (event) {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f}), x;
+        hc = popup_skeleton({near: this, action: f}), x;
     hc.push('<p>Be careful: This will permanently delete all information about this user from the database and <strong>cannot be undone</strong>.</p>');
     if ((x = this.getAttribute("data-delete-info")))
         hc.push(x);
@@ -8657,6 +8698,39 @@ handle_ui.on("js-delete-user", function (event) {
         '<button type="button" name="cancel">Cancel</button>']);
     var $d = hc.show();
     $d.on("submit", "form", function () { addClass(f, "submitting"); });
+});
+
+handle_ui.on("js-disable-user", function (event) {
+    var disabled = hasClass(this, "btn-success"), self = this;
+    self.disabled = true;
+    $.post(hoturl_post("api/account", {u: this.getAttribute("data-user") || this.closest("form").getAttribute("data-user")}),
+        disabled ? {enable: 1} : {disable: 1},
+        function (data) {
+            setajaxcheck(self, data);
+            self.disabled = false;
+            if (data.ok) {
+                if (data.disabled) {
+                    self.textContent = "Enable account";
+                    removeClass(self, "btn-danger");
+                    addClass(self, "btn-success");
+                } else {
+                    self.textContent = "Disable account";
+                    removeClass(self, "btn-success");
+                    addClass(self, "btn-danger");
+                }
+                $(self.closest("form")).find(".js-send-user-accountinfo").prop("disabled", data.disabled);
+            }
+        });
+});
+
+handle_ui.on("js-send-user-accountinfo", function (event) {
+    var self = this;
+    self.disabled = true;
+    $.post(hoturl_post("api/account", {u: this.getAttribute("data-user") || this.closest("form").getAttribute("data-user")}),
+        {sendinfo: 1},
+        function (data) {
+            setajaxcheck(self, data);
+        });
 });
 
 var profile_ui = (function ($) {
@@ -8675,17 +8749,17 @@ return function (event) {
 // review UI
 handle_ui.on("js-decline-review", function () {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f});
+        hc = popup_skeleton({near: this, action: f});
     hc.push('<p>Select “Decline review” to decline this review. Thank you for your consideration.</p>');
     hc.push('<textarea name="reason" rows="3" cols="60" class="w-99 need-autogrow" placeholder="Optional explanation" spellcheck="true"></textarea>');
-    hc.push_actions(['<button type="submit" name="refuse" value="yes" class="btn-danger">Decline review</button>',
+    hc.push_actions(['<button type="submit" name="decline" value="1" class="btn-danger">Decline review</button>',
         '<button type="button" name="cancel">Cancel</button>']);
     hc.show();
 });
 
 handle_ui.on("js-deny-review-request", function () {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f});
+        hc = popup_skeleton({near: this, action: f});
     hc.push('<p>Select “Deny request” to deny this review request.</p>');
     hc.push('<textarea name="reason" rows="3" cols="60" class="w-99 need-autogrow" placeholder="Optional explanation" spellcheck="true"></textarea>');
     hc.push_actions(['<button type="submit" name="denyreview" value="1" class="btn-danger">Deny request</button>',
@@ -8696,7 +8770,7 @@ handle_ui.on("js-deny-review-request", function () {
 
 handle_ui.on("js-delete-review", function () {
     var f = this.closest("form"),
-        hc = popup_skeleton({anchor: this, action: f});
+        hc = popup_skeleton({near: this, action: f});
     hc.push('<p>Be careful: This will permanently delete all information about this review assignment from the database and <strong>cannot be undone</strong>.</p>');
     hc.push_actions(['<button type="submit" name="deletereview" value="1" class="btn-danger">Delete review</button>',
         '<button type="button" name="cancel">Cancel</button>']);
@@ -8704,11 +8778,11 @@ handle_ui.on("js-delete-review", function () {
 });
 
 handle_ui.on("js-approve-review", function (event) {
-    var self = this, hc = popup_skeleton({anchor: event.sidebarTarget || self});
+    var self = this, hc = popup_skeleton({near: event.sidebarTarget || self});
     hc.push('<div class="btngrid">', '</div>');
     var subreviewClass = "";
     if (hasClass(self, "can-adopt")) {
-        hc.push('<button type="button" name="adoptsubmit" class="btn btn-primary big">Adopt and submit</button><p class="pt-2">Submit a copy of this review under your name. You can make changes afterwards.</p>');
+        hc.push('<button type="button" name="adoptsubmit" class="btn btn-primary big">Adopt and submit</button><p>Submit a copy of this review under your name. You can make changes afterwards.</p>');
         hc.push('<button type="button" name="adoptdraft" class="btn big">Adopt as draft</button><p>Save a copy of this review as a draft review under your name.</p>');
     } else if (hasClass(self, "can-adopt-replace")) {
         hc.push('<button type="button" name="adoptsubmit" class="btn btn-primary big">Adopt and submit</button><p>Replace your draft review with a copy of this review and submit it. You can make changes afterwards.</p>');
@@ -8739,21 +8813,21 @@ handle_ui.on("js-approve-review", function (event) {
 
 // search/paperlist UI
 handle_ui.on("js-edit-formulas", function () {
-    var self = this, $d, nformulas = 0;
-    function push_formula(hc, f) {
-        ++nformulas;
-        hc.push('<div class="editformulas-formula" data-formula-number="' + nformulas + '">', '</div>');
-        hc.push('<div class="entryi"><label for="htctl_formulaname_' + nformulas + '">Name</label><div class="entry">', '</div></div>');
+    var self = this, $d, count = 0;
+    function push1(hc, f) {
+        ++count;
+        hc.push('<div class="editformulas-formula" data-formula-number="' + count + '">', '</div>');
+        hc.push('<div class="entryi"><label for="htctl_formulaname_' + count + '">Name</label><div class="entry nw">', '</div></div>');
         if (f.editable) {
-            hc.push('<input type="text" id="htctl_formulaname_' + nformulas + '" class="editformulas-name need-autogrow" name="formulaname_' + nformulas + '" size="30" value="' + escape_entities(f.name) + '">');
+            hc.push('<input type="text" id="htctl_formulaname_' + count + '" class="editformulas-name need-autogrow" name="formulaname_' + count + '" size="30" value="' + escape_entities(f.name) + '" placeholder="Formula name">');
             hc.push('<a class="ui closebtn delete-link need-tooltip" href="" aria-label="Delete formula">x</a>');
         } else
             hc.push(escape_entities(f.name));
         hc.pop();
-        hc.push('<div class="entryi"><label for="htctl_formulaexpression_' + nformulas + '">Expression</label><div class="entry">', '</div></div>');
+        hc.push('<div class="entryi"><label for="htctl_formulaexpression_' + count + '">Expression</label><div class="entry">', '</div></div>');
         if (f.editable)
-            hc.push('<textarea class="editformulas-expression need-autogrow" id="htctl_formulaexpression_' + nformulas + '" name="formulaexpression_' + nformulas + '" rows="1" cols="60" style="width:99%">' + escape_entities(f.expression) + '</textarea>')
-                .push('<input type="hidden" name="formulaid_' + nformulas + '" value="' + f.id + '">');
+            hc.push('<textarea class="editformulas-expression need-autogrow w-99" id="htctl_formulaexpression_' + count + '" name="formulaexpression_' + count + '" rows="1" cols="64" placeholder="Formula definition">' + escape_entities(f.expression) + '</textarea>')
+                .push('<input type="hidden" name="formulaid_' + count + '" value="' + f.id + '">');
         else
             hc.push(escape_entities(f.expression));
         hc.pop();
@@ -8765,7 +8839,7 @@ handle_ui.on("js-edit-formulas", function () {
     function click(event) {
         if (this.name === "add") {
             var hc = new HtmlCollector;
-            push_formula(hc, {name: "", expression: "", editable: true, id: "new"});
+            push1(hc, {name: "", expression: "", editable: true, id: "new"});
             var $f = $(hc.render()).appendTo($d.find(".editformulas"));
             $f[0].setAttribute("data-formula-new", "");
             $f.find("textarea").autogrow();
@@ -8776,12 +8850,13 @@ handle_ui.on("js-edit-formulas", function () {
     function ondelete() {
         var $x = $(this).closest(".editformulas-formula");
         if ($x[0].hasAttribute("data-formula-new"))
-            $x.remove();
+            $x.addClass("hidden");
         else {
-            $x.find(".editformulas-expression").closest(".f-i").addClass("hidden");
+            $x.find(".editformulas-expression").closest(".entryi").addClass("hidden");
             $x.find(".editformulas-name").prop("disabled", true).css("text-decoration", "line-through");
-            $x.append('<em>(Formula deleted)</em><input type="hidden" name="formuladeleted_' + $x.data("formulaNumber") + '" value="1">');
+            $x.append('<em>(Formula deleted)</em>');
         }
+        $x.append('<input type="hidden" name="formuladeleted_' + $x.data("formulaNumber") + '" value="1">');
     }
     function submit(event) {
         event.preventDefault();
@@ -8801,7 +8876,7 @@ handle_ui.on("js-edit-formulas", function () {
         hc.push('<p><a href="' + hoturl("help", "t=formulas") + '" target="_blank">Formulas</a>, such as “sum(OveMer)”, are calculated from review statistics and paper information. Named formulas are shared with the PC and can be used in other formulas. To view an unnamed formula, use a search term like “show:(sum(OveMer))”.</p>');
         hc.push('<div class="editformulas">', '</div>');
         for (i in formulas || [])
-            push_formula(hc, formulas[i]);
+            push1(hc, formulas[i]);
         hc.pop_push('<button type="button" name="add">Add named formula</button>');
         hc.push_actions(['<button type="submit" name="saveformulas" value="1" class="btn-primary">Save</button>', '<button type="button" name="cancel">Cancel</button>']);
         $d = hc.show();
@@ -8860,6 +8935,86 @@ handle_ui.on("js-edit-view-options", function () {
             if (data.ok)
                 create(data.display_default, data.display_current);
         }
+    });
+});
+
+handle_ui.on("js-edit-namedsearches", function () {
+    var self = this, $d, count = 0;
+    function push1(hc, f) {
+        ++count;
+        hc.push('<div class="editsearches-search" data-search-number="' + count + '">', '</div>');
+        hc.push('<div class="entryi"><label for="htctl_searchname_' + count + '">Name</label><div class="entry nw">', '</div></div>');
+        if (f.editable) {
+            hc.push('<input type="text" id="htctl_searchname_' + count + '" class="editsearches-name need-autogrow" name="searchname_' + count + '" size="30" value="' + escape_entities(f.name) + '" placeholder="Search name">');
+            hc.push('<a class="ui closebtn delete-link need-tooltip" href="" aria-label="Delete search">x</a>');
+        } else
+            hc.push(escape_entities(f.name));
+        hc.pop();
+        hc.push('<div class="entryi"><label for="htctl_searchquery_' + count + '">Search</label><div class="entry">', '</div></div>');
+        if (f.editable)
+            hc.push('<textarea class="editsearches-query need-autogrow w-99" id="htctl_searchquery_' + count + '" name="searchq_' + count + '" rows="1" cols="64" placeholder="(All)">' + escape_entities(f.q) + '</textarea>');
+        else
+            hc.push(escape_entities(f.q));
+        hc.push('<input type="hidden" name="searchid_' + count + '" value="' + (f.id || f.name) + '">');
+        hc.pop();
+        if (f.error_html) {
+            hc.push('<div class="entryi"><label class="is-error">Error</label><div class="entry">' + f.error_html + '</div></div>');
+        }
+        hc.pop();
+    }
+    function click(event) {
+        if (this.name === "add") {
+            var hc = new HtmlCollector,
+                q = document.getElementById("searchform");
+            push1(hc, {name: "", q: q ? q.getAttribute("data-lquery") : "", editable: true, id: "new"});
+            var $f = $(hc.render()).appendTo($d.find(".editsearches"));
+            $f[0].setAttribute("data-search-new", "");
+            $f.find("textarea").autogrow();
+            focus_at($f.find(".editsearches-name"));
+            $d.find(".modal-dialog").scrollIntoView({atBottom: true, marginBottom: "auto"});
+        }
+    }
+    function ondelete() {
+        var $x = $(this).closest(".editsearches-search");
+        if ($x[0].hasAttribute("data-search-new"))
+            $x.addClass("hidden");
+        else {
+            $x.find(".editsearches-query").closest(".entryi").addClass("hidden");
+            $x.find(".editsearches-name").prop("disabled", true).css("text-decoration", "line-through");
+            $x.append('<em>(Search deleted)</em>');
+        }
+        $x.append('<input type="hidden" name="searchdeleted_' + $x.data("searchNumber") + '" value="1">');
+    }
+    function submit(event) {
+        event.preventDefault();
+        $.post(hoturl_post("api/namedsearch"),
+            $d.find("form").serialize(),
+            function (data) {
+                if (data.ok)
+                    location.reload(true);
+                else
+                    $d.show_errors(data);
+            });
+    }
+    function create(searches) {
+        var hc = popup_skeleton(), i;
+        hc.push('<div style="max-width:480px;max-width:40rem;position:relative">', '</div>');
+        hc.push('<h2>Saved searches</h2>');
+        hc.push('<p>Invoke a saved search with “ss:NAME”. Saved searches are shared with the PC.</p>');
+        hc.push('<div class="editsearches">', '</div>');
+        for (i in searches || []) {
+            push1(hc, searches[i]);
+        }
+        hc.pop_push('<button type="button" name="add">Add named search</button>');
+        hc.push_actions(['<button type="submit" name="savesearches" value="1" class="btn-primary">Save</button>', '<button type="button" name="cancel">Cancel</button>']);
+        $d = hc.show();
+        $d.on("click", "button", click);
+        $d.on("click", "a.delete-link", ondelete);
+        $d.on("submit", "form", submit);
+    }
+    $.get(hoturl_post("api/namedsearch"), function (data) {
+        if (data.ok)
+            create(data.searches);
     });
 });
 

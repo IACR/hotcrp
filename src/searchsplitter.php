@@ -1,6 +1,6 @@
 <?php
 // searchsplitter.php -- HotCRP helper class for splitting search strings
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class SearchSplitter {
     /** @var string */
@@ -99,7 +99,7 @@ class SearchSplitter {
     }
     /** @param string $str
      * @param int $pos
-     * @param ?callable(string):bool $endf
+     * @param ?callable(string,int):bool $endf
      * @return int */
     static function span_balanced_parens($str, $pos = 0, $endf = null) {
         $pstack = "";
@@ -111,7 +111,7 @@ class SearchSplitter {
             // stop when done
             if ($plast === ""
                 && !$quote
-                && ($endf === null ? ctype_space($ch) : call_user_func($endf, $ch, $pos))) {
+                && ($endf === null ? ctype_space($ch) : $endf($ch, $pos))) {
                 break;
             }
             // translate “” -> "

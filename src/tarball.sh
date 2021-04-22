@@ -204,6 +204,7 @@ src/conference.php
 src/confinvariants.php
 src/conflict.php
 src/contact.php
+src/contactcountmatcher.php
 src/contactlist.php
 src/contactsearch.php
 src/distoptions.php
@@ -317,6 +318,7 @@ src/paperevents.php
 src/paperinfo.php
 src/paperlist.php
 src/paperoption.php
+src/paperrequest.php
 src/papersearch.php
 src/paperstatus.php
 src/papertable.php
@@ -350,6 +352,7 @@ src/search/st_optionvalue.php
 src/search/st_optionvaluein.php
 src/search/st_paperpc.php
 src/search/st_paperstatus.php
+src/search/st_proposal.php
 src/search/st_perm.php
 src/search/st_pdf.php
 src/search/st_reconflict.php

@@ -1,6 +1,6 @@
 <?php
 // a_review.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Review_Assignable extends Assignable {
     /** @var ?int */
@@ -339,7 +339,7 @@ class Review_Assigner extends Assigner {
         if ($this->contact->is_anonymous_user()
             && (!$this->item->existed() || $this->item->deleted())) {
             $extra["token"] = true;
-            $aset->cleanup_callback("rev_token", function ($aset, $vals) {
+            $aset->cleanup_callback("rev_token", function ($vals) use ($aset) {
                 $aset->conf->update_rev_tokens_setting(min($vals));
             }, $this->item->existed() ? 0 : 1);
         }
@@ -359,7 +359,7 @@ class Review_Assigner extends Assigner {
             $reviewer = $aset->conf->user_by_id($this->cid);
             $prow = $aset->conf->paper_by_id($this->pid, $reviewer);
             HotCRPMailer::send_to($reviewer, $this->notify, [
-                "prow" => $prow, "rrow" => $prow->fresh_review_of_user($this->cid),
+                "prow" => $prow, "rrow" => $prow->fresh_review_by_user($this->cid),
                 "requester_contact" => $aset->user, "reason" => $this->item["_reason"]
             ]);
         }

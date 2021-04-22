@@ -1,6 +1,6 @@
 <?php
 // searchselection.php -- HotCRP helper class for paper selections
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class SearchSelection {
     /** @var list<int> */
@@ -75,7 +75,7 @@ class SearchSelection {
         return $this->selmap;
     }
 
-    /** @return PaperInfoSet */
+    /** @return PaperInfoSet|Iterable<PaperInfo> */
     function paper_set(Contact $user, $options = []) {
         $options["paperId"] = $this->sel;
         $pset = $user->paper_set($options);

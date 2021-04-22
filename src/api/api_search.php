@@ -1,15 +1,9 @@
 <?php
 // api_search.php -- HotCRP search-related API calls
-// Copyright (c) 2008-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2008-2021 Eddie Kohler; see LICENSE.
 
 class Search_API {
     static function search(Contact $user, Qrequest $qreq) {
-        $topt = PaperSearch::search_types($user, $qreq->t);
-        if (empty($topt) || ($qreq->t && !isset($topt[$qreq->t]))) {
-            return new JsonResult(403, "Permission error.");
-        }
-
-        $t = $qreq->t ?? key($topt);
         $q = $qreq->q;
         if ($qreq->urlbase) {
             error_log("{$user->conf->dbname}: api/search with urlbase"); // XXX
@@ -25,7 +19,7 @@ class Search_API {
             return new JsonResult(400, "Missing parameter.");
         }
 
-        $search = new PaperSearch($user, ["t" => $t, "q" => $q, "qt" => $qreq->qt, "reviewer" => $qreq->reviewer]);
+        $search = new PaperSearch($user, ["t" => $qreq->t ?? "", "q" => $q, "qt" => $qreq->qt, "reviewer" => $qreq->reviewer]);
         $pl = new PaperList($qreq->report ? : "pl", $search, ["sort" => true], $qreq);
         $pl->apply_view_report_default();
         $pl->apply_view_session();

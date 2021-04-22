@@ -1,6 +1,6 @@
 <?php
 // a_tag.php -- HotCRP assignment helper classes
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Tag_Assignable extends Assignable {
     /** @var string */
@@ -113,8 +113,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         self::load_tag_state($state);
     }
     function allow_paper(PaperInfo $prow, AssignmentState $state) {
-        if (($whyNot = $state->user->perm_change_some_tag($prow))) {
-            return whyNotText($whyNot);
+        if (($whyNot = $state->user->perm_edit_some_tag($prow))) {
+            return $whyNot->unparse_html();
         } else {
             return true;
         }
@@ -140,7 +140,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             if ($tag === "") {
                 break;
             }
-            $span = SearchSplitter::span_balanced_parens($tag, 0, function ($ch) {
+            $span = SearchSplitter::span_balanced_parens($tag, 0, function ($ch, $pos) {
                 return ctype_space($ch) || $ch === "," || $ch === ";";
             });
             $ok = $this->apply1(substr($tag, 0, $span), $prow, $contact, $req, $state)
@@ -155,7 +155,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         $xvalue = trim((string) $req["tag_value"]);
         if (!preg_match('/\A([-+]?#?)(|~~|[^-~+#]*~)([a-zA-Z@*_:.][-+a-zA-Z0-9!@*_:.\/]*)(\z|#|#?[=!<>]=?|#?≠|#?≤|#?≥)(.*)\z/', $tag, $m)
             || ($m[4] !== "" && $m[4] !== "#")) {
-            $state->error("“" . htmlspecialchars($tag) . "”: Invalid tag.");
+            $state->error("Invalid tag “" . htmlspecialchars($tag) . "”.");
             return false;
         } else if ($xvalue !== "" && $m[5] !== "") {
             $state->error("“" . htmlspecialchars($tag) . "”: You have a <code>tag value</code> column, so the tag value specified here is ignored.");
@@ -164,7 +164,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             $state->warning("“" . htmlspecialchars($tag) . "”: Tag values ignored when removing a tag.");
         } else if (($this->remove && str_starts_with($m[1], "+"))
                    || ($this->remove === false && str_starts_with($m[1], "-"))) {
-            $state->error("“" . htmlspecialchars($tag) . "” is incompatible with this action.");
+            $state->error("Tag “" . htmlspecialchars($tag) . "” is incompatible with this action.");
             return false;
         }
 
@@ -238,7 +238,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
 
         // otherwise handle adds
         if (strpos($xtag, "*") !== false) {
-            $state->error("“" . htmlspecialchars($tag) . "”: Wildcards aren’t allowed here.");
+            $state->error("Invalid tag “" . htmlspecialchars($tag) . "” (stars aren’t allowed here).");
             return false;
         }
         if ($xuser !== ""
@@ -256,8 +256,8 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
             $xuser = $twiddlecids[0] . "~";
         }
         $tagger = new Tagger($state->user);
-        if (!$tagger->check($xtag, Tagger::CHECKVERBOSE)) {
-            $state->error($tagger->error_html);
+        if (!$tagger->check($xtag)) {
+            $state->error($tagger->error_html(true));
             return false;
         }
 
@@ -369,7 +369,7 @@ class Tag_AssignmentParser extends UserlessAssignmentParser {
         foreach ($res as $x) {
             if (preg_match($tag_re, $x->ltag)
                 && ($search_ltag
-                    || $state->user->can_change_tag($prow, $x->ltag, $x->_index, null))) {
+                    || $state->user->can_edit_tag($prow, $x->ltag, $x->_index, null))) {
                 $f = $state->remove($x);
             }
         }
@@ -389,13 +389,13 @@ class Tag_Assigner extends Assigner {
         $prow = $state->prow($item["pid"]);
         // check permissions
         if (!$item["_override"]) {
-            $whyNot = $state->user->perm_change_tag($prow, $item["ltag"],
+            $whyNot = $state->user->perm_edit_tag($prow, $item["ltag"],
                 $item->pre("_index"), $item->post("_index"));
             if ($whyNot) {
                 if ($whyNot["otherTwiddleTag"] ?? null) {
                     return null;
                 }
-                throw new Exception(whyNotText($whyNot));
+                throw new Exception($whyNot->unparse_html());
             }
         }
         return new Tag_Assigner($item, $state);
@@ -443,15 +443,14 @@ class Tag_Assigner extends Assigner {
         }
         if ($this->index !== null
             && str_ends_with($this->tag, ':')) {
-            $aset->cleanup_callback("colontag", function ($aset) {
-                $aset->conf->save_setting("has_colontag", 1);
-                $aset->conf->invalidate_caches("tags");
+            $aset->cleanup_callback("colontag", function () use ($aset) {
+                $aset->conf->save_refresh_setting("has_colontag", 1);
             });
         }
         $isperm = strncasecmp($this->tag, 'perm:', 5) === 0;
         if ($this->index !== null && $isperm) {
-            $aset->cleanup_callback("permtag", function ($aset) {
-                $aset->conf->save_setting("has_permtag", 1);
+            $aset->cleanup_callback("permtag", function () use ($aset) {
+                $aset->conf->save_refresh_setting("has_permtag", 1);
             });
         }
         if ($aset->conf->tags()->is_track($this->tag) || $isperm) {

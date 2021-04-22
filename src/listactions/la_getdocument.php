@@ -18,7 +18,7 @@ class GetDocument_ListAction extends ListAction {
             "title" => "Documents/" . $opt->plural_title(),
             "position" => $opt->display_position(),
             "display_if" => "listhas:" . $opt->field_key(),
-            "callback" => "+GetDocument_ListAction"
+            "function" => "+GetDocument_ListAction"
         ];
     }
     static function expand2(GroupedExtensions $gex) {
@@ -35,7 +35,7 @@ class GetDocument_ListAction extends ListAction {
         $docset = new DocumentInfoSet($dn);
         foreach ($ssel->paper_set($user) as $row) {
             if (($whyNot = $user->perm_view_option($row, $opt))) {
-                $docset->add_error_html(whyNotText($whyNot));
+                $docset->add_error_html($whyNot->unparse_html());
             } else if (($doc = $row->document($opt->id))) {
                 $docset->add_as($doc, $doc->export_filename());
             } else {

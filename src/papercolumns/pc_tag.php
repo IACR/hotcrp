@@ -1,6 +1,6 @@
 <?php
 // pc_tag.php -- HotCRP helper classes for paper list content
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class Tag_PaperColumn extends PaperColumn {
     /** @var ?bool */
@@ -56,7 +56,17 @@ class Tag_PaperColumn extends PaperColumn {
             && count($dt->emoji) === 1) {
             $this->emoji = $dt->emoji[0];
         }
-        if ($this->editable && ($visible & PaperColumn::PREP_VISIBLE) && $pl->table_id()) {
+        if ($this->editable
+            && !$pl->user->can_edit_tag_somewhere($this->etag)) {
+            $m = "You can’t edit tag #" . htmlspecialchars($this->dtag) . ".";
+            if ($pl->conf->tags()->is_automatic($this->etag)) {
+                $m .= " That tag is set automatically.";
+            }
+            $pl->message_set()->error_at($this->name, $m);
+        }
+        if ($this->editable
+            && ($visible & PaperColumn::PREP_VISIBLE)
+            && $pl->table_id()) {
             $pl->has_editable_tags = true;
             if (strcasecmp($this->etag, $pl->sort_etag()) === 0
                 && $this->is_value) {
@@ -82,16 +92,14 @@ class Tag_PaperColumn extends PaperColumn {
         }
         foreach ($pl->rowset() as $row) {
             if (!$pl->user->can_view_tag($row, $this->etag)) {
-                $this->sortmap[$row->uid] = $unviewable;
+                $this->sortmap[$row->paperXid] = $unviewable;
             } else {
-                $this->sortmap[$row->uid] = $row->tag_value($this->etag) ?? $empty;
+                $this->sortmap[$row->paperXid] = $row->tag_value($this->etag) ?? $empty;
             }
         }
     }
     function compare(PaperInfo $a, PaperInfo $b, PaperList $pl) {
-        $av = $this->sortmap[$a->uid];
-        $bv = $this->sortmap[$b->uid];
-        return $av < $bv ? -1 : ($av == $bv ? 0 : 1);
+        return $this->sortmap[$a->paperXid] <=> $this->sortmap[$b->paperXid];
     }
     function header(PaperList $pl, $is_text) {
         if (($twiddle = strpos($this->dtag, "~")) > 0) {
@@ -128,7 +136,7 @@ class Tag_PaperColumn extends PaperColumn {
     }
     /** @param ?float $v */
     private function edit_content($pl, $row, $v) {
-        if (!$pl->user->can_change_tag($row, $this->dtag, 0, 0)) {
+        if (!$pl->user->can_edit_tag($row, $this->dtag, 0, 0)) {
             return false;
         }
         if (!$this->is_value) {
@@ -166,7 +174,7 @@ class Tag_PaperColumn extends PaperColumn {
             $fj["title"] = $dt->unparse($t, 0, $user, TagMap::UNPARSE_HASH | TagMap::UNPARSE_TEXT);
             $fj["title_html"] = $dt->unparse($t, 0, $user, TagMap::UNPARSE_HASH);
             $fj["sort"] = $fj["sort"] ?? true;
-            $fj["callback"] = $fj["callback"] ?? "+Tag_PaperColumn";
+            $fj["function"] = $fj["function"] ?? "+Tag_PaperColumn";
             $rs[] = (object) $fj;
         }
         foreach ($tsm->error_texts() as $e) {

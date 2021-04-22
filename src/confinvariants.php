@@ -1,6 +1,6 @@
 <?php
 // confinvariants.php -- HotCRP invariant checker
-// Copyright (c) 2006-2020 Eddie Kohler; see LICENSE.
+// Copyright (c) 2006-2021 Eddie Kohler; see LICENSE.
 
 class ConfInvariants {
     /** @var Conf */
@@ -115,7 +115,7 @@ class ConfInvariants {
         // reviewNeedsSubmit is defined correctly
         $any = $this->invariantq("select r.paperId, r.reviewId from PaperReview r
             left join (select paperId, requestedBy, count(reviewId) ct, count(reviewSubmitted) cs
-                       from PaperReview where reviewType<" . REVIEW_SECONDARY . "
+                       from PaperReview where reviewType>0 and reviewType<" . REVIEW_SECONDARY . "
                        group by paperId, requestedBy) q
                 on (q.paperId=r.paperId and q.requestedBy=r.contactId)
             where r.reviewType=" . REVIEW_SECONDARY . " and reviewSubmitted is null
@@ -123,6 +123,12 @@ class ConfInvariants {
             limit 1");
         if ($any) {
             $this->invariant_error("reviewNeedsSubmit", "bad reviewNeedsSubmit for review #{0}/{1}");
+        }
+
+        // reviewType is defined correctly
+        $any = $this->invariantq("select paperId, reviewId from PaperReview where reviewType<0 and (reviewNeedsSubmit!=0 or reviewSubmitted is not null) limit 1");
+        if ($any) {
+            $this->invariant_error("negative_reviewType", "bad nonexistent review #{0}/{1}");
         }
 
         // review rounds are defined
@@ -134,14 +140,29 @@ class ConfInvariants {
         }
         Dbl::free($result);
 
-        // anonymous users are disabled
-        $any = $this->invariantq("select email from ContactInfo where email regexp '^anonymous[0-9]*\$' and not disabled limit 1");
-        if ($any) {
-            $this->invariant_error("anonymous_user_enabled", "anonymous user is not disabled");
+        // anonymous users are disabled; primaryContactId is not recursive
+        $result = $this->conf->qe("select contactId, email, primaryContactId, disabled from ContactInfo where primaryContactId!=0 or (email>='anonymous' and email<='anonymous:')");
+        $primary = [];
+        while (($row = $result->fetch_object())) {
+            if (str_starts_with($row->email, "anonymous")
+                && Contact::is_anonymous_email($row->email)
+                && !$row->disabled) {
+                $this->invariant_error("anonymous_user_enabled", "anonymous user {$row->email} is not disabled");
+            }
+            if ($row->primaryContactId != 0) {
+                $cid = (int) $row->contactId;
+                $pcid = (int) $row->primaryContactId;
+                $primary[$cid] = ($primary[$cid] ?? 0) | 1;
+                $primary[$pcid] = ($primary[$pcid] ?? 0) | 2;
+                if ($primary[$cid] === 3 || $primary[$pcid] === 3) {
+                    $this->invariant_error("primary_user_loop", "primary user loop involving {$cid}/{$row->email}");
+                }
+            }
         }
+        Dbl::free($result);
 
         // whitespace is simplified
-        $any = $this->invariantq("select email from ContactInfo where firstName regexp '^ | $|  |[\\n\\r\\t]' or lastName regexp '^ | $|  |[\\n\\r\\t]' or affiliation regexp '^ | $|  |[\\n\\r\\t]' limit 1");
+        $any = $this->invariantq("select email from ContactInfo where firstName regexp _utf8 '^ | $|  |[\\n\\r\\t]' or lastName regexp _utf8 '^ | $|  |[\\n\\r\\t]' or affiliation regexp _utf8 '^ | $|  |[\\n\\r\\t]' limit 1");
         if ($any) {
             $this->invariant_error("user_whitespace", "user whitespace is not simplified");
         }
@@ -156,13 +177,17 @@ class ConfInvariants {
         Dbl::free($result);
 
         // paper denormalizations match
+        $any = $this->invariantq("select p.paperId, ps.paperId from Paper p join PaperStorage ps on (ps.paperStorageId=p.paperStorageId) where p.paperStorageId>1 and p.paperId!=ps.paperId limit 1");
+        if ($any) {
+            $this->invariant_error("paper_id_denormalization", "bad PaperStorage link, paper #{0} (storage paper #{1})");
+        }
         $any = $this->invariantq("select p.paperId from Paper p join PaperStorage ps on (ps.paperStorageId=p.paperStorageId) where p.finalPaperStorageId<=0 and p.paperStorageId>1 and (p.sha1!=ps.sha1 or p.size!=ps.size or p.mimetype!=ps.mimetype or p.timestamp!=ps.timestamp) limit 1");
         if ($any) {
             $this->invariant_error("paper_denormalization", "bad Paper denormalization, paper #{0}");
         }
-        $any = $this->invariantq("select p.paperId from Paper p join PaperStorage ps on (ps.paperStorageId=p.finalPaperStorageId) where p.finalPaperStorageId>1 and (p.sha1 != ps.sha1 or p.size!=ps.size or p.mimetype!=ps.mimetype or p.timestamp!=ps.timestamp) limit 1");
+        $any = $this->invariantq("select p.paperId, ps.paperId from Paper p join PaperStorage ps on (ps.paperStorageId=p.finalPaperStorageId) where p.finalPaperStorageId>1 and (p.paperId!=ps.paperId or p.sha1!=ps.sha1 or p.size!=ps.size or p.mimetype!=ps.mimetype or p.timestamp!=ps.timestamp) limit 1");
         if ($any) {
-            $this->invariant_error("paper_final_denormalization", "bad Paper final denormalization, paper #{0}");
+            $this->invariant_error("paper_final_denormalization", "bad Paper final denormalization, paper #{0} (storage paper #{1})");
         }
 
         // filterType is never zero
