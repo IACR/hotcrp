@@ -28,9 +28,17 @@ class MessageItem implements JsonSerializable {
         if ($this->field !== null) {
             $x["field"] = $this->field;
         }
-        $x["message"] = $this->message;
+        if ($this->message !== "") {
+            $x["message"] = $this->message;
+        }
         $x["status"] = $this->status;
         return (object) $x;
+    }
+
+    /** @param ?string $message
+     * @return array{ok:false,message_list:list<MessageItem>} */
+    static function make_error_json($message) {
+        return ["ok" => false, "message_list" => [new MessageItem(null, $message ?? "", 2)]];
     }
 }
 
@@ -330,6 +338,13 @@ class MessageSet {
         } else {
             return $rest;
         }
+    }
+    /** @param string $message
+     * @param int $status
+     * @return string */
+    static function render_feedback_p($message, $status) {
+        $k = self::status_class($status, "feedback", "is-");
+        return "<p class=\"{$k}\">{$message}</p>";
     }
     /** @param ?string|false $field
      * @param string $rest

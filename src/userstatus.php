@@ -517,7 +517,7 @@ class UserStatus extends MessageSet {
         // Follow
         if (isset($cj->follow) && $cj->follow !== "") {
             $cj->follow = $this->make_keyed_object($cj->follow, "follow", true);
-            $cj->bad_follow = array();
+            $cj->bad_follow = [];
             foreach ((array) $cj->follow as $k => $v) {
                 if ($v
                     && $k !== "none"
@@ -537,9 +537,9 @@ class UserStatus extends MessageSet {
             if (!isset($cj->tags) && $old_user) {
                 $cj->tags = preg_split('/[\s,;]+/', $old_user->contactTags);
             } else if (!isset($cj->tags)) {
-                $cj->tags = array();
+                $cj->tags = [];
             }
-            $old_tags = array();
+            $old_tags = [];
             foreach ($cj->tags as $t) {
                 if ($t !== "") {
                     list($tag, $index) = Tagger::unpack($t);
@@ -863,7 +863,7 @@ class UserStatus extends MessageSet {
             $old_disabled = $user->disabled;
         } else {
             $user = Contact::create($this->conf, $actor, $cj, Contact::SAVE_ROLES, $roles);
-            $cj->email = $user->email; // adopt contactdb’s spelling of email
+            $cj->email = $user->email; // adopt contactdb’s email capitalization
             $old_disabled = true;
         }
         if (!$user) {
@@ -1538,10 +1538,10 @@ topics. We use this information to help match papers to reviewers.</p>',
             echo '<div class="btngrid">';
             if (!$us->is_viewer_user()) {
                 echo Ht::button($us->user->disabled ? "Enable account" : "Disable account", [
-                    "class" => "ui js-disable-user " . ($us->user->disabled ? "btn-success" : "btn-danger")
+                    "class" => "ui js-disable-user mf btn relative " . ($us->user->disabled ? "btn-success" : "btn-danger")
                 ]), '<p class="pt-1">Disabled accounts cannot sign in or view the site.</p>';
             }
-            echo Ht::button("Send account information", ["class" => "ui js-send-user-accountinfo", "disabled" => $us->user->disabled]);
+            echo Ht::button("Send account information", ["class" => "ui js-send-user-accountinfo mf btn relative", "disabled" => $us->user->disabled]);
             echo '</div>';
         }
     }
@@ -1561,7 +1561,7 @@ topics. We use this information to help match papers to reviewers.</p>',
                 $args["data-sole-author"] = pluralx($tracks->soleAuthor, "submission") . " " . self::render_paper_link($us->conf, $tracks->soleAuthor);
             } else {
                 $args["class"] .= " js-delete-user";
-                $x = $y = array();
+                $x = $y = [];
                 if (!empty($tracks->author)) {
                     $x[] = "contact for " . pluralx($tracks->author, "submission") . " " . self::render_paper_link($us->conf, $tracks->author);
                     $y[] = "delete " . pluralx($tracks->author, "this") . " " . pluralx($tracks->author, "authorship association");

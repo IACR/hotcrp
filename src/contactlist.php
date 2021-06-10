@@ -729,14 +729,25 @@ class ContactList {
         }
     }
 
-    function addScores($a) {
+    static function uldisplay(Contact $user) {
+        $uldisplay = $user->session("uldisplay");
+        if ($uldisplay === null) {
+            $uldisplay = " tags ";
+            foreach ($user->conf->review_form()->highlighted_main_scores() as $rf) {
+                $uldisplay .= "{$rf->id} ";
+            }
+        }
+        return $uldisplay;
+    }
+
+    private function addScores($a) {
         if ($this->user->isPC) {
-            $uldisplay = $this->user->session("uldisplay", " tags overAllMerit ");
+            $uldisplay = self::uldisplay($this->user);
             foreach ($this->conf->all_review_fields() as $f) {
                 if ($f->has_options && strpos($uldisplay, " {$f->id} ") !== false)
                     array_push($a, $f->id);
             }
-            $this->scoreMax = array();
+            $this->scoreMax = [];
         }
         return $a;
     }
@@ -780,14 +791,14 @@ class ContactList {
         }
         $lllgroups[] = ["", "Download",
             Ht::select("getfn", $types, null, ["class" => "want-focus"])
-            . "&nbsp; " . Ht::submit("fn", "Go", ["value" => "get"])];
+            . Ht::submit("fn", "Go", ["value" => "get", "class" => "uic js-submit-list ml-2 can-submit-all"])];
 
         if ($this->user->privChair) {
             $lllgroups[] = ["", "Tag",
                 Ht::select("tagfn", ["a" => "Add", "d" => "Remove", "s" => "Define"], $this->qreq->tagfn)
                 . ' &nbsp;tag(s) &nbsp;'
-                . Ht::entry("tag", $this->qreq->tag, ["size" => 15, "class" => "want-focus js-autosubmit", "data-autosubmit-type" => "tag"])
-                . ' &nbsp;' . Ht::submit("fn", "Go", ["value" => "tag"])];
+                . Ht::entry("tag", $this->qreq->tag, ["size" => 15, "class" => "want-focus js-autosubmit", "data-submit-fn" => "tag"])
+                . Ht::submit("fn", "Go", ["value" => "tag", "class" => "uic js-submit-list ml-2"])];
 
             $mods = ["disableaccount" => "Disable", "enableaccount" => "Enable"];
             if ($this->user->can_change_password(null)) {
@@ -796,7 +807,7 @@ class ContactList {
             $mods["sendaccount"] = "Send account information";
             $lllgroups[] = ["", "Modify",
                 Ht::select("modifyfn", $mods, null, ["class" => "want-focus"])
-                . "&nbsp; " . Ht::submit("fn", "Go", ["value" => "modify"])];
+                . Ht::submit("fn", "Go", ["value" => "modify", "class" => "uic js-submit-list ml-2"])];
         }
 
         return "  <tfoot class=\"pltable" . ($hascolors ? " pltable-colored" : "")
@@ -984,7 +995,7 @@ class ContactList {
             $body .= $t . $tt;
         }
 
-        $uldisplay = $this->user->session("uldisplay", " tags overAllMerit ");
+        $uldisplay = self::uldisplay($this->user);
         $foldclasses = array();
         foreach (self::$folds as $k => $fold) {
             if (($this->have_folds[$fold] ?? null) !== null) {

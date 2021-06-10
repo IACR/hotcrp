@@ -7,12 +7,15 @@ class PaperListTableRender {
     public $table_start;
     /** @var ?string */
     public $thead;
+    /** @var ?string */
     public $tbody_class;
     /** @var list<string> */
     public $rows;
     /** @var ?string */
     public $tfoot;
+    /** @var ?string */
     public $table_end;
+    /** @var ?string */
     public $error;
 
     /** @var int */
@@ -41,6 +44,8 @@ class PaperListTableRender {
         $this->titlecol = $titlecol;
         $this->skipcallout = $skipcallout;
     }
+    /** @param string $error
+     * @return PaperListTableRender */
     static function make_error($error) {
         $tr = new PaperListTableRender(0, 0, 0);
         $tr->error = $error;
@@ -177,7 +182,7 @@ class PaperList implements XtContext {
     private $_groups;
 
     /** @var bool */
-    private $sortable;
+    private $_sortable;
     /** @var ?string */
     private $_paper_linkto;
     /** @var bool */
@@ -188,7 +193,6 @@ class PaperList implements XtContext {
     private $_viewf = [];
     /** @var array<string,?list<string>> */
     private $_view_decorations = [];
-    private $_atab;
 
     const VIEWORIGIN_MASK = 15;
     const VIEWORIGIN_NONE = -1;
@@ -211,6 +215,14 @@ class PaperList implements XtContext {
     private $_selection;
     /** @var callable(PaperList,PaperInfo):bool */
     private $_row_filter;
+    /** @var int */
+    private $_table_decor = 0;
+    /** @var ?string */
+    private $_table_fold_session;
+    /** @var ?callable */
+    private $_footer_filter;
+    /** @var ?array<string,mixed> */
+    private $_action_submit_attr;
 
     /** @var list<PaperColumn> */
     private $_vcolumns = [];
@@ -276,12 +288,11 @@ class PaperList implements XtContext {
         $this->_rowset = $args["rowset"] ?? null;
 
         $sortarg = $args["sort"] ?? null;
-        $this->sortable = !!$sortarg;
+        $this->_sortable = !!$sortarg;
 
         if (in_array($qreq->linkto, ["paper", "assign", "paperedit", "finishreview"])) {
             $this->set_view("linkto", true, null, [$qreq->linkto]);
         }
-        $this->_atab = $qreq->atab;
 
         $this->tagger = new Tagger($this->user);
 
@@ -297,7 +308,7 @@ class PaperList implements XtContext {
             $this->set_view("anonau", true, self::VIEWORIGIN_REPORT);
         }
 
-        if ($this->sortable) {
+        if ($this->_sortable) {
             if (is_string($sortarg)) {
                 $this->parse_view("sort:[" . $sortarg . "]", null);
             } else if ($qreq->sort) {
@@ -325,6 +336,7 @@ class PaperList implements XtContext {
         $this->_columns_by_name = ["anonau" => [], "aufull" => [], "rownum" => [], "statistics" => []];
     }
 
+    /** @return ?bool */
     function xt_check_element($e, $xt, $user, Conf $conf) {
         if (str_starts_with($e, "listhas:")) {
             return $this->has(substr($e, 8));
@@ -359,7 +371,6 @@ class PaperList implements XtContext {
         case "reviewersSel":
             return "sel id title status [linkto assign]";
         default:
-            error_log($this->conf->dbname . ": No such report {$this->_report_id}");
             return "";
         }
     }
@@ -372,16 +383,54 @@ class PaperList implements XtContext {
 
     /** @param ?string $table_id
      * @param ?string $table_class
-     * @param ?string $row_id_pattern */
+     * @param ?string $row_id_pattern
+     * @return $this */
     function set_table_id_class($table_id, $table_class, $row_id_pattern = null) {
         $this->_table_id = $table_id;
         $this->_table_class = $table_class;
         $this->_row_id_pattern = $row_id_pattern;
+        return $this;
     }
 
-    /** @param callable(PaperList,PaperInfo):bool $filter */
+    const DECOR_NONE = 0;
+    const DECOR_HEADER = 1;
+    const DECOR_EVERYHEADER = 2;
+    const DECOR_FOOTER = 4;
+    const DECOR_STATISTICS = 8;
+    const DECOR_LIST = 16;
+    /** @param int $decor
+     * @return $this */
+    function set_table_decor($decor) {
+        $this->_table_decor = $decor;
+        return $this;
+    }
+
+    /** @param ?string $prefix
+     * @return $this */
+    function set_table_fold_session($prefix) {
+        $this->_table_fold_session = $prefix;
+        return $this;
+    }
+
+    /** @param callable(PaperList,PaperInfo):bool $filter
+     * @return $this */
     function set_row_filter($filter) {
         $this->_row_filter = $filter;
+        return $this;
+    }
+
+    /** @param callable $action_filter
+     * @return $this */
+    function set_footer_filter($action_filter) {
+        $this->_footer_filter = $action_filter;
+        return $this;
+    }
+
+    /** @param ?array $attr
+     * @return $this */
+    function set_action_submit_attr($attr) {
+        $this->_action_submit_attr = $attr;
+        return $this;
     }
 
     /** @return MessageSet */
@@ -562,14 +611,14 @@ class PaperList implements XtContext {
         }
     }
 
-    function apply_view_report_default() {
+    function apply_view_report_default($no_settings = false) {
+        $s = null;
+        if (($this->_report_id === "pl" || $this->_report_id === "pf")
+            && !$no_settings) {
+            $s = $this->conf->setting_data("{$this->_report_id}display_default");
+        }
         if ($this->_report_id === "pl") {
-            $s = $this->conf->setting_data("pldisplay_default")
-                ?? $this->conf->review_form()->default_display();
-        } else if ($this->_report_id === "pf") {
-            $s = $this->conf->setting_data("pfdisplay_default");
-        } else {
-            $s = null;
+            $s = $s ?? $this->conf->review_form()->view_default();
         }
         $this->parse_view($s, self::VIEWORIGIN_DEFAULT_DISPLAY);
     }
@@ -851,8 +900,10 @@ class PaperList implements XtContext {
     }
 
 
+    /** @return $this */
     function set_selection(SearchSelection $ssel) {
         $this->_selection = $ssel;
+        return $this;
     }
 
     /** @return bool */
@@ -1438,7 +1489,7 @@ class PaperList implements XtContext {
         $t = $fdef->header($this, false);
         if ($fdef->as_row
             || !$fdef->sort
-            || !$this->sortable
+            || !$this->_sortable
             || !($sort_url = $this->search->url_site_relative_raw())) {
             return $t;
         }
@@ -1536,15 +1587,8 @@ class PaperList implements XtContext {
     }
 
     /** @param PaperListTableRender $rstate
-     * @param bool $live
      * @return string */
-    private function _statistics_rows($rstate, $live) {
-        foreach ($this->_vcolumns as $fdef) {
-            $live = $live || (!$fdef->as_row && $fdef->has_statistics());
-        }
-        if (!$live) {
-            return "";
-        }
+    private function _statistics_rows($rstate) {
         $t = '  <tr class="pl_statheadrow fx8">';
         if ($rstate->titlecol) {
             $t .= "<td colspan=\"{$rstate->titlecol}\" class=\"plstat\"></td>";
@@ -1582,8 +1626,10 @@ class PaperList implements XtContext {
         return $t;
     }
 
+    /** @param int $arrow_ncol
+     * @param int $ncol */
     static function render_footer_row($arrow_ncol, $ncol, $header,
-                            $lllgroups, $activegroup = -1, $extra = null) {
+                            $lllgroups, $activegroup = -1) {
         $foot = "<tr class=\"pl_footrow\">\n   ";
         if ($arrow_ncol) {
             $foot .= '<td class="plf pl_footselector" colspan="' . $arrow_ncol . '">'
@@ -1655,17 +1701,36 @@ class PaperList implements XtContext {
             }
             $foot .= "   </tr></tbody></table>";
         }
-        return $foot . (string) $extra . "<hr class=\"c\" /></td>\n </tr>";
+        return $foot . "<hr class=\"c\" /></td>\n </tr>";
     }
 
-    private function _footer($ncol, $extra, Qrequest $qreq) {
+    /** @param string $fn
+     * @param array<string,mixed> $js
+     * @return string */
+    function action_submit($fn, $js = []) {
+        $js["value"] = $fn;
+        $js["class"] = rtrim("uic js-submit-list ml-2 " . ($js["class"] ?? ""));
+        return Ht::submit("fn", "Go", $js + ($this->_action_submit_attr ?? []));
+    }
+
+    /** @param int $ncol
+     * @return string */
+    private function _footer($ncol) {
         if ($this->count == 0) {
             return "";
+        }
+        $qreq = $this->qreq;
+        $atab = null;
+        if (($selfhref = !!$qreq->page())) {
+            $atab = $qreq->fn ?? $qreq->atab;
         }
 
         $gex = ListAction::grouped_extensions($this->user);
         $gex->add_xt_checker([$this, "xt_check_element"]);
-        $gex->filter_by("display_if");
+        $gex->apply_key_filter("display_if");
+        if ($this->_footer_filter) {
+            $gex->apply_filter($this->_footer_filter);
+        }
         $lllgroups = [];
         $whichlll = -1;
         foreach ($gex->members("") as $rf) {
@@ -1677,9 +1742,11 @@ class PaperList implements XtContext {
                     $lllg = [$lllg];
                 }
                 array_unshift($lllg, $rf->name, $rf->title);
-                $lllg[0] = $this->conf->selfurl($qreq, ["atab" => $lllg[0], "#" => "plact"]);
+                if ($selfhref) {
+                    $lllg[0] = $this->conf->selfurl($qreq, ["atab" => $lllg[0], "#" => "plact"]);
+                }
                 $lllgroups[] = $lllg;
-                if ($qreq->fn == $rf->name || $this->_atab == $rf->name) {
+                if ($atab === $rf->name) {
                     $whichlll = count($lllgroups) - 1;
                 }
             }
@@ -1688,9 +1755,9 @@ class PaperList implements XtContext {
         $footsel_ncol = $this->_view_kanban ? 0 : 1;
         return self::render_footer_row($footsel_ncol, $ncol - $footsel_ncol,
             "<b>Select papers</b> (or <a class=\"ui js-select-all\" href=\""
-            . $this->conf->selfurl($qreq, ["selectall" => 1, "#" => "plact"])
+            . ($selfhref ? $this->conf->selfurl($this->qreq, ["selectall" => 1, "#" => "plact"]) : "")
             . '">select all ' . $this->count . "</a>), then&nbsp;",
-            $lllgroups, $whichlll, $extra);
+            $lllgroups, $whichlll);
     }
 
     /** @return bool */
@@ -1709,6 +1776,7 @@ class PaperList implements XtContext {
         return $this->rowset()->paper_ids();
     }
 
+    /** @return ?string */
     private function _listDescription() {
         switch ($this->_report_id) {
         case "reviewAssignment":
@@ -1729,8 +1797,8 @@ class PaperList implements XtContext {
         return $this->search->create_session_list_object($this->paper_ids(), $this->_listDescription(), $this->sortdef());
     }
 
-    /** @param array{list?:bool,attributes?:array,fold_session_prefix?:string,noheader?:bool,nofooter?:bool,footer_extra?:string,live?:bool} $options */
-    private function _table_render($options) {
+    /** @return PaperListTableRender */
+    private function _table_render() {
         $this->_prepare();
         // need tags for row coloring
         if ($this->user->can_view_tags(null)) {
@@ -1798,13 +1866,8 @@ class PaperList implements XtContext {
         if ($this->_table_id) {
             $this->table_attr["id"] = $this->_table_id;
         }
-        if (!empty($options["attributes"])) {
-            foreach ($options["attributes"] as $n => $v) {
-                $this->table_attr[$n] = $v;
-            }
-        }
-        if (isset($options["fold_session_prefix"])) {
-            $this->table_attr["data-fold-session-prefix"] = $options["fold_session_prefix"];
+        if ($this->_table_fold_session) {
+            $this->table_attr["data-fold-session-prefix"] = $this->_table_fold_session;
             $this->table_attr["data-fold-session"] = json_encode_browser([
                 "2" => "anonau", "4" => "aufull", "5" => "force",
                 "6" => "rownum", "7" => "statistics"
@@ -1816,11 +1879,11 @@ class PaperList implements XtContext {
         if ($this->_sort_etag !== "") {
             $this->table_attr["data-order-tag"] = $this->_sort_etag;
         }
-        if ($options["list"] ?? false) {
+        if (($this->_table_decor & self::DECOR_LIST) !== 0) {
             $this->table_attr["class"][] = "has-hotlist";
             $this->table_attr["data-hotlist"] = $this->session_list_object()->info_string();
         }
-        if ($this->sortable && ($url = $this->search->url_site_relative_raw())) {
+        if ($this->_sortable && ($url = $this->search->url_site_relative_raw())) {
             $url = Navigation::siteurl() . $url . (strpos($url, "?") ? "&" : "?") . "sort={sort}";
             $this->table_attr["data-sort-url-template"] = $url;
         }
@@ -1858,21 +1921,22 @@ class PaperList implements XtContext {
 
         // statistics rows
         $tfoot = "";
-        if (!$this->_view_kanban) {
-            $tfoot = $this->_statistics_rows($rstate, $options["live"] ?? false);
+        if (!$this->_view_kanban && ($this->_table_decor & self::DECOR_STATISTICS) !== 0) {
+            $tfoot = $this->_statistics_rows($rstate);
         }
 
         // analyze folds
         $this->_analyze_folds($rstate);
 
         // header cells
-        if (!($options["noheader"] ?? false)) {
+        if (($this->_table_decor & (self::DECOR_HEADER | self::DECOR_EVERYHEADER)) !== 0) {
             $ths = "";
             foreach ($this->_vcolumns as $fdef) {
                 if ($fdef->as_row) {
                     continue;
                 }
-                if ($fdef->has_content || ($options["fullheader"] ?? false)) {
+                if ($fdef->has_content
+                    || ($this->_table_decor & self::DECOR_EVERYHEADER) !== 0) {
                     $ths .= "<th class=\"pl plh " . $fdef->className;
                     if ($fdef->fold) {
                         $ths .= " fx" . $fdef->fold;
@@ -1937,8 +2001,8 @@ class PaperList implements XtContext {
         // footer
         reset($this->_vcolumns);
         if (current($this->_vcolumns) instanceof Selector_PaperColumn
-            && !($options["nofooter"] ?? false)) {
-            $tfoot .= $this->_footer($ncol, $options["footer_extra"] ?? "", $this->qreq);
+            && ($this->_table_decor & self::DECOR_FOOTER) !== 0) {
+            $tfoot .= $this->_footer($ncol);
         }
         if ($tfoot) {
             $rstate->tfoot = ' <tfoot class="pltable' . ($rstate->hascolors ? " pltable-colored" : "") . '">' . $tfoot . "</tfoot>\n";
@@ -1948,18 +2012,16 @@ class PaperList implements XtContext {
         return $rstate;
     }
 
-    /** @param array{list?:bool,attributes?:array,fold_session_prefix?:string,noheader?:bool,fullheader?:bool,nofooter?:bool,footer_extra?:string,live?:bool} $options
-     * @return PaperListTableRender */
-    function table_render($options = []) {
+    /** @return PaperListTableRender */
+    function table_render() {
         $overrides = $this->user->remove_overrides(Contact::OVERRIDE_CONFLICT);
-        $rstate = $this->_table_render($options);
+        $rstate = $this->_table_render();
         $this->user->set_overrides($overrides);
         return $rstate;
     }
 
-    /** @param array{list?:bool,attributes?:array,fold_session_prefix?:string,noheader?:bool,fullheader?:bool,nofooter?:bool,footer_extra?:string,live?:bool} $options */
-    function echo_table_html($options = []) {
-        $render = $this->table_render($options);
+    function echo_table_html() {
+        $render = $this->table_render();
         if (!$render->error) {
             echo $render->table_start,
                 self::$include_stash ? Ht::unstash() : "",
@@ -1974,11 +2036,10 @@ class PaperList implements XtContext {
         }
     }
 
-    /** @param array{list?:bool,attributes?:array,fold_session_prefix?:string,noheader?:bool,fullheader?:bool,nofooter?:bool,footer_extra?:string,live?:bool} $options
-     * @return string */
-    function table_html($options = []) {
+    /** @return string */
+    function table_html() {
         ob_start();
-        $this->echo_table_html($options);
+        $this->echo_table_html();
         return ob_get_clean();
     }
 
@@ -2092,7 +2153,7 @@ class PaperList implements XtContext {
     }
 
     /** @return array{array<string,string>,list<array<string,string>>} */
-    function text_csv($options = []) {
+    function text_csv() {
         // get column list, check sort
         $this->_prepare();
         $this->_set_vcolumns();

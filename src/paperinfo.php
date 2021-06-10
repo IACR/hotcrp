@@ -511,7 +511,7 @@ class PaperInfo {
     /** @var array<int,?PaperValue> */
     private $_option_array = [];
     /** @var ?array<int,PaperValue> */
-    private $_new_option_array;
+    private $_base_option_array;
     /** @var array<int,DocumentInfo> */
     private $_document_array;
     /** @var ?array<int,array<int,int>> */
@@ -1740,21 +1740,29 @@ class PaperInfo {
 
     /** @param int|PaperOption $o
      * @return PaperValue */
-    function new_option($o) {
+    function base_option($o) {
         $id = is_int($o) ? $o : $o->id;
-        if (!array_key_exists($id, $this->_new_option_array ?? [])) {
-            $this->_new_option_array[$id] = $this->force_option($o);
-        }
-        /** @phan-suppress-next-line PhanTypeArraySuspiciousNullable */
-        return $this->_new_option_array[$id];
+        return $this->_base_option_array[$id] ?? $this->force_option($o);
     }
 
-    function set_new_option(PaperValue $ov) {
-        $this->_new_option_array[$ov->id] = $ov;
+    function override_option(PaperValue $ov) {
+        if (!isset($this->_base_option_array[$ov->id])) {
+            $this->_base_option_array[$ov->id] = $this->force_option($ov->option);
+        }
+        $this->_option_array[$ov->id] = $ov;
+    }
+
+    function remove_option_overrides() {
+        if ($this->_base_option_array !== null) {
+            foreach ($this->_base_option_array as $id => $ov) {
+                $this->_option_array[$id] = $ov;
+            }
+            $this->_base_option_array = null;
+        }
     }
 
     function invalidate_options($reload = false) {
-        assert($this->_new_option_array === null);
+        assert($this->_base_option_array === null);
         $this->optionIds = $this->_option_values = $this->_option_data = null;
         $this->_option_array = [];
         if ($reload) {
@@ -2006,10 +2014,8 @@ class PaperInfo {
         }
 
         $result = $this->conf->qe("select PaperReview.*, " . $this->conf->query_ratings() . " ratingSignature from PaperReview where paperId?a order by paperId, reviewId", $row_set->paper_ids());
-        while (($rrow = ReviewInfo::fetch($result, null, $this->conf))) {
-            $prow = $row_set->get($rrow->paperId);
-            $rrow->set_prow($prow);
-            $prow->_review_array[$rrow->reviewId] = $rrow;
+        while (($rrow = ReviewInfo::fetch($result, $row_set, $this->conf))) {
+            $rrow->prow->_review_array[$rrow->reviewId] = $rrow;
         }
         Dbl::free($result);
 
@@ -2046,6 +2052,12 @@ class PaperInfo {
             $this->load_reviews();
         }
         return $this->_review_array;
+    }
+
+    /** @return array<int,ReviewInfo> */
+    function all_full_reviews() {
+        $this->ensure_full_reviews();
+        return $this->all_reviews();
     }
 
     /** @return list<ReviewInfo> */
@@ -2189,65 +2201,6 @@ class PaperInfo {
     }
 
 
-    /** @return array<int,ReviewInfo>
-     * @deprecated */
-    function reviews_by_id() {
-        return $this->all_reviews();
-    }
-    /** @return list<ReviewInfo>
-     * @deprecated */
-    function reviews_by_id_order() {
-        return $this->reviews_as_list();
-    }
-    /** @return list<ReviewInfo>
-     * @deprecated */
-    function reviews_by_display() {
-        return $this->reviews_as_display();
-    }
-    /** @param int $id
-     * @return ?ReviewInfo
-     * @deprecated */
-    function review_of_id($id) {
-        return $this->review_by_id($id);
-    }
-    /** @param int $ordinal
-     * @return ?ReviewInfo
-     * @deprecated */
-    function review_of_ordinal($ordinal) {
-        return $this->review_by_ordinal($ordinal);
-    }
-    /** @param int|Contact $contact
-     * @return ?ReviewInfo
-     * @deprecated */
-    function review_of_user($contact) {
-        return $this->review_by_user($contact);
-    }
-    /** @param int|Contact $contact
-     * @return list<ReviewInfo>
-     * @deprecated */
-    function reviews_of_user($contact, $rev_tokens = null) {
-        return $this->reviews_by_user($contact, $rev_tokens);
-    }
-    /** @param int|Contact $contact
-     * @return ?ReviewInfo
-     * @deprecated */
-    function viewable_review_of_user($contact, Contact $viewer) {
-        return $this->viewable_review_by_user($contact, $viewer);
-    }
-    /** @param int|string $token
-     * @return ?ReviewInfo
-     * @deprecated */
-    function review_of_token($token) {
-        return $this->review_by_token($token);
-    }
-    /** @param string $textid
-     * @return false|?ReviewInfo
-     * @deprecated */
-    function review_of_textual_id($textid) {
-        return $this->review_by_ordinal_id($textid);
-    }
-
-
     private function ensure_full_review_name() {
         $names = [];
         foreach ($this->_full_review ?? [] as $rrow) {
@@ -2287,10 +2240,8 @@ class PaperInfo {
                 $prow->_full_review_key = "u$cid";
             }
             $result = $this->conf->qe("select PaperReview.*, " . $this->conf->query_ratings() . " ratingSignature from PaperReview where paperId?a and contactId=? order by paperId, reviewId", $row_set->paper_ids(), $cid);
-            while (($rrow = ReviewInfo::fetch($result, null, $this->conf))) {
-                $prow = $row_set->get($rrow->paperId);
-                $rrow->set_prow($prow);
-                $prow->_full_review[] = $rrow;
+            while (($rrow = ReviewInfo::fetch($result, $row_set, $this->conf))) {
+                $rrow->prow->_full_review[] = $rrow;
             }
             Dbl::free($result);
             $this->ensure_full_review_name();
@@ -2334,28 +2285,6 @@ class PaperInfo {
         }
     }
 
-    /** @return ?ReviewInfo
-     * @deprecated */
-    function full_review_of_id($id) {
-        return $this->full_review_by_id($id);
-    }
-    /** @param int|Contact $contact
-     * @return list<ReviewInfo>
-     * @deprecated */
-    function full_reviews_of_user($contact) {
-        return $this->full_reviews_by_user($contact);
-    }
-    /** @return ?ReviewInfo
-     * @deprecated */
-    function full_review_of_ordinal($ordinal) {
-        return $this->full_review_by_ordinal($ordinal);
-    }
-    /** @return ?ReviewInfo
-     * @deprecated */
-    function full_review_of_textual_id($textid) {
-        return $this->full_review_by_ordinal_id($textid);
-    }
-
     /** @return ?ReviewInfo */
     private function fresh_review_by($key, $value) {
         $result = $this->conf->qe("select PaperReview.*, " . $this->conf->query_ratings() . " ratingSignature, ContactInfo.firstName, ContactInfo.lastName, ContactInfo.affiliation, ContactInfo.email, ContactInfo.roles, ContactInfo.contactTags from PaperReview join ContactInfo using (contactId) where paperId=? and $key=? order by paperId, reviewId", $this->paperId, $value);
@@ -2374,16 +2303,6 @@ class PaperInfo {
     function fresh_review_by_user($u) {
         return $this->fresh_review_by("contactId", self::contact_to_cid($u));
     }
-    /** @return ?ReviewInfo
-     * @deprecated */
-    function fresh_review_of_id($id) {
-        return $this->fresh_review_by_id($id);
-    }
-    /** @return ?ReviewInfo
-     * @deprecated */
-    function fresh_review_of_user($contact) {
-        return $this->fresh_review_by_user($contact);
-    }
 
     /** @return list<ReviewInfo> */
     function viewable_reviews_as_display(Contact $viewer) {
@@ -2399,12 +2318,6 @@ class PaperInfo {
             $cinfo->vreviews_version = $this->_review_array_version;
         }
         return $cinfo->vreviews_array;
-    }
-
-    /** @return list<ReviewInfo>
-     * @deprecated */
-    function viewable_reviews_by_display(Contact $viewer) {
-        return $this->viewable_reviews_as_display($viewer);
     }
 
     /** @return bool */
@@ -2713,17 +2626,6 @@ class PaperInfo {
             }
         }
         return $a;
-    }
-
-    /** @return list<ReviewRefusalInfo>
-     * @deprecated */
-    function review_refusals_of_user(Contact $user) {
-        return $this->review_refusals_by_user($user);
-    }
-    /** @return list<ReviewRefusalInfo>
-     * @deprecated */
-    function review_refusals_of_email($email) {
-        return $this->review_refusals_by_email($email);
     }
 
 

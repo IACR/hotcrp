@@ -270,10 +270,10 @@ src/listactions/la_getreviewbase.php
 src/listactions/la_getreviewforms.php
 src/listactions/la_getreviews.php
 src/listactions/la_getreviewcsv.php
-src/listactions/la_getrevpref.php
 src/listactions/la_getscores.php
 src/listactions/la_get_sub.php
 src/listactions/la_mail.php
+src/listactions/la_revpref.php
 src/listactions/la_tag.php
 src/listsorter.php
 src/mailclasses.php
@@ -449,7 +449,7 @@ scripts/buzzer.js
 scripts/emojicodes.json
 scripts/graph.js
 scripts/jquery-1.12.4.min.js
-scripts/jquery-3.5.1.min.js
+scripts/jquery-3.6.0.min.js
 scripts/script.js
 scripts/settings.js
 

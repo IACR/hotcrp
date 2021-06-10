@@ -157,6 +157,9 @@ class PaperValue implements JsonSerializable {
         $this->prow->invalidate_options(true);
         $this->load_value_data();
     }
+    function call($method, ...$args) {
+        return $this->option->$method($this, ...$args);
+    }
 
     /** @param string $name
      * @return bool */
@@ -202,6 +205,10 @@ class PaperValue implements JsonSerializable {
     }
     function warning($msg) {
         $this->msg($msg, MessageSet::WARNING);
+    }
+    /** @return int */
+    function problem_status() {
+        return $this->_ms ? $this->_ms->problem_status() : 0;
     }
     /** @return bool */
     function has_error() {
@@ -334,7 +341,8 @@ class PaperOptionList implements IteratorAggregate {
     function assign_search_keywords($nonpaper, AbbreviationMatcher $am) {
         $cb = [$this, "option_by_id"];
         foreach ($this->option_json_map() as $id => $oj) {
-            if ((($oj->nonpaper ?? false) === true) === $nonpaper) {
+            if (!isset($oj->search_keyword)
+                && (($oj->nonpaper ?? false) === true) === $nonpaper) {
                 if ($oj->name ?? null) {
                     $e = AbbreviationEntry::make_lazy($oj->name, $cb, [$id], Conf::MFLAG_OPTION);
                     $s = $am->ensure_entry_keyword($e, AbbreviationMatcher::KW_CAMEL, Conf::MFLAG_OPTION) ?? false;
@@ -1243,16 +1251,28 @@ class PaperOption implements JsonSerializable {
         $prow->mark_inactive_documents();
     }
 
-    function render(FieldRender $fr, PaperValue $ov) {
+    /** @return bool */
+    function can_render($context) {
+        if (($context & (FieldRender::CFLIST | FieldRender::CFLISTSUGGEST)) !== 0
+            && (!is_string($this->list_class) || $this->search_keyword() === false)) {
+            return false;
+        }
+        if (($context & FieldRender::CFLISTSUGGEST) !== 0
+            && strpos($this->list_class, "pl-no-suggest") !== false) {
+            return false;
+        }
+        if (($context & FieldRender::CFMAIL) !== 0
+            && $this->search_keyword() === false) {
+            return false;
+        }
+        if (($context & FieldRender::CFPAGE) !== 0
+            && $this->display_position === false) {
+            return false;
+        }
+        return true;
     }
 
-    const LIST_DISPLAY_SUGGEST = 1;
-    /** @return bool */
-    function supports_list_display($context = 0) {
-        return is_string($this->list_class)
-            && ($context !== self::LIST_DISPLAY_SUGGEST
-                || strpos($this->list_class, "pl-no-suggest") === false)
-            && $this->search_keyword() !== false;
+    function render(FieldRender $fr, PaperValue $ov) {
     }
 
     /** @return ?FormatSpec */
@@ -1551,6 +1571,9 @@ class Document_PaperOption extends PaperOption {
     function __construct(Conf $conf, $args) {
         parent::__construct($conf, $args);
         $this->list_class = $this->list_class ?? "";
+        if ($this->id === 0 && !$conf->opt("noPapers")) {
+            $this->set_required(true);
+        }
     }
 
     function is_document() {

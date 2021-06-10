@@ -7,8 +7,8 @@ if (!$Me->privChair && !$Me->isPC) {
     $Me->escape();
 }
 
-if (isset($Qreq->default) && $Qreq->defaultact) {
-    $Qreq->fn = $Qreq->defaultact;
+if (isset($Qreq->default) && $Qreq->defaultfn) {
+    $Qreq->fn = $Qreq->defaultfn;
 } else if (isset($Qreq->default)) {
     $Qreq->fn = "saveprefs";
 }
@@ -56,21 +56,12 @@ if ($Qreq->fn
     $Qreq->fn .= "/" . $Qreq[$Qreq->fn . "fn"];
 }
 if (!str_starts_with($Qreq->fn, "get/")
-    && !in_array($Qreq->fn, ["uploadpref", "saveuploadpref", "setpref", "saveprefs"])) {
+    && !in_array($Qreq->fn, ["uploadpref", "tryuploadpref", "applyuploadpref", "setpref", "saveprefs"])) {
     unset($Qreq->fn);
 }
 
-function prefs_hoturl_args() {
-    global $Me, $reviewer;
-    $args = [];
-    if ($reviewer->contactId !== $Me->contactId) {
-        $args["reviewer"] = $reviewer->email;
-    }
-    return $args;
-}
-
 // Update preferences
-function savePreferences($Qreq, $reset_p) {
+function savePreferences($qreq) {
     global $Conf, $Me, $reviewer, $incorrect_reviewer;
     if ($incorrect_reviewer) {
         Conf::msg_error("Preferences not saved.");
@@ -80,7 +71,7 @@ function savePreferences($Qreq, $reset_p) {
     $csvg = new CsvGenerator;
     $csvg->select(["paper", "email", "preference"]);
     $suffix = "u" . $reviewer->contactId;
-    foreach ($Qreq as $k => $v) {
+    foreach ($qreq as $k => $v) {
         if (strlen($k) > 7 && substr($k, 0, 7) == "revpref") {
             if (str_ends_with($k, $suffix)) {
                 $k = substr($k, 0, -strlen($suffix));
@@ -99,130 +90,22 @@ function savePreferences($Qreq, $reset_p) {
     $aset->parse($csvg->unparse());
     if ($aset->execute()) {
         Conf::msg_confirm("Preferences saved.");
-        if ($reset_p) {
-            unset($Qreq->p, $Qreq->pap);
-        }
-        $Conf->redirect_self($Qreq);
+        $Conf->redirect_self($qreq);
     } else {
         Conf::msg_error(join("<br />", $aset->messages_html()));
     }
 }
-if ($Qreq->fn === "saveprefs" && $Qreq->valid_post()) {
-    savePreferences($Qreq, true);
-}
 
-
-// paper selection
+// paper selection, search actions
 global $SSel;
 $SSel = SearchSelection::make($Qreq, $Me);
-SearchSelectioN::clear_request($Qreq);
-
-
-// Set multiple paper preferences
-if ($Qreq->fn === "setpref" && $Qreq->valid_post()) {
-    if (!$SSel->is_empty()) {
-        $new_qreq = new Qrequest($Qreq->method());
-        foreach ($SSel->selection() as $p) {
-            $new_qreq["revpref{$p}u{$reviewer->contactId}"] = $Qreq->pref;
-        }
-        savePreferences($new_qreq, false);
-    } else {
-        Conf::msg_error("No papers selected.");
-    }
-}
-
-
-// Parse paper preferences
-function parseUploadedPreferences($text, $filename, $apply) {
-    global $Conf, $Me, $Qreq, $SSel, $reviewer;
-
-    $text = cleannl($text);
-    $text = preg_replace('/^==-== /m', '#', $text);
-    $csv = new CsvParser($text, CsvParser::TYPE_GUESS);
-    $csv->set_comment_chars("#");
-    $csv->set_filename($filename);
-    $line = $csv->next_list();
-
-    // Parse header
-    if ($line !== null) {
-        if (preg_grep('/\A(?:paper|pid|paper[\s_]*id|id)\z/i', $line)) {
-            $csv->set_header($line);
-        } else {
-            if (count($line) >= 2 && ctype_digit($line[0])) {
-                if (preg_match('/\A\s*\d+\s*[XYZ]?\s*\z/i', $line[1])) {
-                    $csv->set_header(["paper", "preference"]);
-                } else {
-                    $csv->set_header(["paper", "title", "preference"]);
-                }
-            }
-            $csv->unshift($line);
-        }
-    }
-
-    $assignset = new AssignmentSet($Me, true);
-    $assignset->set_search_type("editpref");
-    $assignset->set_reviewer($reviewer);
-    $assignset->enable_actions("pref");
-    if ($apply) {
-        $assignset->enable_papers($SSel->selection());
-    }
-    $assignset->parse($csv, $filename);
-    if ($assignset->is_empty()) {
-        if ($assignset->has_error()) {
-            $Conf->warnMsg("Preferences unchanged, but you may want to fix these errors and try again:\n" . $assignset->messages_div_html(true));
-        } else {
-            $Conf->warnMsg("Preferences unchanged.\n" . $assignset->messages_div_html(true));
-        }
-    } else if ($apply) {
-        if ($assignset->execute(true)) {
-            $Conf->redirect_self($Qreq);
-        }
-    } else {
-        $Conf->header("Review preferences", "revpref");
-        if ($assignset->has_error()) {
-            $Conf->warnMsg($assignset->messages_div_html(true));
-        }
-
-        echo Ht::form($Conf->hoturl_post("reviewprefs", prefs_hoturl_args() + ["fn" => "saveuploadpref"]), ["class" => "alert need-unload-protection"]);
-
-        $actions = Ht::actions([
-            Ht::submit("Apply changes", ["class" => "btn-success"]),
-            Ht::submit("cancel", "Cancel", ["formnovalidate" => true])
-        ], ["class" => "aab aabig"]);
-        if (count($assignset->assigned_pids()) >= 4) {
-            echo $actions;
-        }
-
-        echo '<h3>Proposed preference assignment</h3>';
-        echo '<p>The uploaded file requests the following preference changes.</p>';
-        $assignset->echo_unparse_display();
-
-        echo '<div class="g"></div>', $actions,
-            Ht::hidden("file", $assignset->make_acsv()->unparse()),
-            Ht::hidden("filename", $filename),
-            '</form>', "\n";
-        $Conf->footer();
-        exit;
-    }
-}
-if ($Qreq->fn === "saveuploadpref" && $Qreq->valid_post()) {
-    parseUploadedPreferences($Qreq->file, $Qreq->filename, true);
-} else if ($Qreq->fn === "uploadpref" && $Qreq->valid_post()) {
-    if ($Qreq->has_file("uploadedFile")) {
-        parseUploadedPreferences($Qreq->file_contents("uploadedFile"),
-                             $Qreq->file_filename("uploadedFile"), false);
-    } else {
-        Conf::msg_error("Select a preferences file to upload.");
-    }
-}
-
-
-// Prepare search
+SearchSelection::clear_request($Qreq);
 $Qreq->q = $Qreq->q ?? "";
 $Qreq->t = "editpref";
-
-// Search actions
-if (str_starts_with($Qreq->fn, "get/")) {
+if ($Qreq->fn === "saveprefs") {
+    if ($Qreq->valid_post())
+        savePreferences($Qreq);
+} else if ($Qreq->fn !== null) {
     ListAction::call($Qreq->fn, $Me, $Qreq, $SSel);
 }
 
@@ -251,6 +134,8 @@ $pl->apply_view_report_default();
 $pl->apply_view_session();
 $pl->apply_view_qreq();
 $pl->set_table_id_class("foldpl", "pltable-fullw", "p#");
+$pl->set_table_decor(PaperList::DECOR_HEADER | PaperList::DECOR_FOOTER | PaperList::DECOR_LIST);
+$pl->set_table_fold_session("pfdisplay.");
 
 
 // DISPLAY OPTIONS
@@ -322,7 +207,10 @@ Ht::stash_script("$(\"#showau\").on(\"change\", function () { hotcrp.foldup.call
 
 
 // main form
-$hoturl_args = prefs_hoturl_args();
+$hoturl_args = [];
+if ($reviewer->contactId !== $Me->contactId) {
+    $hoturl_args["reviewer"] = $reviewer->email;
+}
 if ($Qreq->q) {
     $hoturl_args["q"] = $Qreq->q;
 }
@@ -330,13 +218,11 @@ if ($Qreq->sort) {
     $hoturl_args["sort"] = $Qreq->sort;
 }
 echo Ht::form($Conf->hoturl_post("reviewprefs", $hoturl_args), ["id" => "sel", "class" => "ui-submit js-submit-paperlist assignpc"]),
-    Ht::hidden("defaultact", "", array("id" => "defaultact")),
+    Ht::hidden("defaultfn", ""),
     Ht::hidden_default_submit("default", 1);
 echo "<div class=\"pltable-fullw-container\">\n",
-    '<noscript><div style="text-align:center">', Ht::submit("fn", "Save changes", ["value" => "saveprefs"]), '</div></noscript>';
-$pl->echo_table_html(["fold_session_prefix" => "pfdisplay.",
-                      "footer_extra" => "<div id=\"plactr\">" . Ht::submit("fn", "Save changes", ["data-default-submit-all" => 1, "value" => "saveprefs"]) . "</div>",
-                      "list" => true, "live" => true]);
+    '<noscript><div style="text-align:center">', Ht::submit("fn", "Save changes", ["value" => "saveprefs", "class" => "btn-primary"]), '</div></noscript>';
+$pl->echo_table_html();
 echo "</div></form>\n";
 
 $Conf->footer();

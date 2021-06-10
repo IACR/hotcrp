@@ -369,7 +369,7 @@ class Conf {
 
         // update schema
         $this->sversion = $this->settings["allowPaperOption"];
-        if ($this->sversion < 246) {
+        if ($this->sversion < 247) {
             require_once("updateschema.php");
             $old_nerrors = Dbl::$nerrors;
             updateSchema($this);
@@ -2223,16 +2223,7 @@ class Conf {
         return $this->_user_email_cache[$lemail];
     }
 
-    /** @param string $email
-     * @return false|int
-     * @deprecated */
-    function user_id_by_email($email) {
-        $result = $this->qe("select contactId from ContactInfo where email=?", trim($email));
-        $row = $result->fetch_row();
-        Dbl::free($result);
-        return $row ? (int) $row[0] : false;
-    }
-
+    /** @return string */
     private function _cached_user_query() {
         if ($this->_pc_members_fully_loaded) {
             return "*";
@@ -2946,22 +2937,9 @@ class Conf {
         }
     }
 
-    /** @deprecated */
-    function deadlinesAfter($name, $grace = null) {
-        return $this->time_after_setting($name);
-    }
-    /** @deprecated */
-    function deadlinesBetween($name1, $name2, $grace = null) {
-        return $this->time_between_settings($name1, $name2, $grace) > 0;
-    }
-
     /** @return bool */
     function time_start_paper() {
         return $this->time_between_settings("sub_open", "sub_reg", "sub_grace") > 0;
-    }
-    /** @deprecated */
-    function timeStartPaper() {
-        return $this->time_start_paper();
     }
     /** @param ?PaperInfo $prow
      * @return bool */
@@ -2974,10 +2952,6 @@ class Conf {
     function time_finalize_paper($prow = null) {
         return ($this->_pc_see_cache & 4) !== 0
             && (!$prow || $prow->timeSubmitted <= 0 || ($this->_pc_see_cache & 1) === 0);
-    }
-    /** @deprecated */
-    function timeFinalizePaper($prow = null) {
-        return $this->time_finalize_paper($prow);
     }
     /** @return bool */
     function allow_final_versions() {
@@ -3031,10 +3005,6 @@ class Conf {
         }
         return ($isPC ? "pcrev_" : "extrev_") . ($hard ? "hard" : "soft")
             . ($round ? "_$round" : "");
-    }
-    /** @deprecated */
-    function review_deadline($round, $isPC, $hard) {
-        return $this->review_deadline_name($round, $isPC, $hard);
     }
     function missed_review_deadline($round, $isPC, $hard) {
         $rev_open = $this->settings["rev_open"] ?? 0;
@@ -3099,11 +3069,6 @@ class Conf {
     function subBlindAlways() {
         return $this->settings["sub_blind"] === self::BLIND_ALWAYS;
     }
-    /** @return bool
-     * @deprecated */
-    function subBlindNever() {
-        return $this->settings["sub_blind"] === self::BLIND_NEVER;
-    }
 
     function is_review_blind($rrow) {
         $rb = $this->settings["rev_blind"];
@@ -3130,11 +3095,6 @@ class Conf {
     /** @return bool */
     function has_any_submitted() {
         return !($this->settings["no_papersub"] ?? false);
-    }
-    /** @return bool
-     * @deprecated */
-    function has_any_pc_viewable_pdf() {
-        return $this->has_any_submitted();
     }
     /** @return bool */
     function has_any_accepted() {
@@ -3179,10 +3139,6 @@ class Conf {
 
     /** @return bool */
     function time_pc_view_active_submissions() {
-        return ($this->_pc_see_cache & 8) !== 0;
-    }
-    /** @deprecated */
-    function can_pc_see_active_submissions() {
         return ($this->_pc_see_cache & 8) !== 0;
     }
 
@@ -3426,16 +3382,10 @@ class Conf {
     ];
 
     /** @param Qrequest $qreq
-     * @param ?array $param
+     * @param array $param
      * @param int $flags
      * @return string */
-    function selfurl(Qrequest $qreq, $param = null, $flags = 0) {
-        assert(Navigation::page() === null || $qreq->page() === Navigation::page());
-        if ($qreq->page() === "api") {
-            error_log("selfurl for api page: " . debug_string_backtrace());
-        }
-        $param = $param ?? [];
-
+    private function qrequrl($qreq, $param, $flags) {
         $x = [];
         foreach ($qreq as $k => $v) {
             $ak = self::$selfurl_safe[$k] ?? false;
@@ -3459,8 +3409,48 @@ class Conf {
      * @param ?array $param
      * @param int $flags
      * @return string */
+    function selfurl(Qrequest $qreq, $param = null, $flags = 0) {
+        if (!$qreq->page() || $qreq->page() === "api") {
+            error_log("selfurl for bad page: " . debug_string_backtrace());
+        }
+        if (($p = Navigation::page()) !== null && $p !== $qreq->page()) {
+            error_log("selfurl on different page: " . debug_string_backtrace());
+        }
+        return $this->qrequrl($qreq, $param ?? [], $flags);
+    }
+
+    /** @param Qrequest $qreq
+     * @param ?array $param
+     * @param int $flags
+     * @return string */
     function selfurl_absolute(Qrequest $qreq, $param = null, $flags = 0) {
         return $this->selfurl($qreq, $param, $flags | Conf::HOTURL_ABSOLUTE);
+    }
+
+    /** @param Qrequest $qreq
+     * @param ?array $param
+     * @param int $flags
+     * @return string */
+    function site_referrer_url(Qrequest $qreq, $param = null, $flags = 0) {
+        if (($r = $qreq->referrer()) && ($rf = parse_url($r))) {
+            $sup = Navigation::siteurl_path();
+            $path = $rf["path"] ?? "";
+            if ($path !== "" && str_starts_with($path, $sup)) {
+                $xqreq = new Qrequest("GET");
+                $p = substr($path, strlen($sup));
+                if (($slash = strpos($p, "/"))) {
+                    $xqreq->set_page(substr($p, $slash), substr($p, $slash + 1));
+                } else {
+                    $xqreq->set_page($p);
+                }
+                preg_match_all('/([^=;&]+)=([^;&]+)/', $rf["query"] ?? "", $m, PREG_SET_ORDER);
+                foreach ($m as $mx) {
+                    $xqreq[urldecode($mx[1])] = urldecode($mx[2]);
+                }
+                return $this->qrequrl($xqreq, $param ?? [], $flags);
+            }
+        }
+        return $this->selfurl($qreq, $param, $flags);
     }
 
 
@@ -3549,6 +3539,7 @@ class Conf {
         //   "assignments"
         //   "where" => $sql    SQL 'where' clause
         //   "order" => $sql    $sql is SQL 'order by' clause (or empty)
+        //   "limit" => $sql    SQL 'limit' clause
 
         $cxid = $user ? $user->contactXid : -2;
         assert($cxid > 0 || $cxid < -1);
@@ -3747,7 +3738,8 @@ class Conf {
         if (($options["tags"] ?? false) === "require") {
             $pq .= "having paperTags!=''\n";
         }
-        $pq .= ($options["order"] ?? "order by Paper.paperId") . "\n";
+        $pq .= ($options["order"] ?? "order by Paper.paperId") . "\n"
+            . ($options["limit"] ?? "");
 
         //Conf::msg_debugt($pq);
         return $this->qe_raw($pq);
@@ -3980,7 +3972,9 @@ class Conf {
     private function make_jquery_script_file($jqueryVersion) {
         $integrity = null;
         if ($this->opt["jqueryCdn"] ?? $this->opt["jqueryCDN"] ?? false) {
-            if ($jqueryVersion === "3.5.1") {
+            if ($jqueryVersion === "3.6.0") {
+                $integrity = "sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=";
+            } else if ($jqueryVersion === "3.5.1") {
                 $integrity = "sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2";
             } else if ($jqueryVersion === "3.4.1") {
                 $integrity = "sha384-vk5WoKIaW/vJyUAd9n/wmopsmNhiy+L2Z+SBxGYnUkunIxVxAv/UtMOhba/xskxh";
@@ -4116,7 +4110,7 @@ class Conf {
         if (($jqurl = $this->opt["jqueryUrl"] ?? $this->opt["jqueryURL"] ?? null)) {
             Ht::stash_html($this->make_script_file($jqurl, true) . "\n");
         } else {
-            $jqueryVersion = $this->opt["jqueryVersion"] ?? "3.5.1";
+            $jqueryVersion = $this->opt["jqueryVersion"] ?? "3.6.0";
             if ($jqueryVersion[0] === "3") {
                 Ht::stash_html("<!--[if lt IE 9]>" . $this->make_jquery_script_file("1.12.4") . "<![endif]-->\n");
                 Ht::stash_html("<![if !IE|gte IE 9]>" . $this->make_jquery_script_file($jqueryVersion) . "<![endif]>\n");
@@ -4553,7 +4547,7 @@ class Conf {
     // Action recording
     //
 
-    const action_log_query = "insert into ActionLog (ipaddr, contactId, destContactId, trueContactId, paperId, timestamp, action) values ?v";
+    const action_log_query = "insert into ActionLog (ipaddr, contactId, destContactId, trueContactId, paperId, timestamp, action)";
     const action_log_query_action_index = 6;
 
     function save_logs($on) {
@@ -4583,7 +4577,7 @@ class Conf {
                 }
             }
             if (!empty($qv)) {
-                $this->qe(self::action_log_query, $qv);
+                $this->qe(self::action_log_query . " values ?v", $qv);
             }
             $this->_save_logs = null;
         }
@@ -4610,8 +4604,9 @@ class Conf {
     /** @param null|int|Contact $user
      * @param null|int|Contact $dest_user
      * @param string $text
-     * @param null|int|PaperInfo|list<int|PaperInfo> $pids */
-    function log_for($user, $dest_user, $text, $pids = null) {
+     * @param null|int|PaperInfo|list<int|PaperInfo> $pids
+     * @param bool $dedup */
+    function log_for($user, $dest_user, $text, $pids = null, $dedup = false) {
         if (is_object($pids)) {
             $pids = [$pids->paperId];
         } else if (is_array($pids)) {
@@ -4640,7 +4635,14 @@ class Conf {
         $dest_user = self::log_clean_user($dest_user, $text);
 
         if ($this->_save_logs === null) {
-            $this->qe(self::action_log_query, self::format_log_values($text, $user, $dest_user, $true_user, $pids));
+            $values = self::format_log_values($text, $user, $dest_user, $true_user, $pids);
+            if ($dedup && count($values) === 1) {
+                $this->qe_apply(self::action_log_query . " select ?, ?, ?, ?, ?, ?, ? from dual"
+                    . " where (select max(logId) from (select * from ActionLog order by logId desc limit 100) t1 where ipaddr<=>? and contactId<=>? and destContactId<=>? and trueContactId<=>? and paperId<=>? and timestamp>=?-3600 and action<=>?) is null",
+                    array_merge($values[0], $values[0]));
+            } else {
+                $this->qe(self::action_log_query . " values ?v", $values);
+            }
         } else {
             $key = "$user,$dest_user,$true_user|$text";
             if (!isset($this->_save_logs[$key])) {
@@ -5150,7 +5152,7 @@ class Conf {
 
     function _add_mail_template_json($fj) {
         if (isset($fj->name) && is_string($fj->name)) {
-            if (is_array($fj->body)) {
+            if (isset($fj->body) && is_array($fj->body)) {
                 $fj->body = join("", $fj->body);
             }
             return self::xt_add($this->_mail_template_map, $fj->name, $fj);

@@ -7,8 +7,8 @@ if ($Me->is_empty()) {
     $Me->escape();
 }
 
-if (isset($Qreq->default) && $Qreq->defaultact) {
-    $Qreq->fn = $Qreq->defaultact;
+if (isset($Qreq->default) && $Qreq->defaultfn) {
+    $Qreq->fn = $Qreq->defaultfn;
 }
 assert(!$Qreq->ajax);
 
@@ -103,11 +103,13 @@ $pl->apply_view_session();
 $pl->apply_view_qreq();
 if (isset($Qreq->q)) {
     $pl->set_table_id_class("foldpl", "pltable-fullw", "p#");
+    $pl->set_table_decor(PaperList::DECOR_HEADER | PaperList::DECOR_FOOTER | PaperList::DECOR_STATISTICS | PaperList::DECOR_LIST);
+    $pl->set_table_fold_session("pldisplay.");
     if ($SSel->count()) {
         $pl->set_selection($SSel);
     }
     $pl->qopts["options"] = true; // get efficient access to `has(OPTION)`
-    $pl_text = $pl->table_html(["fold_session_prefix" => "pldisplay.", "list" => true, "live" => true]);
+    $pl_text = $pl->table_html();
     unset($Qreq->atab);
 } else {
     $pl_text = null;
@@ -187,7 +189,7 @@ if ($pl_text) {
 
     // Options
     foreach ($Conf->options() as $ox) {
-        if ($ox->supports_list_display(PaperOption::LIST_DISPLAY_SUGGEST)
+        if ($ox->can_render(FieldRender::CFLIST | FieldRender::CFLISTSUGGEST)
             && $pl->has("opt$ox->id")) {
             $display_options->checkbox_item(10, $ox->search_keyword(), $ox->name);
         }
@@ -451,7 +453,7 @@ if ($pl_text) {
 
     if ($pl->has("sel")) {
         echo Ht::form($Conf->selfurl($Qreq, ["post" => post_value(), "forceShow" => null]), ["id" => "sel", "class" => "ui-submit js-submit-paperlist"]),
-            Ht::hidden("defaultact", "", ["id" => "defaultact"]),
+            Ht::hidden("defaultfn", ""),
             Ht::hidden("forceShow", (string) $Qreq->forceShow, ["id" => "forceShow"]),
             Ht::hidden_default_submit("default", 1);
     }

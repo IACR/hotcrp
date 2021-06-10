@@ -53,6 +53,7 @@ class LoginHelper {
         }
     }
 
+    /** @return array|Contact */
     static private function user_lookup(Conf $conf, Qrequest $qreq) {
         // Look up the account information
         // to determine if the user is registered
@@ -67,7 +68,7 @@ class LoginHelper {
             }
         }
         return $conf->user_by_email($qreq->email)
-            ? : new Contact(["email" => $qreq->email], $conf);
+            ?? new Contact(["email" => $qreq->email], $conf);
     }
 
     static function login_info(Conf $conf, Qrequest $qreq) {
@@ -142,8 +143,8 @@ class LoginHelper {
             $url .= "u/" . Contact::session_user_index($user->email) . "/";
         }
         $url .= "?postlogin=1";
-        if ($qreq->go !== null) {
-            $url .= "&go=" . urlencode($qreq->go);
+        if ($qreq->redirect !== null && $qreq->redirect !== "1") {
+            $url .= "&redirect=" . urlencode($qreq->redirect);
         }
 
         $info["user"] = $user;
@@ -197,8 +198,8 @@ class LoginHelper {
         unset($_SESSION["testsession"]);
 
         // Go places
-        if (isset($qreq->go)) {
-            $where = $qreq->go;
+        if (isset($qreq->redirect)) {
+            $where = $qreq->redirect;
         } else if (isset($_SESSION["login_bounce"])
                    && $_SESSION["login_bounce"][0] == $user->conf->dsn) {
             $where = $_SESSION["login_bounce"][1];

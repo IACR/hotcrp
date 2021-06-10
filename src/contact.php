@@ -1769,6 +1769,7 @@ class Contact {
         return $old_roles !== $new_roles;
     }
 
+    /** @param Contact|Author|object $reg */
     function import_prop($reg) {
         if ($reg instanceof Contact) {
             foreach (self::$props as $prop => $shape) {
@@ -1789,6 +1790,8 @@ class Contact {
         }
     }
 
+    /** @param ?Contact $actor
+     * @return ?Contact */
     static function create(Conf $conf, $actor, $reg, $flags = 0, $roles = 0) {
         // clean registration
         if (is_array($reg)) {
@@ -2194,17 +2197,31 @@ class Contact {
         }
     }
 
-    function log_activity($text, $paperId = null) {
+    /** @param string $text
+     * @param null|int|PaperInfo|list<int|PaperInfo> $pids */
+    function log_activity($text, $pids = null) {
         $this->mark_activity();
         if (!$this->is_anonymous_user()) {
-            $this->conf->log_for($this, $this, $text, $paperId);
+            $this->conf->log_for($this, $this, $text, $pids);
         }
     }
 
-    function log_activity_for($user, $text, $paperId = null) {
+    /** @param null|int|Contact $dest_user
+     * @param string $text
+     * @param null|int|PaperInfo|list<int|PaperInfo> $pids */
+    function log_activity_for($dest_user, $text, $pids = null) {
         $this->mark_activity();
         if (!$this->is_anonymous_user()) {
-            $this->conf->log_for($this, $user, $text, $paperId);
+            $this->conf->log_for($this, $dest_user, $text, $pids);
+        }
+    }
+
+    /** @param string $text
+     * @param null|int|PaperInfo|list<int|PaperInfo> $pids */
+    function log_activity_dedup($text, $pids = null) {
+        $this->mark_activity();
+        if (!$this->is_anonymous_user()) {
+            $this->conf->log_for($this, $this, $text, $pids, true);
         }
     }
 
@@ -2767,7 +2784,6 @@ class Contact {
             $rights = $this->rights($prow);
             return $rights->allow_administer;
         } else {
-            error_log(debug_string_backtrace());
             return $this->privChair;
         }
     }
@@ -3509,7 +3525,9 @@ class Contact {
             return false;
         }
         $oview = $opt->visibility();
-        return $this->is_author()
+        return $oview === PaperOption::VIS_SUB
+            || $this->privChair
+            || $this->is_author()
             || ($oview === PaperOption::VIS_ADMIN && $this->is_manager())
             || ($oview === PaperOption::VIS_AUTHOR && $this->can_view_some_authors())
             || ($oview === PaperOption::VIS_CONFLICT && $this->can_view_some_conflicts())
@@ -3655,7 +3673,7 @@ class Contact {
         }
         $seerev = $this->seerev_setting($prow, $rrow, $rights);
         if ($rrow) {
-            $viewscore = min($viewscore, $rrow->reviewViewScore);
+            $viewscore = min($viewscore, $rrow->view_score());
         }
         // See also PaperInfo::can_view_review_identity_of.
         return ($rights->act_author_view
@@ -3848,7 +3866,8 @@ class Contact {
             && $this->conf->check_any_tracks($this, Track::UNASSREV);
     }
 
-    function timeReview(PaperInfo $prow, ReviewInfo $rrow = null) {
+    /** @return bool */
+    function time_review(PaperInfo $prow, ReviewInfo $rrow = null) {
         $rights = $this->rights($prow);
         if ($rights->reviewType > 0
             || ($rrow
@@ -4057,19 +4076,6 @@ class Contact {
             }
         }
         return $whyNot;
-    }
-
-    /** @return bool
-     * @deprecated */
-    function can_review(PaperInfo $prow, ReviewInfo $rrow = null, $submit = false) {
-        return $this->can_edit_review($prow, $rrow, $submit);
-    }
-
-    /** @param ?ReviewInfo $rrow
-     * @return ?PermissionProblem
-     * @deprecated */
-    function perm_review(PaperInfo $prow, $rrow, $submit = false) {
-        return $this->perm_edit_review($prow, $rrow, $submit);
     }
 
     /** @param ?ReviewInfo $rrow
@@ -4558,12 +4564,17 @@ class Contact {
 
         // conflict checks
         $tag = Tagger::base($tag);
-        $dt = $this->conf->tags();
+        $tagmap = $this->conf->tags();
         if ($prow) {
             $rights = $this->rights($prow);
-            if (!($rights->allow_pc
-                  || ($rights->allow_pc_broad && $this->conf->tag_seeall)
-                  || ($this->privChair && $dt->is_sitewide($tag)))) {
+            if (!$rights->allow_pc
+                && (!$this->privChair
+                    || !$tagmap->has_sitewide
+                    || !$tagmap->is_sitewide($tag))
+                && (!$rights->allow_pc_broad
+                    || (!$this->conf->tag_seeall
+                        && (!$tagmap->has_conflict_free
+                            || !$tagmap->is_conflict_free($tag))))) {
                 return false;
             }
             $allow_administer = $rights->allow_administer;
@@ -4578,10 +4589,10 @@ class Contact {
                 || ($twiddle === 0 && $tag[1] !== "~")
                 || ($twiddle > 0
                     && (substr($tag, 0, $twiddle) == $this->contactId
-                        || $dt->is_public_peruser(substr($tag, $twiddle + 1)))))
+                        || $tagmap->is_public_peruser(substr($tag, $twiddle + 1)))))
             && ($twiddle !== false
-                || !$dt->has_hidden
-                || !$dt->is_hidden($tag)
+                || !$tagmap->has_hidden
+                || !$tagmap->is_hidden($tag)
                 || $this->can_view_hidden_tags($prow));
     }
 
@@ -4602,16 +4613,6 @@ class Contact {
             || ($this->isPC && $this->conf->tags()->has_public_peruser);
     }
 
-    /** @deprecated */
-    function can_change_tag(PaperInfo $prow, $tag, $previndex, $index) {
-        return $this->can_edit_tag($prow, $tag, $previndex, $index);
-    }
-
-    /** @deprecated */
-    function perm_change_tag(PaperInfo $prow, $tag, $previndex, $index) {
-        return $this->perm_edit_tag($prow, $tag, $previndex, $index);
-    }
-
     /** @param string $tag
      * @return bool */
     function can_edit_tag(PaperInfo $prow, $tag, $previndex, $index) {
@@ -4622,41 +4623,45 @@ class Contact {
         }
         $rights = $this->rights($prow);
         $tagmap = $this->conf->tags();
-        if (!($rights->allow_pc
-              && ($rights->can_administer || $this->conf->time_pc_view($prow, false)))) {
+        if (!$rights->allow_pc_broad
+            || (!$rights->allow_pc && !$tagmap->has_conflict_free)
+            || (!$rights->can_administer && !$this->conf->time_pc_view($prow, false))) {
             if ($this->privChair && $tagmap->has_sitewide) {
-                $dt = $tagmap->check($tag);
-                return $dt && $dt->sitewide && !$dt->automatic;
+                $tag = Tagger::base($tag);
+                $tw = strpos($tag, "~");
+                return ($tw === false || ($tw === 0 && $tag[1] === "~"))
+                    && ($t = $tagmap->check($tag))
+                    && $t->sitewide
+                    && !$t->automatic;
             } else {
                 return false;
             }
         }
         $tag = Tagger::base($tag);
-        $twiddle = strpos($tag, "~");
-        if ($twiddle !== false) {
-            if ($twiddle > 0
-                && substr($tag, 0, $twiddle) != $this->contactId
-                && !$rights->can_administer) {
-                return false;
-            } else if ($twiddle === 0
-                       && $tag[1] === "~") {
-                return $rights->can_administer && !$tagmap->is_automatic($tag);
-            } else {
-                return !($index < 0) || !$tagmap->is_allotment(substr($tag, $twiddle + 1));
-            }
-        } else {
+        $tw = strpos($tag, "~");
+        if ($tw === false || ($tw === 0 && $tag[1] === "~")) {
             $t = $tagmap->check($tag);
-            if (!$t) {
-                return true;
-            } else if ($t->automatic
-                       || ($t->track && !$this->privChair)
-                       || ($t->hidden && !$this->can_view_hidden_tags($prow))) {
-                return false;
-            } else {
-                return $rights->can_administer
-                    || ($this->privChair && $t->sitewide)
-                    || (!$t->readonly && !$t->rank);
-            }
+            return ($rights->allow_pc
+                    || ($t && $t->conflict_free))
+                && ($tw === false || $this->privChair)
+                && (!$t || !$t->automatic)
+                && (!$t || !$t->track || $this->privChair)
+                && (!$t || !$t->hidden || $this->can_view_hidden_tags($prow))
+                && (!$t
+                    || (!$t->readonly && !$t->rank)
+                    || $rights->can_administer
+                    || ($this->privChair && $t->sitewide));
+        } else {
+            $t = $tagmap->check(substr($tag, $tw + 1));
+            return ($rights->allow_pc
+                    || ($t && $t->conflict_free))
+                && ($tw === 0
+                    || $rights->can_administer
+                    || ($tw === strlen((string) $this->contactId)
+                        && str_starts_with($tag, (string) $this->contactId)))
+                && (!($index < 0)
+                    || !$t
+                    || !$t->allotment);
         }
     }
 
@@ -4705,16 +4710,6 @@ class Contact {
         return $whyNot;
     }
 
-    /** @deprecated */
-    function can_change_some_tag(PaperInfo $prow = null) {
-        return $this->can_edit_some_tag($prow);
-    }
-
-    /** @deprecated */
-    function perm_change_some_tag(PaperInfo $prow = null) {
-        return $this->perm_edit_some_tag($prow);
-    }
-
     /** @return bool */
     function can_edit_some_tag(PaperInfo $prow = null) {
         if (($this->_overrides & self::OVERRIDE_TAG_CHECKS)
@@ -4750,11 +4745,6 @@ class Contact {
             $whyNot["forceShow"] = true;
         }
         return $whyNot;
-    }
-
-    /** @deprecated */
-    function can_change_most_tags(PaperInfo $prow = null) {
-        return $this->can_edit_most_tags($prow);
     }
 
     /** @return bool */
@@ -4796,11 +4786,6 @@ class Contact {
                     && (!$t->track || $this->privChair)
                     && (!$t->readonly || $this->is_manager()));
         }
-    }
-
-    /** @deprecated */
-    function can_change_tag_anno($tag) {
-        return $this->can_edit_tag_anno($tag);
     }
 
     /** @param string $tag

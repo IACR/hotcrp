@@ -13,7 +13,7 @@ $Conf->site_contact();
 // header
 function assign_show_header() {
     global $paperTable, $Qreq;
-    PaperTable::do_header($paperTable, "assign", "assign", $Qreq);
+    PaperTable::echo_header($paperTable, "assign", "assign", $Qreq);
 }
 
 
@@ -25,7 +25,7 @@ function assign_load() {
         $pr = new PaperRequest($Me, $Qreq, true);
         $prow = $Conf->paper = $pr->prow;
         if (($whynot = $Me->perm_request_review($prow, null, false))) {
-            $paperTable = new PaperTable($Me, $Qreq, $prow, "assign");
+            $paperTable = new PaperTable($Me, $Qreq, $prow);
             throw $whynot;
         }
         return $prow;
@@ -110,7 +110,7 @@ function pcAssignments($qreq) {
     $aset->parse(join("", $t));
     if ($aset->execute()) {
         if ($qreq->ajax) {
-            json_exit(["ok" => true]);
+            json_exit($aset->json_result());
         } else {
             $Conf->confirmMsg("Assignments saved." . $aset->messages_div_html());
             $Conf->redirect_self($qreq);
@@ -119,7 +119,7 @@ function pcAssignments($qreq) {
         }
     } else {
         if ($qreq->ajax) {
-            json_exit(["ok" => false, "error" => join("<br />", $aset->messages_html())]);
+            json_exit($aset->json_result());
         } else {
             $Conf->errorMsg(join("<br />", $aset->messages_html()));
         }
@@ -217,8 +217,7 @@ if (isset($Qreq->undeclinereview)
 
 
 // paper table
-$paperTable = new PaperTable($Me, $Qreq, $prow, "assign");
-$paperTable->initialize(false, false);
+$paperTable = new PaperTable($Me, $Qreq, $prow);
 $paperTable->resolve_review(false);
 $allow_view_authors = $Me->allow_view_authors($prow);
 
@@ -226,11 +225,11 @@ assign_show_header();
 
 
 // begin form and table
-$paperTable->paptabBegin();
+$paperTable->echo_paper_info();
 
 
 // reviewer information
-$t = $paperTable->review_table(null);
+$t = $paperTable->review_table();
 if ($t !== "") {
     echo '<div class="pcard revcard">',
         '<div class="revcard-head"><h2>Reviews</h2></div>',

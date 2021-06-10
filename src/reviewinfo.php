@@ -40,9 +40,7 @@ class ReviewInfo implements JsonSerializable {
     /** @var int */
     public $reviewNeedsSubmit;
     /** @var int */
-    public $reviewViewScore;
-    /** @var bool */
-    public $reviewViewScore_recomputed = false;
+    private $reviewViewScore;
     /** @var int */
     public $reviewStatus;
 
@@ -134,6 +132,10 @@ class ReviewInfo implements JsonSerializable {
     public $lastLogin;
     /** @var ?string */
     public $ratingSignature;
+
+    // other
+    /** @var ?list<MessageItem> */
+    public $message_list;
 
     const VIEWSCORE_RECOMPUTE = -100;
 
@@ -266,10 +268,11 @@ class ReviewInfo implements JsonSerializable {
         return $rrow;
     }
 
-    private function merge($is_full, PaperInfo $prow = null, Conf $conf = null) {
+    private function merge(PaperInfo $prow = null, Conf $conf = null) {
         $this->conf = $conf ?? $prow->conf;
         $this->prow = $prow;
         $this->paperId = (int) $this->paperId;
+        assert($prow === null || $this->paperId === $prow->paperId);
         $this->reviewId = (int) $this->reviewId;
         $this->contactId = (int) $this->contactId;
         $this->reviewToken = (int) $this->reviewToken;
@@ -363,13 +366,6 @@ class ReviewInfo implements JsonSerializable {
         if ($this->roles !== null) {
             $this->roles = (int) $this->roles;
         }
-
-        if ($this->reviewViewScore == self::VIEWSCORE_RECOMPUTE) {
-            $this->reviewViewScore_recomputed = true;
-            if ($is_full) {
-                $this->reviewViewScore = $conf->review_form()->nonempty_view_score($this);
-            }
-        }
     }
 
     function upgrade_sversion() {
@@ -383,12 +379,14 @@ class ReviewInfo implements JsonSerializable {
         }
     }
 
-    /** @return ?ReviewInfo */
-    static function fetch($result, PaperInfo $prow = null, Conf $conf = null) {
+    /** @param PaperInfo|PaperInfoSet|null $prowx
+     * @return ?ReviewInfo */
+    static function fetch($result, $prowx = null, Conf $conf = null) {
         $rrow = $result ? $result->fetch_object("ReviewInfo") : null;
         '@phan-var ?ReviewInfo $rrow';
         if ($rrow) {
-            $rrow->merge(true, $prow, $conf);
+            $prow = $prowx instanceof PaperInfoSet ? $prowx->get((int) $rrow->paperId) : $prowx;
+            $rrow->merge($prow, $conf);
         }
         return $rrow;
     }
@@ -429,7 +427,7 @@ class ReviewInfo implements JsonSerializable {
             $rrow->$fid = (int) substr($vals[$i], $eq + 1);
             $prow->_mark_has_score($fid);
         }
-        $rrow->merge(false, $prow, $prow->conf);
+        $rrow->merge($prow, $prow->conf);
         return $rrow;
     }
 
@@ -568,6 +566,20 @@ class ReviewInfo implements JsonSerializable {
         } else {
             return "new";
         }
+    }
+
+    /** @return bool */
+    function need_view_score() {
+        return $this->reviewViewScore === self::VIEWSCORE_RECOMPUTE;
+    }
+
+    /** @return int */
+    function view_score() {
+        if ($this->reviewViewScore === self::VIEWSCORE_RECOMPUTE) {
+            assert($this->prow);
+            $this->reviewViewScore = $this->prow->conf->review_form()->nonempty_view_score($this);
+        }
+        return $this->reviewViewScore;
     }
 
 

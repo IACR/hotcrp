@@ -17,6 +17,9 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     private $____page;
     /** @var ?string */
     private $____path;
+    /** @var ?string */
+    private $____referrer;
+    /** @param string $method */
     function __construct($method, $data = null) {
         $this->____method = $method;
         if ($data) {
@@ -25,12 +28,24 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
             }
         }
     }
+    /** @param Qrequest $qreq
+     * @return Qrequest */
+    static function empty_clone($qreq) {
+        $qreq2 = new Qrequest($qreq->____method);
+        return $qreq2->set_page($qreq->____page, $qreq->____path);
+    }
     /** @param string $page
      * @param ?string $path
      * @return $this */
     function set_page($page, $path = null) {
         $this->____page = $page;
         $this->____path = $path;
+        return $this;
+    }
+    /** @param ?string $referrer
+     * @return $this */
+    function set_referrer($referrer) {
+        $this->____referrer = $referrer;
         return $this;
     }
     /** @return string */
@@ -69,6 +84,11 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         return null;
     }
+    /** @return ?string */
+    function referrer() {
+        return $this->____referrer;
+    }
+
     function offsetExists($offset) {
         return property_exists($this, $offset);
     }
@@ -143,7 +163,7 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     }
     /** @return int */
     function count() {
-        return count(get_object_vars($this)) - 8;
+        return count(get_object_vars($this)) - 9;
     }
     function jsonSerialize() {
         return $this->as_array();
@@ -185,14 +205,17 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     function contains($key) {
         return property_exists($this, $key);
     }
-    /** @param string $name */
+    /** @param string $name
+     * @return $this */
     function set_file($name, $finfo) {
         $this->____files[$name] = $finfo;
+        return $this;
     }
     /** @param string $name
      * @param string $content
      * @param ?string $filename
-     * @param ?string $mimetype */
+     * @param ?string $mimetype
+     * @return $this */
     function set_file_content($name, $content, $filename = null, $mimetype = null) {
         $this->____files[$name] = [
             "name" => $filename ?? "__set_file_content.$name",
@@ -201,6 +224,7 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
             "content" => $content,
             "error" => 0
         ];
+        return $this;
     }
     /** @return bool */
     function has_files() {
@@ -303,14 +327,6 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
     function valid_token() {
         return $this->____post_ok;
     }
-    /** @deprecated
-     * @return bool */
-    function post_ok() {
-        if ($this->____post_ok && $this->____method !== "POST") {
-            error_log("Qrequest::post_ok() on {$this->____method}");
-        }
-        return $this->____post_ok;
-    }
     /** @return bool */
     function valid_post() {
         if ($this->____post_ok && $this->____method !== "POST") {
@@ -358,6 +374,9 @@ class Qrequest implements ArrayAccess, IteratorAggregate, Countable, JsonSeriali
         }
         if (empty($_POST)) {
             $qreq->set_post_empty();
+        }
+        if (isset($_SERVER["HTTP_REFERER"])) {
+            $qreq->set_referrer($_SERVER["HTTP_REFERER"]);
         }
 
         // $_FILES requires special processing since we want error messages.

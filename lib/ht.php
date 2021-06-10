@@ -334,10 +334,11 @@ class Ht {
             $js = $value;
             $value = null;
         } else if ($js === null) {
-            $js = array();
+            $js = [];
         }
-        $js["class"] = trim(($js["class"] ?? "") . " hidden");
-        return self::submit($name, $value, $js);
+        $js["class"] = trim(($js["class"] ?? "") . " pseudohidden");
+        $js["value"] = $value;
+        return self::submit($name, "", $js);
     }
 
     private static function apply_placeholder(&$value, &$js) {
@@ -565,12 +566,6 @@ class Ht {
         return self::unstash();
     }
 
-    /** @return string
-     * @deprecated */
-    static function take_stash() {
-        return self::unstash();
-    }
-
 
     static function contextual_diagnostic($s, $pos1, $pos2, $message, $status = null) {
         $klass = $status && $status === 1 ? "is-warning" : "is-error";
@@ -678,9 +673,5 @@ class Ht {
             $t .= '<p class="' . MessageSet::status_class($mx->status, "feedback", "is-") . '">' . $mx->message . '</p>';
         }
         return $t;
-    }
-    /** @deprecated */
-    static function render_feedback_at($field) {
-        return self::feedback_at($field);
     }
 }

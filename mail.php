@@ -10,6 +10,11 @@ if (!$Me->is_manager() && !$Me->isPC) {
 if (isset($Qreq->recipients) && !isset($Qreq->to)) {
     $Qreq->to = $Qreq->recipients;
 }
+if (isset($Qreq->loadtmpl)
+    || isset($Qreq->psearch)
+    || (isset($Qreq->default) && $Qreq->defaultfn === "recheck")) {
+    $Qreq->recheck = 1;
+}
 
 // load mail from log
 if (isset($Qreq->fromlog)
@@ -31,7 +36,7 @@ if (isset($Qreq->fromlog)
 }
 
 // create options
-$tOpt = array();
+$tOpt = [];
 if ($Me->privChair) {
     $tOpt["s"] = "Submitted papers";
     if ($Conf->time_pc_view_decision(false) && $Conf->has_any_accepted()) {
@@ -71,7 +76,7 @@ $null_mailer = new HotCRPMailer($Conf, null, array_merge(["width" => false], $ma
 if (isset($Qreq->monreq)) {
     $Qreq->template = "myreviewremind";
 }
-if (isset($Qreq->template) && !isset($Qreq->check)) {
+if (isset($Qreq->template) && !isset($Qreq->check) && !isset($Qreq->default)) {
     $Qreq->loadtmpl = -1;
 }
 
@@ -89,21 +94,23 @@ if (isset($Qreq->p) && is_string($Qreq->p)) {
 // It's OK to just set $Qreq->p from the input without
 // validation because MailRecipients filters internally
 if (isset($Qreq->prevt) && isset($Qreq->prevq)) {
-    if (!isset($Qreq->plimit))
+    if (!isset($Qreq->plimit)) {
         unset($Qreq->p);
-    else if (($Qreq->prevt !== $Qreq->t || $Qreq->prevq !== $Qreq->q)
-             && !isset($Qreq->psearch)) {
+    } else if (($Qreq->prevt !== $Qreq->t || $Qreq->prevq !== $Qreq->q)
+               && !isset($Qreq->recheck)) {
         $Conf->warnMsg("You changed the paper search. Please review the paper list.");
         $Qreq->psearch = true;
     }
 }
 $papersel = null;
-if (isset($Qreq->p) && is_array($Qreq->p)
-    && !isset($Qreq->psearch)) {
-    $papersel = array();
-    foreach ($Qreq->p as $p)
+if (isset($Qreq->p)
+    && is_array($Qreq->p)
+    && !isset($Qreq->recheck)) {
+    $papersel = [];
+    foreach ($Qreq->p as $p) {
         if (($p = cvtint($p)) > 0)
             $papersel[] = $p;
+    }
     sort($papersel);
     $Qreq->q = join(" ", $papersel);
     $Qreq->plimit = 1;
@@ -117,7 +124,7 @@ if (isset($Qreq->p) && is_array($Qreq->p)
 
 // Load template if requested
 if (isset($Qreq->loadtmpl)) {
-    $t = $Qreq->get("template", "generic");
+    $t = $Qreq->get("template") ?? "generic";
     $template = (array) $Conf->mail_template($t);
     if (((!isset($template["title"]) || $template["title"] === false)
          && !isset($template["allow_template"]))
@@ -155,8 +162,7 @@ $recip = new MailRecipients($Me, $Qreq->to, $papersel, $Qreq->newrev_since);
 // warn if no papers match
 if (isset($papersel)
     && empty($papersel)
-    && !isset($Qreq->loadtmpl)
-    && !isset($Qreq->psearch)
+    && !isset($Qreq->recheck)
     && $recip->need_papers()) {
     Conf::msg_error("No papers match that search.");
     unset($papersel);
@@ -237,16 +243,18 @@ class MailSender {
     }
 
     private function echo_actions($extra_class = "") {
-        echo '<div class="aa', $extra_class, '">',
-            Ht::submit("send", "Send", ["class" => "btn-highlight mr-3"]),
-            ' &nbsp; ';
-        $class = $this->groupable ? "" : " hidden";
+        echo '<div class="aab aabig mt-3', $extra_class, '">',
+            '<div class="aabut">', Ht::submit("send", "Send", ["class" => "btn-success"]), '</div>',
+            '<div class="aabut">', Ht::submit("cancel", "Cancel"), '</div>',
+            '<div class="aabut ml-3 need-tooltip', $this->groupable ? " hidden" : "", '" id="mail-group-disabled" data-tooltip="These messages cannot be gathered because their contents differ.">', Ht::submit("group", "Gather recipients", ["disabled" => true]), '</div>',
+            '<div class="aabut ml-3', $this->groupable ? "" : " hidden", '" id="mail-group-enabled">';
         if (!$this->qreq->group && $this->qreq->ungroup) {
-            echo Ht::submit("group", "Gather recipients", ["class" => "mail_groupable" . $class]);
+            echo Ht::submit("group", "Gather recipients");
         } else {
-            echo Ht::submit("ungroup", "Separate recipients", ["class" => "mail_groupable" . $class]);
+            echo Ht::submit("ungroup", "Separate recipients");
         }
-        echo ' &nbsp; ', Ht::submit("cancel", "Cancel"), '</div>';
+        echo '</div></div>';
+        Ht::stash_script('$(".need-tooltip").each(tooltip)');
     }
 
     private function echo_request_form($include_cb) {
@@ -335,7 +343,7 @@ class MailSender {
             . plural($this->mrecipients, "recipient");
         $s .= "document.getElementById('mailinfo').innerHTML=\"<span class='barsep'>·</span>" . $m . "\";";
         if (!$this->sending && $this->groupable) {
-            $s .= "\$('.mail_groupable').show();";
+            $s .= "\$('#mail-group-disabled').addClass('hidden');\$('#mail-group-enabled').removeClass('hidden')";
         }
         echo Ht::unstash_script($s);
     }
@@ -417,7 +425,7 @@ class MailSender {
         $nprintrows = 0;
         foreach (["To", "cc", "bcc", "reply-to", "Subject"] as $k) {
             if ($k == "To") {
-                $vh = array();
+                $vh = [];
                 foreach ($show_prep->to as $to) {
                     $vh[] = htmlspecialchars(MimeText::decode_header($to));
                 }
@@ -500,8 +508,8 @@ class MailSender {
         $nrows_done = 0;
         $nrows_total = $result->num_rows;
         $nwarnings = 0;
-        $preperrors = array();
-        $revinform = ($this->recipients == "newpcrev" ? array() : null);
+        $preperrors = [];
+        $revinform = ($this->recipients === "newpcrev" ? [] : null);
         while (($rowdata = $result->fetch_assoc())) {
             $row = new PaperInfo($rowdata, $this->user, $this->conf);
             $contact = new Contact($rowdata, $this->conf);
@@ -593,9 +601,8 @@ if (isset($Qreq->monreq)) {
 
 
 // Check or send
-if (!$Qreq->loadtmpl
+if (!$Qreq->recheck
     && !$Qreq->cancel
-    && !$Qreq->psearch
     && !$Qreq->again
     && !$recip->error
     && $Qreq->valid_token()) {
@@ -616,7 +623,8 @@ if (isset($Qreq->monreq)) {
         $Conf->infoMsg('You have not requested any external reviews.  <a href="' . hoturl("index") . '">Return home</a>');
     } else {
         echo "<h2>Requested reviews</h2>\n\n";
-        $plist->echo_table_html(["list" => true]);
+        $plist->set_table_decor(PaperList::DECOR_HEADER | PaperList::DECOR_LIST);
+        $plist->echo_table_html();
         echo '<div class="info">';
         if ($plist->has("need_review")) {
             echo "Some of your requested external reviewers have not completed their reviews.  To send them an email reminder, check the text below and then select &ldquo;Prepare mail.&rdquo;  You’ll get a chance to review the emails and select specific reviewers to remind.";
@@ -632,6 +640,7 @@ if (isset($Qreq->monreq)) {
 }
 
 echo Ht::form($Conf->hoturl_post("mail", "check=1")),
+    Ht::hidden("defaultfn", ""),
     Ht::hidden_default_submit("default", 1), '
 
 <div class="aa" style="padding-left:8px">
@@ -667,35 +676,37 @@ echo '<tr><td class="mhnp nw"><label for="to">To:</label></td><td class="mhdd">'
 
 // paper selection
 echo '<table class="fx9"><tr>';
-if ($Me->privChair)
+if ($Me->privChair) {
     echo '<td class="nw">',
         Ht::checkbox("plimit", 1, isset($Qreq->plimit), ["id" => "plimit"]),
         "&nbsp;</td><td>", Ht::label("Choose papers", "plimit"),
         "<span class=\"fx8\">:&nbsp; ";
-else
+} else {
     echo '<td class="nw">Papers: &nbsp;</td><td>',
         Ht::hidden("plimit", 1), '<span>';
+}
 echo Ht::entry("q", (string) $Qreq->q, [
         "id" => "q", "placeholder" => "(All)", "spellcheck" => false,
-        "class" => "papersearch need-suggest", "size" => 36
+        "class" => "papersearch need-suggest js-autosubmit", "size" => 36,
+        "data-submit-fn" => "recheck"
     ]), " &nbsp;in&nbsp;";
 if (count($tOpt) == 1) {
     echo htmlspecialchars($tOpt[$Qreq->t]);
 } else {
-    echo " ", Ht::select("t", $tOpt, $Qreq->t, array("id" => "t"));
+    echo " ", Ht::select("t", $tOpt, $Qreq->t, ["id" => "t"]);
 }
 echo " &nbsp;", Ht::submit("psearch", "Search");
 echo "</span>";
 if (isset($Qreq->plimit)
     && !isset($Qreq->monreq)
-    && (isset($Qreq->loadtmpl) || isset($Qreq->psearch))) {
+    && isset($Qreq->recheck)) {
     $plist = new PaperList("reviewers", new PaperSearch($Me, ["t" => $Qreq->t, "q" => $Qreq->q]));
     echo "<div class=\"fx8";
     if ($plist->is_empty()) {
         echo "\">No papers match that search.";
     } else {
         echo " g\">";
-        $plist->echo_table_html(["noheader" => true, "nofooter" => true]);
+        $plist->echo_table_html();
     }
     echo '</div>', Ht::hidden("prevt", $Qreq->t),
         Ht::hidden("prevq", $Qreq->q);
@@ -707,7 +718,7 @@ if (!$Qreq->newrev_since && ($t = $Conf->setting("pcrev_informtime")))
     $Qreq->newrev_since = $Conf->parseableTime($t, true);
 echo 'Assignments since:&nbsp; ',
     Ht::entry("newrev_since", $Qreq->newrev_since,
-              array("placeholder" => "(all)", "size" => 30)),
+              ["placeholder" => "(all)", "size" => 30, "class" => "js-autosubmit", "data-submit-fn" => "recheck"]),
     '</div>';
 
 echo '<div class="fx9 g"></div>';
@@ -732,7 +743,7 @@ if ($Me->is_manager()) {
             echo "  <tr><td class=\"",
                 Ht::control_class($xfield, "mhnp nw"),
                 "\"><label for=\"$xfield\">$field:</label></td><td class=\"mhdp\">",
-                Ht::entry($xfield, $Qreq[$xfield], ["size" => 64, "class" => Ht::control_class($xfield, "text-monospace"), "id" => $xfield]),
+                Ht::entry($xfield, $Qreq[$xfield], ["size" => 64, "class" => Ht::control_class($xfield, "text-monospace js-autosubmit"), "id" => $xfield, "data-submit-fn" => "false"]),
                 ($xfield == "replyto" ? "<hr class=\"g\">" : ""),
                 "</td></tr>\n\n";
         }
@@ -741,12 +752,12 @@ if ($Me->is_manager()) {
 // ** SUBJECT
 echo "  <tr><td class=\"mhnp nw\"><label for=\"subject\">Subject:</label></td><td class=\"mhdp\">",
     "<samp>[", htmlspecialchars($Conf->short_name), "]&nbsp;</samp>",
-    Ht::entry("subject", $Qreq->subject, ["size" => 64, "class" => Ht::control_class("subject", "text-monospace"), "id" => "subject"]),
+    Ht::entry("subject", $Qreq->subject, ["size" => 64, "class" => Ht::control_class("subject", "text-monospace js-autosubmit"), "id" => "subject", "data-submit-fn" => "false"]),
     "</td></tr>
 
  <tr><td></td><td class=\"mhb\">\n",
     Ht::textarea("emailBody", $Qreq->emailBody,
-            array("class" => "text-monospace", "rows" => 20, "cols" => 80, "spellcheck" => "true")),
+            ["class" => "text-monospace", "rows" => 20, "cols" => 80, "spellcheck" => "true"]),
     "</td></tr>
 </table></div>\n\n";
 
@@ -771,10 +782,13 @@ if ($Me->privChair) {
 echo '<div class="aa c">',
     Ht::submit("Prepare mail", ["class" => "btn-primary"]), ' &nbsp; <span class="hint">You’ll be able to review the mails before they are sent.</span>
 </div>
+';
 
-
-<div id="mailref">Keywords enclosed in percent signs, such as <code>%NAME%</code> or <code>%REVIEWDEADLINE%</code>, are expanded for each mail.  Use the following syntax:
+function echo_mail_keyword_help() {
+    global $Conf;
+    echo '<div id="mailref">Keywords enclosed in percent signs, such as <code>%NAME%</code> or <code>%REVIEWDEADLINE%</code>, are expanded for each mail.  Use the following syntax:
 <hr class="g">
+
 <div class="ctable no-hmargin">
 <dl class="ctelt">
 <dt><code>%URL%</code></dt>
@@ -800,7 +814,31 @@ echo '<div class="aa c">',
     <dd>First couple words of paper title (useful for mail subject).</dd>
 <dt><code>%OPT(AUTHORS)%</code></dt>
     <dd>Paper authors (if recipient is allowed to see the authors).</dd>
-</dl><dl class="ctelt">
+';
+
+    $opts = array_filter($Conf->options()->normal(), function ($o) {
+        return $o->display_position() !== false
+            && $o->can_render(FieldRender::CFMAIL);
+    });
+    usort($opts, function ($a, $b) {
+        if ($a->final !== $b->final) {
+            return $a->final ? 1 : -1;
+        } else {
+            return PaperOption::compare($a, $b);
+        }
+    });
+    if (!empty($opts)) {
+        echo '<dt><code>%', htmlspecialchars($opts[0]->search_keyword()), '%</code></dt>
+    <dd>Value of paper’s “', $opts[0]->title_html(), '” submission field.';
+        if (count($opts) > 1) {
+            echo ' Also ', join(", ", array_map(function ($o) {
+                return '<code>%' . htmlspecialchars($o->search_keyword()) . '%</code>';
+            }, array_slice($opts, 1))), '.';
+        }
+        echo "</dd>\n<dt><code>%IF(", htmlspecialchars($opts[0]->search_keyword()), ')%...%ENDIF%</code></dt>
+    <dd>Include text if paper has a “', $opts[0]->title_html(), "” submission field.</dd>\n";
+    }
+    echo '</dl><dl class="ctelt">
 <dt><code>%REVIEWS%</code></dt>
     <dd>Pretty-printed paper reviews.</dd>
 <dt><code>%COMMENTS%</code></dt>
@@ -823,7 +861,10 @@ echo '<div class="aa c">',
     <dd>Value of paper’s <code><i>tag</i></code>.</dd>
 </dl>
 </div></div>
+';
+}
 
-</form>';
 
+echo_mail_keyword_help();
+echo '</form>';
 $Conf->footer();

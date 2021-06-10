@@ -26,6 +26,35 @@ class ListAction {
         return $gex;
     }
 
+    /** @param GroupedExtensions $gex
+     * @param string $group
+     * @return list */
+    static function members_selector_options($gex, $group) {
+        $last_group = null;
+        $sel_opt = [];
+        $p = strlen($group) + 1;
+        foreach ($gex->members($group) as $rf) {
+            if (!str_starts_with($rf->name, "__")) {
+                $as = strpos($rf->title, "/");
+                if ($as === false) {
+                    if ($last_group) {
+                        $sel_opt[] = ["optgroup", false];
+                    }
+                    $last_group = null;
+                    $sel_opt[] = ["value" => substr($rf->name, $p), "label" => $rf->title];
+                } else {
+                    $group = substr($rf->title, 0, $as);
+                    if ($group !== $last_group) {
+                        $sel_opt[] = ["optgroup", $group];
+                        $last_group = $group;
+                    }
+                    $sel_opt[] = ["value" => substr($rf->name, $p), "label" => substr($rf->title, $as + 1)];
+                }
+            }
+        }
+        return $sel_opt;
+    }
+
 
     /** @param string $name
      * @param SearchSelection|array<int> $selection */
@@ -56,7 +85,7 @@ class ListAction {
             $selection = new SearchSelection($selection);
         }
         if (!$uf || !Conf::xt_resolve_require($uf) || !is_string($uf->function)) {
-            return new JsonResult(404, "Function not found.");
+            return new JsonResult(404, "No such action.");
         } else if (($uf->paper ?? false) && $selection->is_empty()) {
             return new JsonResult(400, "No papers selected.");
         } else if ($uf->function[0] === "+") {
@@ -88,6 +117,9 @@ class ListAction {
             }
         } else if ($res instanceof CsvGenerator) {
             $res->emit();
+            exit;
+        } else if ($res instanceof Redirection) {
+            $user->conf->redirect($res->url);
             exit;
         }
     }

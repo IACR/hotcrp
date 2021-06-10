@@ -156,16 +156,14 @@
         "title": "Preference file",
         "position": 1,
         "allow_if": "pc", "display_if": "listreport:pf",
-        "function": "+GetRevpref_ListAction",
-        "abstracts": false
+        "function": "+Revpref_ListAction"
     },
     {
         "name": "get/revprefx", "get": true,
         "title": "Preference file with abstracts",
         "position": 2,
         "allow_if": "pc", "display_if": "listreport:pf",
-        "function": "+GetRevpref_ListAction",
-        "abstracts": true
+        "function": "+Revpref_ListAction"
     },
     {
         "name": "get/allrevpref", "get": true,
@@ -244,22 +242,44 @@
         "function": "+Decide_ListAction"
     },
     {
-        "name": "mail", "get": true,
+        "name": "mail",
         "render_function": "Mail_ListAction::render", "title": "Mail",
-        "position": 1000,
-        "allow_if": "manager", "display_if": "!listreport:pf",
-        "function": "+Mail_ListAction"
+        "position": 1000, "display_if": "!listreport:pf"
     },
     {
-        "name": "uploadpref",
-        "render_function": "GetRevpref_ListAction::render_upload", "title": "Upload",
+        "name": "mail/authors", "get": true,
+        "title": "Contact authors",
+        "position": 10, "allow_if": "manager",
+        "function": "+Mail_ListAction",
+        "mail_template": "authors"
+    },
+    {
+        "name": "mail/reviewers", "get": true,
+        "title": "Reviewers",
+        "position": 100, "allow_if": "manager",
+        "function": "+Mail_ListAction",
+        "mail_template": "reviewers"
+    },
+    {
+        "name": "tryuploadpref", "post": true,
+        "render_function": "Revpref_ListAction::render_upload", "title": "Upload",
         "allow_if": "pc", "display_if": "listreport:pf",
+        "function": "+Revpref_ListAction",
         "position": 100
     },
     {
-        "name": "setpref",
-        "render_function": "GetRevpref_ListAction::render_set", "title": "Set preferences",
+        "name": "uploadpref", "post": true,
+        "allow_if": "pc", "function": "+Revpref_ListAction"
+    },
+    {
+        "name": "applyuploadpref", "post": true,
+        "allow_if": "pc", "function": "+Revpref_ListAction"
+    },
+    {
+        "name": "setpref", "post": true,
+        "render_function": "Revpref_ListAction::render_set", "title": "Set selected",
         "allow_if": "pc", "display_if": "listreport:pf",
+        "function": "+Revpref_ListAction",
         "position": 200
     }
 ]

@@ -286,7 +286,7 @@ class Options_SettingRenderer {
         echo '<div class="settings-opt has-fold fold2o"><a href="" class="q ui settings-field-folder"><span class="expander"><span class="in0 fx2">▼</span></span></a>';
 
         /////////// For IACR options, we make the name readonly.
-        $extras = ["placeholder" => "Field name", "size" => 50, "id" => "optn_$xpos", "style" => "font-weight:bold", "class" => "need-tooltip", "data-tooltip-info" => "settings-option", "data-tooltip-type" => "focus", "aria-label" => "Field name"];
+        $extras = ["placeholder" => "Field name", "size" => 50, "id" => "optn_$xpos", "class" => "need-tooltip font-weight-bold", "data-tooltip-info" => "settings-option", "data-tooltip-type" => "focus", "aria-label" => "Field name"];
         if (has_iacr_button($o)) {
           $extras['readonly'] = true;
         }

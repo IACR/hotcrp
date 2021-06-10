@@ -117,7 +117,7 @@ class AssignmentItem implements ArrayAccess, JsonSerializable {
             "pid" => $this->before->pid,
             "\$status" => $this->deleted
                 ? "DELETED"
-                : ($this->existed ? "INSERTED" : ($this->after ? "MODIFIED" : "UNCHANGED"))
+                : ($this->existed ? ($this->after ? "MODIFIED" : "UNCHANGED") : "INSERTED")
         ];
         foreach (get_object_vars($this->after ?? $this->before) as $k => $v) {
             if ($k !== "type" && $k !== "pid") {
@@ -572,7 +572,7 @@ class AssignerContacts {
     /** @return Contact */
     function none_user() {
         if (!$this->none_user) {
-            $this->none_user = new Contact(["contactId" => 0, "roles" => 0, "email" => "", "sorter" => ""], $this->conf);
+            $this->none_user = new Contact(["contactId" => 0, "roles" => 0, "email" => ""], $this->conf);
         }
         return $this->none_user;
     }
@@ -975,7 +975,7 @@ class AssignmentSet {
     private $assigners = [];
     /** @var array<int,int> */
     private $assigners_pidhead = [];
-    /** @var ?list<int> */
+    /** @var ?array<int,true> */
     private $enabled_pids;
     /** @var ?array<string,true> */
     private $enabled_actions;
@@ -1051,9 +1051,9 @@ class AssignmentSet {
         foreach (is_array($paper) ? $paper : [$paper] as $p) {
             if ($p instanceof PaperInfo) {
                 $this->astate->add_prow($p);
-                $this->enabled_pids[] = $p->paperId;
+                $this->enabled_pids[$p->paperId] = true;
             } else {
-                $this->enabled_pids[] = (int) $p;
+                $this->enabled_pids[(int) $p] = true;
             }
         }
     }
@@ -1162,16 +1162,12 @@ class AssignmentSet {
         }
     }
     /** @return JsonResult */
-    function json_result($landmarks = false) {
+    function json_result() {
         if ($this->has_error()) {
-            $jr = new JsonResult(403, ["ok" => false, "error" => $this->messages_div_html($landmarks)]);
-            if ($this->astate->has_user_error) {
-                $jr->status = 422;
-                $jr->content["user_error"] = true;
-            }
-            return $jr;
+            $status = $this->astate->has_user_error ? 200 : 403;
+            return new JsonResult($status, ["ok" => false, "message_list" => $this->message_list()]);
         } else if ($this->astate->has_messages()) {
-            return new JsonResult(["ok" => true, "response" => $this->messages_div_html($landmarks)]);
+            return new JsonResult(["ok" => true, "message_list" => $this->message_list()]);
         } else {
             return new JsonResult(["ok" => true]);
         }
@@ -1451,13 +1447,12 @@ class AssignmentSet {
         }
 
         // Implement paper restriction
-        if ($this->enabled_pids !== null) {
-            $npids = array_intersect($npids, $this->enabled_pids);
+        $all = $this->enabled_pids === null;
+        foreach ($npids as $pid) {
+            if ($all || isset($this->enabled_pids[$pid]))
+                $pids[$pid] = true;
         }
 
-        foreach ($npids as $pid) {
-            $pids[$pid] = true;
-        }
         return $val;
     }
 
@@ -2025,7 +2020,8 @@ class Assignment_PaperColumn extends PaperColumn {
         $plist = new PaperList("reviewers", $search);
         $plist->add_column("autoassignment", $pc);
         $plist->set_table_id_class("foldpl", "pltable-fullw");
-        $plist->echo_table_html(["nofooter" => true]);
+        $plist->set_table_decor(PaperList::DECOR_HEADER);
+        $plist->echo_table_html();
 
         if (count(array_intersect_key($pc->change_counts->bypc, $pc->conf->pc_members()))) {
             $summary = [];
